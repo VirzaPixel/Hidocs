@@ -5,6 +5,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Flag } from 'lucide-react';
 import { formApi } from '../../lib/api';
 import { Button, FullPageSpinner } from '../../shared/ui';
 import { renderMixedText } from '../../shared/MathField';
+import { CodeBlock } from '../../shared/CodeBlock';
 import { cn, questionTypeLabel, resolveMediaUrl } from '../../lib/utils';
 
 export default function StudentPreviewPage() {
@@ -145,6 +146,9 @@ function QuestionAnswerArea({ question, value, onChange, accent }) {
         onChange={(e) => onChange(e.target.value)}
       />
     );
+  }
+  if ((/code/i.test(question.code_language || '') || question.code_language) && value == null) {
+    return <CodeBlock value={question.question_text} codeLanguage={question.code_language} />;
   }
   if (type === 'LONG_TEXT' || type === 'CODE') {
     return (

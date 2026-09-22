@@ -10,7 +10,6 @@ import ImportTemplateModal from './ImportTemplateModal';
 const IMPORTERS = [
   { key: 'docx', label: 'Import dari Word (.docx)', accept: '.docx', fn: (file) => formApi.importDocx(file) },
   { key: 'excel', label: 'Import dari Excel (.xlsx/.csv)', accept: '.xlsx,.xls,.csv', fn: (file) => formApi.importExcel(file) },
-  { key: 'pdf', label: 'Import dari PDF', accept: '.pdf', fn: (file) => formApi.importPdf(file) },
 ];
 
 export default function ImportMenu() {

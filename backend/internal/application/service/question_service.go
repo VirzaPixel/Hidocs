@@ -145,7 +145,11 @@ func (s *questionService) UpdateQuestion(ctx context.Context, userID uuid.UUID, 
 		return nil, err
 	}
 
-	return s.mapQuestionToDTO(q), nil
+	updatedQuestion, err := s.questionRepo.GetQuestionByID(ctx, q.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.mapQuestionToDTO(updatedQuestion), nil
 }
 
 func (s *questionService) DeleteQuestion(ctx context.Context, userID uuid.UUID, questionID uuid.UUID) error {

@@ -218,7 +218,7 @@ func (r *responseRepository) GetLiveMonitoringByFormID(ctx context.Context, form
 			r.status,
 			r.current_question_index,
 			COALESCE(q_cnt.cnt, 0) AS total_questions,
-			COUNT(a.id) FILTER (WHERE a.selected_option_id IS NOT NULL OR (a.answer_text IS NOT NULL AND a.answer_text != '') OR (a.match_pair_json IS NOT NULL AND a.match_pair_json != '')) AS answered_count,
+			COUNT(a.id) FILTER (WHERE a.selected_option_id IS NOT NULL OR (a.answer_text IS NOT NULL AND a.answer_text != '') OR (a.match_pair_json IS NOT NULL AND a.match_pair_json::text NOT IN ('', 'null', '[]', '{}'))) AS answered_count,
 			COUNT(a.id) FILTER (WHERE a.is_flagged = TRUE) AS flagged_count,
 			r.tab_switch_count,
 			r.blur_count,

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"backend/internal/application/dto"
 	"backend/internal/domain"
@@ -39,14 +40,27 @@ func NewDocxService(docxParser *parser.DocxParser, formRepo domain.FormRepositor
 // buildFormFromExtracted memusatkan logic yang sebelumnya diduplikasi persis sama
 // di ImportFormFromDocx dan ImportFormFromExcel, supaya ImportFormFromPDF (dan
 // perbaikan di masa depan) tidak perlu copy-paste ~70 baris lagi.
+func importedFormTitle(title, fallback string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return fallback
+	}
+	const maxTitleLength = 240
+	if len(title) > maxTitleLength {
+		title = strings.TrimSpace(title[:maxTitleLength])
+	}
+	return title
+}
+
 func (s *docxService) buildFormFromExtracted(ctx context.Context, userID uuid.UUID, formID uuid.UUID, extracted *parser.ExtractedForm) (*dto.FormResponseDTO, error) {
+	title := importedFormTitle(extracted.Title, "Dokumen Soal Import")
 	form := &domain.Form{
 		ID:          formID,
 		UserID:      userID,
-		Title:       extracted.Title,
+		Title:       title,
 		Description: extracted.Description,
 		Type:        domain.TypeExam,
-		CustomURL:   utils.GenerateSlug(extracted.Title),
+		CustomURL:   utils.GenerateSlug(title),
 		Status:      domain.StatusDraft,
 	}
 
@@ -136,13 +150,14 @@ func (s *docxService) ImportFormFromDocx(ctx context.Context, userID uuid.UUID, 
 		return nil, err
 	}
 
+	title := importedFormTitle(extracted.Title, "Dokumen Soal Import")
 	form := &domain.Form{
 		ID:          formID,
 		UserID:      userID,
-		Title:       extracted.Title,
+		Title:       title,
 		Description: extracted.Description,
 		Type:        domain.TypeExam,
-		CustomURL:   utils.GenerateSlug(extracted.Title),
+		CustomURL:   utils.GenerateSlug(title),
 		Status:      domain.StatusDraft,
 	}
 
@@ -225,13 +240,14 @@ func (s *docxService) ImportFormFromExcel(ctx context.Context, userID uuid.UUID,
 		return nil, err
 	}
 
+	title := importedFormTitle(extracted.Title, "Dokumen Soal Import")
 	form := &domain.Form{
 		ID:          formID,
 		UserID:      userID,
-		Title:       extracted.Title,
+		Title:       title,
 		Description: extracted.Description,
 		Type:        domain.TypeExam,
-		CustomURL:   utils.GenerateSlug(extracted.Title),
+		CustomURL:   utils.GenerateSlug(title),
 		Status:      domain.StatusDraft,
 	}
 

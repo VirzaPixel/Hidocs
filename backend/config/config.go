@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -45,6 +46,12 @@ type Config struct {
 	GeminiAPIKey string
 	GeminiModel  string
 
+	// GROQ_API_KEY: masih dibaca untuk kompatibilitas, tapi AI generate
+	// sekarang via Gemini SDK (google.golang.org/genai). Biarkan kosong
+	// jika tidak dipakai.
+	GroqAPIKey string
+	GroqModel  string
+
 	// FIX: sebelumnya ada di .env.example tapi tidak pernah dibaca ke Config,
 	// jadi CORS selalu hardcoded ke "*" dan upload/body limit tidak pernah divalidasi
 	// dari env sama sekali.
@@ -57,8 +64,12 @@ type Config struct {
 
 func LoadConfig() *Config {
 	if err := godotenv.Load(); err != nil {
+		_ = godotenv.Load(filepath.Join("backend", ".env"))
+	}
+	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
+	geminiKey := envFirst("GEMINI_API_KEY", "GOOGLE_API_KEY", "GENAI_API_KEY", "AI_API_KEY")
 
 	jwtExpire, _ := strconv.Atoi(getEnv("JWT_EXPIRE_HOURS", "24"))
 	autoMigrate, _ := strconv.ParseBool(getEnv("AUTO_MIGRATE", "true"))
@@ -110,8 +121,10 @@ func LoadConfig() *Config {
 		JWTSecret:   getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
 		JWTExpireHr: jwtExpire,
 
-		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
+		GeminiAPIKey: geminiKey,
 		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),
+		GroqAPIKey:   envFirst("GROQ_API_KEY", "GROQ_KEY"),
+		GroqModel:    getEnv("GROQ_MODEL", "llama-3.1-8b-instant"),
 
 		AllowedOrigins:   allowedOrigins,
 		MaxUploadMB:      maxUploadMB,
@@ -119,6 +132,15 @@ func LoadConfig() *Config {
 		RateLimitPerMin:  rateLimitPerMin,
 		BodyLimitMB:      bodyLimitMB,
 	}
+}
+
+func envFirst(keys ...string) string {
+	for _, k := range keys {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func getEnv(key, fallback string) string {

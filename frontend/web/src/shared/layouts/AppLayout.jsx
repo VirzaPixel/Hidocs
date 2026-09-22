@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Library, UserCircle, Sun, Moon, LogOut, Menu, X, FileText } from 'lucide-react';
+import { LayoutDashboard, Library, UserCircle, Sun, Moon, LogOut, Menu } from 'lucide-react';
+import hidocsLogo from '../../assets/hidocs-logo.png';
 import { useAuthStore } from '../../store/authStore';
 import { useTheme } from '../../lib/useTheme';
-import { cn } from '../../lib/utils';
+import { cn, resolveMediaUrl } from '../../lib/utils';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Form Saya', icon: LayoutDashboard },
@@ -59,9 +60,9 @@ export default function AppLayout() {
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <div className="ml-1 flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-bg-secondary">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                {user?.name?.[0]?.toUpperCase() || 'G'}
-              </div>
+              <button onClick={() => navigate('/profile')} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-semibold text-primary" title="Buka profil">
+                {user?.avatar_url ? <img src={resolveMediaUrl(user.avatar_url)} alt="Foto profil" className="h-full w-full object-cover" /> : user?.name?.[0]?.toUpperCase() || 'G'}
+              </button>
               <span className="hidden text-sm font-medium text-text sm:block">{user?.name}</span>
             </div>
             <button
@@ -88,9 +89,7 @@ function SidebarContent({ onNavigate }) {
   return (
     <>
       <div className="flex h-16 shrink-0 items-center gap-2 border-b border-border px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white">
-          <FileText size={18} />
-        </div>
+        <img src={hidocsLogo} alt="HiDocs" className="h-8 w-8 rounded-lg object-contain" />
         <span className="text-lg font-bold text-text">HiDocs</span>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">

@@ -33,13 +33,13 @@ type aiService struct {
 }
 
 func NewAIService(cfg *config.Config, formRepo domain.FormRepository, questionRepo domain.QuestionRepository, responseRepo domain.ResponseRepository) AIService {
-	var key, model string
+	var gKey, gModel string
 	if cfg != nil {
-		key, model = cfg.GeminiAPIKey, cfg.GeminiModel
+		gKey, gModel = cfg.GeminiAPIKey, cfg.GeminiModel
 	}
 	return &aiService{
 		cfg:          cfg,
-		gemini:       infraAI.NewGeminiClient(key, model),
+		gemini:       infraAI.NewGeminiClient(gKey, gModel),
 		formRepo:     formRepo,
 		questionRepo: questionRepo,
 		responseRepo: responseRepo,
@@ -128,7 +128,7 @@ func (s *aiService) GeneratePreview(ctx context.Context, req dto.AIGenerateFormR
 		}
 	}
 	if !s.gemini.IsEnabled() {
-		return s.mockPreview(req), nil
+		return nil, fmt.Errorf("GEMINI_API_KEY belum diisi — generate AI tidak tersedia")
 	}
 	prompt := s.buildPrompt(req)
 	var raw string
@@ -139,7 +139,6 @@ func (s *aiService) GeneratePreview(ctx context.Context, req dto.AIGenerateFormR
 			break
 		}
 		if attempt < 2 {
-			// small wait between retries
 			select {
 			case <-ctx.Done():
 				break
@@ -148,17 +147,16 @@ func (s *aiService) GeneratePreview(ctx context.Context, req dto.AIGenerateFormR
 		}
 	}
 	if generateErr != nil || strings.TrimSpace(raw) == "" {
-		p := s.mockPreview(req)
-		p.Description = fmt.Sprintf("Dihasilkan secara otomatis untuk materi: %s", defaultStr(req.Topic, "Umum"))
-		return p, nil
+		return nil, fmt.Errorf("gagal generate AI (gemini): %v", generateErr)
 	}
 	preview, err := parsePreview(infraAI.HealJSON(raw))
 	if err != nil {
-		p := s.mockPreview(req)
-		p.Description = fmt.Sprintf("Dihasilkan secara otomatis untuk materi: %s (parse error: %v)", defaultStr(req.Topic, "Umum"), err)
-		return p, nil
+		return nil, fmt.Errorf("gagal memparse output AI (%v). Raw: %q", err, truncateAI(raw, 700))
 	}
 	normalizePreview(preview, req)
+	if len(preview.Questions) == 0 {
+		return nil, fmt.Errorf("output AI valid tapi tidak ada soal (questions kosong). Raw: %q", truncateAI(raw, 700))
+	}
 	return preview, nil
 }
 
@@ -239,7 +237,7 @@ func (s *aiService) GradeEssay(ctx context.Context, req dto.AIGradeEssayRequest)
 		return nil, fmt.Errorf("max_points must be >= 0")
 	}
 	if !s.gemini.IsEnabled() {
-		return s.mockGrade(req)
+		return nil, fmt.Errorf("GEMINI_API_KEY belum diisi — grading tidak tersedia")
 	}
 	prompt := fmt.Sprintf(`Kamu adalah penilai essay yang adil. Nilai jawaban murid terhadap kunci jawaban secara semantik (makna sama dengan susunan kata berbeda tetap dinilai tinggi).
 Kunci jawaban: %s
@@ -297,9 +295,6 @@ func (s *aiService) GradeResponseEssays(ctx context.Context, userID uuid.UUID, r
 		ansByQ[qid] = &a
 	}
 	result := &dto.AIGradeResponseResult{}
-	if !s.gemini.IsEnabled() {
-		result.Mock = true
-	}
 	var totalAdded float64
 	for _, ans := range resp.Answers {
 		q := ans.Question
@@ -329,8 +324,7 @@ func (s *aiService) GradeResponseEssays(ctx context.Context, userID uuid.UUID, r
 				score, feedback = g.Score, g.Feedback
 			}
 		} else {
-			// Fallback tanpa kunci/AI: skor 0 + feedback agar guru review manual.
-			feedback = "Belum dinilai AI (kunci jawaban kosong atau AI nonaktif). Perlu grading manual."
+			feedback = "Belum dinilai AI (kunci jawaban kosong atau GEMINI_API_KEY belum diisi). Perlu grading manual."
 		}
 		result.Items = append(result.Items, dto.AIGradeResponseItem{
 			QuestionID: ans.QuestionID, Score: score, MaxPoints: max, Feedback: feedback,
@@ -541,4 +535,11 @@ func wordSet(s string) map[string]bool {
 		}
 	}
 	return out
+}
+
+func truncateAI(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Library, Trash2, Pencil } from 'lucide-react';
 import { questionBankApi } from '../../lib/api';
@@ -12,17 +12,19 @@ const LIMIT = 20;
 
 export default function QuestionBankPage() {
   const [filters, setFilters] = useState({ subject: '', topic: '', difficulty: '', question_type: '' });
+  const deferredSubject = useDeferredValue(filters.subject);
+  const deferredTopic = useDeferredValue(filters.topic);
   const [offset, setOffset] = useState(0);
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {...} = edit
   const [deleteTarget, setDeleteTarget] = useState(null);
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const params = {
-    ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+  const params = useMemo(() => ({
+    ...Object.fromEntries(Object.entries({ ...filters, subject: deferredSubject, topic: deferredTopic }).filter(([, v]) => v)),
     limit: LIMIT,
     offset,
-  };
+  }), [filters, deferredSubject, deferredTopic, offset]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['question-bank', params],
@@ -84,14 +86,9 @@ export default function QuestionBankPage() {
       ) : !data?.items?.length ? (
         <EmptyState
           icon={<Library size={36} />}
-          title="Belum ada soal di bank"
-          description="Tambahkan soal langsung di sini, atau simpan dari halaman edit form"
-          action={
-            <Button onClick={() => setEditing({})}>
-              <Plus size={16} />
-              Tambah Soal
-            </Button>
-          }
+          title={filters.subject ? `Bank Soal mata pelajaran “${filters.subject}” tidak ditemukan` : filters.topic ? `Soal dengan topik “${filters.topic}” tidak ditemukan` : Object.values(filters).some(Boolean) ? 'Tidak ada soal yang cocok dengan filter saat ini' : 'Belum ada soal di bank'}
+          description={Object.values(filters).some(Boolean) ? 'Coba kata kunci atau filter lain.' : 'Tambahkan soal langsung di sini, atau simpan dari halaman edit form'}
+          action={Object.values(filters).some(Boolean) ? <Button variant="outline" onClick={() => setFilters({ subject: '', topic: '', difficulty: '', question_type: '' })}>Hapus filter</Button> : <Button onClick={() => setEditing({})}><Plus size={16} />Tambah Soal</Button>}
         />
       ) : (
         <div className="flex flex-col gap-2">

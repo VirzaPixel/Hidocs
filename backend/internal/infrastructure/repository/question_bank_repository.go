@@ -31,10 +31,10 @@ func (r *bankQuestionRepository) GetByID(ctx context.Context, id uuid.UUID) (*do
 func (r *bankQuestionRepository) applyFilter(tx *gorm.DB, userID uuid.UUID, filter domain.BankQuestionFilter) *gorm.DB {
 	tx = tx.Where("user_id = ?", userID)
 	if filter.Subject != "" {
-		tx = tx.Where("subject = ?", filter.Subject)
+		tx = tx.Where("subject ILIKE ?", "%"+filter.Subject+"%")
 	}
 	if filter.Topic != "" {
-		tx = tx.Where("topic = ?", filter.Topic)
+		tx = tx.Where("topic ILIKE ?", "%"+filter.Topic+"%")
 	}
 	if filter.Difficulty != "" {
 		tx = tx.Where("difficulty = ?", filter.Difficulty)

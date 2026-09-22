@@ -5,13 +5,21 @@ import { Input, Textarea, Select, Checkbox, Toggle, Button, Badge } from '../../
 import { ConfirmDialog } from '../../shared/Modal';
 import OptionsEditor from '../../shared/OptionsEditor';
 import MatchingEditor from '../../shared/MatchingEditor';
-import MathField, { renderMixedText } from '../../shared/MathField';
+import { renderMixedText } from '../../shared/MathField';
 import MediaUploadField from '../../shared/MediaUploadField';
 import SaveToBankModal from './SaveToBankModal';
+import MathLiveEditor from '../../shared/MathLiveEditor';
+import CodeMirrorEditor from '../../shared/CodeMirrorEditor';
 import { useToast } from '../../shared/Toast';
 import { QUESTION_TYPES, questionTypeMeta, questionTypeLabel } from '../../lib/utils';
 
-const CODE_LANGUAGES = ['javascript', 'python', 'java', 'c', 'cpp', 'go', 'sql', 'html'];
+const CONTENT_MODES = [
+  { key: 'text', label: 'Teks Biasa' },
+  { key: 'math', label: 'Matematika' },
+  { key: 'code', label: 'Kode Program' },
+];
+
+
 
 function defaultOptions(type) {
   if (type === 'MATCHING') {
@@ -26,12 +34,24 @@ function defaultOptions(type) {
   ];
 }
 
+const FENCE_BLOCK = /^```[a-zA-Z0-9+#-]*\n([\s\S]*?)\n```(?:\n([\s\S]*))?$/;
+
+function splitCodeBlock(raw) {
+  const text = (raw || '').trim();
+  const match = text.match(FENCE_BLOCK);
+  if (match) {
+    return { snippet: (match[1] || '').trim(), prompt: (match[2] || '').trim() };
+  }
+  return { snippet: text, prompt: '' };
+}
+
 function initFromQuestion(question) {
   if (!question) {
     return {
       question_text: '',
-      question_type: 'MULTIPLE_CHOICE',
-      code_language: '',
+      code_snippet: '',
+      code_language: 'javascript',
+      content_mode: 'text',
       img_url: null,
       audio_url: null,
       video_url: null,
@@ -41,10 +61,13 @@ function initFromQuestion(question) {
       options: defaultOptions('MULTIPLE_CHOICE'),
     };
   }
+  const isCode = Boolean(question.code_language);
+  const split = isCode ? splitCodeBlock(question.question_text) : { snippet: '', prompt: '' };
   return {
-    question_text: question.question_text || '',
-    question_type: question.question_type,
-    code_language: question.code_language || '',
+    question_text: isCode ? split.prompt : (question.question_text || ''),
+    code_snippet: isCode ? split.snippet : '',
+    code_language: question.code_language || 'javascript',
+    content_mode: isCode ? 'code' : 'text',
     img_url: question.img_url || null,
     audio_url: question.audio_url || null,
     video_url: question.video_url || null,
@@ -95,11 +118,14 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
   };
 
   const validate = () => {
-    if (!form.question_text.trim()) return 'Teks soal wajib diisi';
+    if (form.content_mode === 'code') {
+      if (!form.code_snippet.trim()) return 'Kode soal wajib diisi';
+      if (!form.question_text.trim()) return 'Kalimat pertanyaan wajib diisi';
+    } else if (!form.question_text.trim()) {
+      return 'Teks soal wajib diisi';
+    }
     if (meta.hasOptions) {
-      const filled = form.options.filter((o) =>
-        form.question_type === 'MATCHING' ? o.option_text.trim() && o.match_target_text.trim() : o.option_text.trim()
-      );
+      const filled = form.options.filter((o) => (o.option_text || '').trim());
       if (filled.length < 2) return 'Minimal 2 opsi/pasangan harus terisi';
       if (form.question_type !== 'MATCHING' && meta.autoScored) {
         const hasCorrect = form.options.some((o) => o.is_correct);
@@ -117,10 +143,15 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
     }
     setSaving(true);
     try {
+      const questionText =
+        form.content_mode === 'code'
+          ? `\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\`\n${form.question_text.trim()}`
+          : form.question_text;
+      const codeLanguage = form.content_mode === 'code' ? form.code_language : '';
       const payload = {
-        question_text: form.question_text,
+        question_text: questionText,
         question_type: form.question_type,
-        code_language: form.question_type === 'CODE' ? form.code_language : '',
+        code_language: codeLanguage,
         img_url: form.img_url || '',
         audio_url: form.audio_url || null,
         video_url: form.video_url || null,
@@ -129,8 +160,8 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         order_index: question?.order_index ?? index + 1,
         is_required: form.is_required,
         options: meta.hasOptions
-          ? form.options.map((o, i) => ({
-              option_text: o.option_text,
+          ? form.options.filter((o) => (o.option_text || '').trim()).map((o, i) => ({
+              option_text: (o.option_text || '').trim(),
               img_url: o.img_url || null,
               audio_url: o.audio_url || null,
               video_url: o.video_url || null,
@@ -173,7 +204,11 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
 
   if (!expanded) {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left hover:border-primary/50"
+        onClick={() => setExpanded(true)}
+      >
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-medium text-text-secondary">
           {index + 1}
         </span>
@@ -185,10 +220,8 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         </div>
         <Badge>{questionTypeLabel(form.question_type)}</Badge>
         <span className="text-xs text-text-secondary">{form.points} poin</span>
-        <button onClick={() => setExpanded(true)} className="text-text-secondary hover:text-primary">
-          <ChevronDown size={18} />
-        </button>
-      </div>
+        <ChevronDown size={18} className="text-text-secondary" />
+      </button>
     );
   }
 
@@ -200,6 +233,17 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
           <ChevronUp size={18} />
         </button>
       </div>
+
+      <details className="rounded-lg border border-border">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-text-secondary">
+          Lampiran Media untuk soal (Opsional)
+        </summary>
+        <div className="grid grid-cols-1 gap-3 border-t border-border p-3 sm:grid-cols-3">
+          <MediaUploadField mediaType="IMAGE" label="Gambar" value={form.img_url} onChange={(v) => patch({ img_url: v })} />
+          <MediaUploadField mediaType="AUDIO" label="Audio" value={form.audio_url} onChange={(v) => patch({ audio_url: v })} />
+          <MediaUploadField mediaType="VIDEO" label="Video" value={form.video_url} onChange={(v) => patch({ video_url: v })} />
+        </div>
+      </details>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1fr]">
         <Select
@@ -222,35 +266,47 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         />
       </div>
 
-      {form.question_type === 'MATH' ? (
-        <MathField
-          textareaId={`math-${question?.id || 'new'}-${index}`}
-          value={form.question_text}
-          onChange={(v) => patch({ question_text: v })}
-        />
+      <div className="flex gap-2">
+        {CONTENT_MODES.map((mode) => (
+          <button
+            key={mode.key}
+            type="button"
+            onClick={() => patch({ content_mode: mode.key })}
+            className={
+              form.content_mode === mode.key
+                ? 'rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white'
+                : 'rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary hover:border-primary'
+            }
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+
+      {form.content_mode === 'math' ? (
+        <MathLiveEditor value={form.question_text} onChange={(v) => patch({ question_text: v })} />
+      ) : form.content_mode === 'code' ? (
+        <div className="flex flex-col gap-2">
+          <CodeMirrorEditor
+            value={form.code_snippet}
+            language={form.code_language}
+            onChange={(v) => patch({ code_snippet: v })}
+            onLanguageChange={(v) => patch({ code_language: v })}
+          />
+          <Textarea
+            label="Kalimat Pertanyaan"
+            value={form.question_text}
+            onChange={(e) => patch({ question_text: e.target.value })}
+            rows={3}
+          />
+        </div>
       ) : (
         <Textarea
           label="Teks Soal"
-          placeholder="Tulis pertanyaan di sini..."
           value={form.question_text}
           onChange={(e) => patch({ question_text: e.target.value })}
-          rows={3}
+          rows={4}
         />
-      )}
-
-      {form.question_type === 'CODE' && (
-        <Select
-          label="Bahasa Pemrograman"
-          value={form.code_language}
-          onChange={(e) => patch({ code_language: e.target.value })}
-        >
-          <option value="">Pilih bahasa</option>
-          {CODE_LANGUAGES.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </Select>
       )}
 
       {meta.hasOptions &&
@@ -261,21 +317,12 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
             options={form.options}
             onChange={(options) => patch({ options })}
             singleCorrect={form.question_type !== 'CHECKBOXES'}
+            contentMode={form.content_mode}
+            codeLanguage={form.code_language}
           />
         ))}
 
-      <details className="rounded-lg border border-border">
-        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-text-secondary">
-          Lampiran Media (opsional)
-        </summary>
-        <div className="grid grid-cols-1 gap-3 border-t border-border p-3 sm:grid-cols-3">
-          <MediaUploadField mediaType="IMAGE" label="Gambar" value={form.img_url} onChange={(v) => patch({ img_url: v })} />
-          <MediaUploadField mediaType="AUDIO" label="Audio" value={form.audio_url} onChange={(v) => patch({ audio_url: v })} />
-          <MediaUploadField mediaType="VIDEO" label="Video" value={form.video_url} onChange={(v) => patch({ video_url: v })} />
-        </div>
-      </details>
-
-      {['SHORT_TEXT', 'LONG_TEXT', 'CODE'].includes(form.question_type) && (
+      {form.question_type === 'LONG_TEXT' && (
         <div className="rounded-lg border border-border bg-bg-secondary p-3">
           <Toggle
             checked={form.is_auto_scored}

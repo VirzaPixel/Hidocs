@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, FileText, BarChart3, Trash2, Sparkles } from 'lucide-react';
+import { Plus, FileText, BarChart3, Trash2, Sparkles, Share2 } from 'lucide-react';
 import { formApi } from '../../lib/api';
 import { Button, Card, EmptyState, FullPageSpinner, Badge, Tabs } from '../../shared/ui';
 import { Modal } from '../../shared/Modal';
@@ -11,6 +11,7 @@ import { useToast } from '../../shared/Toast';
 import { FORM_STATUS_META, displayFormStatus, formatDate, resolveMediaUrl } from '../../lib/utils';
 import ImportMenu from './ImportMenu';
 import AIGenerateModal from './AIGenerateModal';
+import FormAccessPanel from '../form-builder/FormAccessPanel';
 
 const STATUS_TABS = [
   { value: '', label: 'Semua' },
@@ -24,6 +25,7 @@ export default function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [shareTarget, setShareTarget] = useState(null);
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -130,12 +132,16 @@ export default function DashboardPage() {
                   <span>{form.response_count || 0} respons</span>
                 </div>
                 <p className="text-xs text-text-secondary">Dibuat {formatDate(form.created_at)}</p>
-                <div className="mt-1 flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/forms/${form.id}`)}>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/forms/${form.id}`)}>
                     <FileText size={14} />
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/forms/${form.id}/monitoring`)}>
+                  <Button variant="outline" size="sm" onClick={() => setShareTarget(form)} title="Bagikan akses aplikasi siswa">
+                    <Share2 size={14} />
+                    Bagikan
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/forms/${form.id}/monitoring`)}>
                     <BarChart3 size={14} />
                     Monitoring
                   </Button>
@@ -149,6 +155,9 @@ export default function DashboardPage() {
 
       <CreateFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <AIGenerateModal open={aiOpen} onClose={() => setAiOpen(false)} />
+      <Modal open={!!shareTarget} onClose={() => setShareTarget(null)} title="Bagikan akses aplikasi siswa">
+        {shareTarget && <FormAccessPanel form={shareTarget} />}
+      </Modal>
 
       <ConfirmDialog
         open={!!deleteTarget}

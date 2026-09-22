@@ -149,3 +149,72 @@ func TestParseLinesToForm_Markers(t *testing.T) {
 		t.Fatalf("Expected IMAGE for [GAMBAR], got %v", q3.QuestionType)
 	}
 }
+
+func TestParseLinesToForm_Sections(t *testing.T) {
+	lines := []string{
+		"Test Soal",
+		"",
+		"Pilihan Ganda",
+		"1. Ibu kota Indonesia adalah?",
+		"A. Bandung",
+		"B. Jakarta",
+		"C. Surabaya",
+		"Kunci Jawaban: B",
+		"",
+		"Essai",
+		"2. Sebutkan 3 penyebab pemanasan global.",
+	}
+
+	formID := uuid.New()
+	extracted, err := parseLinesToForm(lines, formID)
+	if err != nil {
+		t.Fatalf("parseLinesToForm failed: %v", err)
+	}
+
+	if len(extracted.Questions) != 2 {
+		t.Fatalf("Expected 2 questions, got %d", len(extracted.Questions))
+	}
+
+	q1 := extracted.Questions[0]
+	if q1.QuestionType != domain.TypeMultipleChoice {
+		t.Fatalf("Expected MULTIPLE_CHOICE under 'Pilihan Ganda', got %v", q1.QuestionType)
+	}
+	if !q1.Options[1].IsCorrect {
+		t.Fatalf("Expected Option B correct for q1")
+	}
+
+	q2 := extracted.Questions[1]
+	if q2.QuestionType != domain.TypeLongText {
+		t.Fatalf("Expected LONG_TEXT under 'Essai', got %v", q2.QuestionType)
+	}
+	if q2.IsAutoScored {
+		t.Fatalf("Expected esai not auto scored")
+	}
+}
+
+func TestParseLinesToForm_SectionsNoBlank(t *testing.T) {
+	lines := []string{
+		"Test Soal",
+		"Pilihan Ganda",
+		"1. Ibu kota Indonesia adalah?",
+		"Kunci Jawaban: A",
+		"Essai",
+		"2. Sebutkan 3 penyebab pemanasan global.",
+	}
+
+	formID := uuid.New()
+	extracted, err := parseLinesToForm(lines, formID)
+	if err != nil {
+		t.Fatalf("parseLinesToForm failed: %v", err)
+	}
+
+	if len(extracted.Questions) != 2 {
+		t.Fatalf("Expected 2 questions, got %d", len(extracted.Questions))
+	}
+	if extracted.Questions[0].QuestionType != domain.TypeMultipleChoice {
+		t.Fatalf("Expected MULTIPLE_CHOICE, got %v", extracted.Questions[0].QuestionType)
+	}
+	if extracted.Questions[1].QuestionType != domain.TypeLongText {
+		t.Fatalf("Expected LONG_TEXT, got %v", extracted.Questions[1].QuestionType)
+	}
+}

@@ -50,7 +50,33 @@ func (r *questionRepository) GetQuestionsByFormID(ctx context.Context, formID uu
 }
 
 func (r *questionRepository) UpdateQuestion(ctx context.Context, q *domain.Question) error {
-	return r.db.WithContext(ctx).Session(&gorm.Session{FullSaveAssociations: true}).Save(q).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updates := map[string]interface{}{
+			"question_text":   q.QuestionText,
+			"question_type":   q.QuestionType,
+			"code_language":   q.CodeLanguage,
+			"img_url":         q.ImgURL,
+			"audio_url":       q.AudioURL,
+			"video_url":       q.VideoURL,
+			"is_auto_scored":  q.IsAutoScored,
+			"points":          q.Points,
+			"order_index":     q.OrderIndex,
+			"is_required":     q.IsRequired,
+			"is_autosaved_at": q.IsAutosavedAt,
+		}
+		if err := tx.Model(&domain.Question{}).Where("id = ?", q.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("question_id = ?", q.ID).Delete(&domain.QuestionOption{}).Error; err != nil {
+			return err
+		}
+		if len(q.Options) > 0 {
+			if err := tx.Create(&q.Options).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *questionRepository) DeleteQuestion(ctx context.Context, id uuid.UUID) error {

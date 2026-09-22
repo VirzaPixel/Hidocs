@@ -47,18 +47,15 @@ export function timeAgo(dateStr) {
 }
 
 export const QUESTION_TYPES = [
-  { value: 'SHORT_TEXT', label: 'Jawaban Singkat', hasOptions: false, autoScored: false },
   { value: 'LONG_TEXT', label: 'Esai', hasOptions: false, autoScored: false },
   { value: 'MULTIPLE_CHOICE', label: 'Pilihan Ganda', hasOptions: true, autoScored: true },
   { value: 'CHECKBOXES', label: 'Kotak Centang', hasOptions: true, autoScored: true },
-  { value: 'DROPDOWN', label: 'Dropdown', hasOptions: true, autoScored: true },
   { value: 'RATING', label: 'Rating (skala 1-5)', hasOptions: false, autoScored: false },
   { value: 'YES_NO', label: 'Ya / Tidak', hasOptions: true, autoScored: true },
-  { value: 'MATH', label: 'Matematika / Rumus', hasOptions: false, autoScored: false },
-  { value: 'CODE', label: 'Kode Program', hasOptions: false, autoScored: false },
-  { value: 'IMAGE', label: 'Gambar', hasOptions: false, autoScored: false },
   { value: 'MATCHING', label: 'Menjodohkan', hasOptions: true, autoScored: true },
 ];
+
+export const CONTENT_MODES = ['text', 'math', 'code'];
 
 export function questionTypeLabel(value) {
   return QUESTION_TYPES.find((t) => t.value === value)?.label || value;

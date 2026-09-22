@@ -16,5 +16,9 @@ func GenerateSlug(title string) string {
 	if slug == "" {
 		return "form-" + RandomString(6)
 	}
+	const maxBaseLength = 90
+	if len(slug) > maxBaseLength {
+		slug = strings.Trim(slug[:maxBaseLength], "-")
+	}
 	return slug + "-" + RandomString(6)
 }

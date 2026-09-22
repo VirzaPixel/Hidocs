@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Library, Eye, BarChart3, CheckCircle2, RotateCcw, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Library, Eye, BarChart3, CheckCircle2, RotateCcw, Share2 } from 'lucide-react';
 import { formApi } from '../../lib/api';
 import { Button, Input, Badge, Tabs, FullPageSpinner, EmptyState } from '../../shared/ui';
 import QuestionEditor from './QuestionEditor';
 import AddFromBankModal from './AddFromBankModal';
 import FormSettingsPanel from './FormSettingsPanel';
+import FormAccessPanel from './FormAccessPanel';
 import { useToast } from '../../shared/Toast';
+import { Modal } from '../../shared/Modal';
 import { FORM_STATUS_META, displayFormStatus } from '../../lib/utils';
 
 const TABS = [
@@ -28,6 +30,7 @@ export default function FormBuilderPage() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
 
   const { data: form, isLoading } = useQuery({
     queryKey: ['form', formId],
@@ -35,10 +38,12 @@ export default function FormBuilderPage() {
   });
 
   useEffect(() => {
-    if (form && questions === null) {
+    if (!form || questions !== null) return undefined;
+    const timer = window.setTimeout(() => {
       setQuestions(form.questions || []);
       setTitleDraft(form.title);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [form, questions]);
 
   const invalidateForm = () => queryClient.invalidateQueries({ queryKey: ['form', formId] });
@@ -159,6 +164,10 @@ export default function FormBuilderPage() {
             <Eye size={14} />
             Preview
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setAccessOpen(true)} title="Bagikan akses aplikasi siswa">
+            <Share2 size={14} />
+            Bagikan
+          </Button>
           <Button variant="outline" size="sm" onClick={() => navigate(`/forms/${formId}/monitoring`)}>
             <BarChart3 size={14} />
             Monitoring
@@ -186,8 +195,7 @@ export default function FormBuilderPage() {
 
       <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === 'questions' ? (
-        <div className="flex flex-col gap-3">
+      <div className={activeTab === 'questions' ? 'flex flex-col gap-3' : 'hidden'}>
           {questions.length === 0 && !addingNew ? (
             <EmptyState
               title="Belum ada soal"
@@ -230,9 +238,13 @@ export default function FormBuilderPage() {
             </Button>
           </div>
         </div>
-      ) : (
-        <FormSettingsPanel formId={formId} settings={form.form_settings} onSaved={invalidateForm} />
-      )}
+      <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
+        <FormSettingsPanel formId={formId} formData={form} settings={form.form_settings} onSaved={invalidateForm} />
+      </div>
+
+      <Modal open={accessOpen} onClose={() => setAccessOpen(false)} title="Bagikan akses aplikasi siswa">
+        <FormAccessPanel form={form} />
+      </Modal>
 
       <AddFromBankModal
         open={addFromBankOpen}

@@ -147,25 +147,8 @@ func parseMatrixToForm(matrix [][]string, formID uuid.UUID) (*ExtractedForm, err
 			continue
 		}
 
-		rawType := strings.ToUpper(getCell(row, colMap["tipe"]))
-		var qType domain.QuestionType
-		isAutoScored := true
-
-		switch {
-		case strings.Contains(rawType, "ESSAY") || strings.Contains(rawType, "TEXT"):
-			qType = domain.TypeLongText
-			isAutoScored = false
-		case strings.Contains(rawType, "YATIDAK") || strings.Contains(rawType, "TRUEFALSE") || strings.Contains(rawType, "BOOLEAN"):
-			qType = domain.TypeYesNo
-		case strings.Contains(rawType, "RATING") || strings.Contains(rawType, "STAR"):
-			qType = domain.TypeRating
-			isAutoScored = false
-		case strings.Contains(rawType, "CODE") || strings.Contains(rawType, "KODE"):
-			qType = domain.TypeCode
-			isAutoScored = false
-		default:
-			qType = domain.TypeMultipleChoice
-		}
+		rawType := getCell(row, colMap["tipe"])
+		qType, isAutoScored := normalizeQuestionType(rawType)
 
 		points := 10
 		if ptsStr := getCell(row, colMap["poin"]); ptsStr != "" {

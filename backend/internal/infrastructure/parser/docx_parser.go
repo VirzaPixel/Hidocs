@@ -298,18 +298,37 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 	optionRegex := regexp.MustCompile(`(?i)^(\*?\s*)(?:[\(\[]?([A-Ea-e])[\.\)\]]|\b([A-Ea-e])[\.\)])(?:\s*(.*))`)
 	answerKeyRegex := regexp.MustCompile(`(?i)^(?:Kunci\s*Jawaban|Kunci|Jawaban|Answer|Key)\s*[:=]?\s*[\(\[]?([A-Ea-e])[\.\)\]]?`)
 	separatorRegex := regexp.MustCompile(`^[\_\-\*\=\#\s]{3,}$`)
+	sectionRegex := regexp.MustCompile(`(?i)^\s*(?:[A-Z]\.|B\.)?\s*(?:Bagian)?\s*(Pilihan\s*Ganda|Pilihan\s+Ganda|PG|Multiple\s*Choice|Essai|Esai|Essay|Uraian|LONG_TEXT)\s*[:]?\s*$`)
 
 	startIndex := 0
 
 	// Check if document starts directly with a question
 	firstIsQuestion := qNumRegex.MatchString(paragraphs[0].Text) || optionRegex.MatchString(paragraphs[0].Text)
 
+	isSectionLine := func(i int) bool {
+		return sectionRegex.MatchString(strings.TrimSpace(paragraphs[i].Text))
+	}
+
 	if !firstIsQuestion {
-		extracted.Title = paragraphs[0].Text
-		startIndex = 1
-		if len(paragraphs) > 1 && !qNumRegex.MatchString(paragraphs[1].Text) && !optionRegex.MatchString(paragraphs[1].Text) {
-			extracted.Description = paragraphs[1].Text
-			startIndex = 2
+		if isSectionLine(0) {
+			// Dokumen dimulai langsung dengan seksi ("Pilihan Ganda"/"Essai"),
+			// tidak ada judul. Seksi diproses oleh loop dibawah.
+			extracted.Title = ""
+			startIndex = 0
+		} else {
+			extracted.Title = paragraphs[0].Text
+			startIndex = 1
+			if len(paragraphs) > 1 && strings.TrimSpace(paragraphs[1].Text) != "" &&
+				!qNumRegex.MatchString(paragraphs[1].Text) &&
+				!optionRegex.MatchString(paragraphs[1].Text) &&
+				!isSectionLine(1) {
+				extracted.Description = paragraphs[1].Text
+				startIndex = 2
+			} else if isSectionLine(1) {
+				// "Judul" langsung lalu "Pilihan Ganda" tanpa blank baris:
+				// seksi tetap diproses oleh loop dibawah, judul sudah set.
+				extracted.Description = ""
+			}
 		}
 	}
 
@@ -317,6 +336,8 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 	var currentOptions []domain.QuestionOption
 	var pendingCorrectLetter string
 	var pendingImage string
+	var defaultType domain.QuestionType = ""
+	var defaultAutoScored bool = true
 	orderIdx := 1
 
 	for i := startIndex; i < len(paragraphs); i++ {
@@ -328,6 +349,16 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			continue
 		}
 
+		// 0. Section header (Pilihan Ganda / Essai / Essay / Uraian) determines
+		// the default type for the questions right after it.
+		if smatch := sectionRegex.FindStringSubmatch(line); len(smatch) > 0 {
+			sectionType, sectionAuto := normalizeQuestionType(smatch[1])
+			if sectionType == domain.TypeMultipleChoice || sectionType == domain.TypeLongText {
+				defaultType, defaultAutoScored = sectionType, sectionAuto
+			}
+			continue
+		}
+
 		// 1. Check if it's a question number line
 		if match := qNumRegex.FindStringSubmatch(line); len(match) > 0 {
 			if currentQuestion != nil {
@@ -336,15 +367,23 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			}
 
 			qText := strings.TrimSpace(match[1])
+			qType, isAutoScored := normalizeQuestionType(qText)
+			if qType == domain.TypeMultipleChoice && defaultType != "" {
+				qType, isAutoScored = defaultType, defaultAutoScored
+			}
+			points := 10
+			if qType == domain.TypeLongText || qType == domain.TypeImage {
+				points = 5
+			}
 			qID := uuid.New()
 			currentQuestion = &domain.Question{
 				ID:           qID,
 				FormID:       formID,
-				QuestionText: qText,
-				QuestionType: domain.TypeMultipleChoice,
+				QuestionText: stripQuestionMarkers(qText),
+				QuestionType: qType,
 				ImgURL:       para.ImageURL,
-				IsAutoScored: true,
-				Points:       10,
+				IsAutoScored: isAutoScored,
+				Points:       points,
 				OrderIndex:   orderIdx,
 				IsRequired:   true,
 			}
@@ -419,13 +458,22 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 				pendingImage = ""
 			}
 
+			var matchKey, matchTarget *string
+			if currentQuestion.QuestionType == domain.TypeMatching {
+				if split := strings.SplitN(optText, "->", 2); len(split) == 2 {
+					left, right := strings.TrimSpace(split[0]), strings.TrimSpace(split[1])
+					optText, matchKey, matchTarget = left, &left, &right
+				}
+			}
 			currentOptions = append(currentOptions, domain.QuestionOption{
-				ID:         uuid.New(),
-				QuestionID: currentQuestion.ID,
-				OptionText: optText,
-				ImgURL:     optImg,
-				IsCorrect:  isCorrect,
-				OrderIndex: len(currentOptions) + 1,
+				ID:              uuid.New(),
+				QuestionID:      currentQuestion.ID,
+				OptionText:      optText,
+				ImgURL:          optImg,
+				MatchKey:        matchKey,
+				MatchTargetText: matchTarget,
+				IsCorrect:       isCorrect,
+				OrderIndex:      len(currentOptions) + 1,
 			})
 			continue
 		}

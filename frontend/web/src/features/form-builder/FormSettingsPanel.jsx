@@ -13,8 +13,9 @@ function toLocalInputValue(dateStr) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function FormSettingsPanel({ formId, settings, onSaved }) {
+export default function FormSettingsPanel({ formId, formData, settings, onSaved }) {
   const [form, setForm] = useState(() => ({
+    custom_url: formData?.custom_url || '',
     duration_minutes: settings?.duration_minutes ?? 60,
     is_active_immediately: settings?.is_active_immediately ?? false,
     is_one_time_submission: settings?.is_one_time_submission ?? false,
@@ -59,9 +60,20 @@ export default function FormSettingsPanel({ formId, settings, onSaved }) {
         exam_token: form.exam_token || null,
         is_token_protected: form.is_token_protected,
       };
-      const updated = await formApi.updateSettings(formId, payload);
+      await formApi.updateSettings(formId, payload);
+      if (form.custom_url !== formData?.custom_url) {
+        await formApi.update(formId, {
+          title: formData.title,
+          description: formData.description || '',
+          category: formData.category || '',
+          type: formData.type,
+          custom_url: form.custom_url.trim(),
+          status: formData.status,
+          is_template: formData.is_template,
+        });
+      }
       toast.success('Pengaturan form disimpan');
-      onSaved?.(updated);
+      onSaved?.();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -71,6 +83,17 @@ export default function FormSettingsPanel({ formId, settings, onSaved }) {
 
   return (
     <div className="flex flex-col gap-5">
+      <Card className="flex flex-col gap-4">
+        <h3 className="font-semibold text-text">Tautan Akses Form</h3>
+        <Input
+          label="Custom URL"
+          value={form.custom_url}
+          onChange={(e) => patch({ custom_url: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+          placeholder="contoh: ujian-ipa-kelas-8b"
+          hint="Gunakan huruf kecil, angka, dan tanda hubung. Tautan ini dipakai aplikasi mobile dan QR code."
+        />
+      </Card>
+
       <Card className="flex flex-col gap-4">
         <h3 className="font-semibold text-text">Waktu Ujian</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

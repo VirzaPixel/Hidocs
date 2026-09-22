@@ -128,9 +128,8 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				forms.POST("", cfg.FormHandler.CreateForm)
 				forms.POST("/import-docx", cfg.FormHandler.ImportDocx)
 				forms.POST("/import-excel", cfg.FormHandler.ImportExcel)
-				// FIX: handler & service sudah dibuat (ImportFormFromPDF), tapi
-				// sebelumnya belum ada route yang mengarah ke sana sama sekali.
-				forms.POST("/import-pdf", cfg.FormHandler.ImportPdf)
+				// FIX: Import PDF dihapus dari produk (kualitas parsing teks PDF
+				// tidak dapat diandalkan). Dihapus route + handler/service terkait.
 				forms.GET("/:form_id", cfg.FormHandler.GetFormByID)
 				forms.PUT("/:form_id", cfg.FormHandler.UpdateForm)
 				forms.DELETE("/:form_id", cfg.FormHandler.DeleteForm)
