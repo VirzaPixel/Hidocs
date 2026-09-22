@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o hidocs-backend ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -p 2 -ldflags="-w -s" -o hidocs-backend ./cmd/api
 
 FROM alpine:latest
 
