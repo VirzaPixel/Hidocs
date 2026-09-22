@@ -29,4 +29,3 @@ services:
 
 volumes:
   hidocs_postgres_data:
-  
