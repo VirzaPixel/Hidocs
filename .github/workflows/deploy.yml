@@ -21,8 +21,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          timeout: 15m
-          commmand_timeout: 15m
+          timeout: 30m
+          commmand_timeout: 30m
           script: |
             # Make Directory for Hidocs
             mkdir -p /root/hidocs
