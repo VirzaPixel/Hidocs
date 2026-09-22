@@ -20,7 +20,6 @@ import (
 	"backend/internal/interfaces/http/router"
 
 	"github.com/google/uuid"
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -39,10 +38,6 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
-
-	if cfg.AppEnv == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
 
 	// Initialize Postgres DB
 	db, err := database.NewPostgresDB(cfg)
@@ -63,17 +58,27 @@ func main() {
 	questionRepo := repository.NewQuestionRepository(db)
 	responseRepo := repository.NewResponseRepository(db)
 	adminRepo := repository.NewAdminRepository(db)
+	// FIX: repository baru untuk Share Monitoring dan Bank Soal.
+	collaboratorRepo := repository.NewCollaboratorRepository(db)
+	bankQuestionRepo := repository.NewBankQuestionRepository(db)
 
 	// Services
 	authService := service.NewAuthService(userRepo, hasher, jwtManager, redisClient, emailSender)
 	userService := service.NewUserService(userRepo, hasher)
-	formService := service.NewFormService(formRepo, responseRepo, redisClient, cfg.JWTSecret)
+	// FIX: NewFormService sekarang butuh appBaseURL (QR code) + collabRepo/userRepo
+	// (Share Monitoring).
+	formService := service.NewFormService(formRepo, responseRepo, redisClient, cfg.AppBaseURL, collaboratorRepo, userRepo)
 	questionService := service.NewQuestionService(questionRepo, formRepo)
-	responseService := service.NewResponseService(responseRepo, formRepo, questionRepo, cfg.JWTSecret)
+	// FIX: NewResponseService sekarang butuh collaboratorRepo (Share Monitoring).
+	responseService := service.NewResponseService(responseRepo, formRepo, questionRepo, collaboratorRepo)
 	docxService := service.NewDocxService(docxParser, formRepo, questionRepo)
 	exportService := service.NewExportService(formRepo, responseRepo, questionRepo)
 	adminService := service.NewAdminService(adminRepo, userRepo, hasher)
 	metricsService := service.NewMetricsService(db, formRepo)
+	// FIX: sebelumnya AIService tidak pernah diinstantiate sama sekali.
+	aiService := service.NewAIService(cfg, formRepo, questionRepo, responseRepo)
+	// FIX: service baru untuk Bank Soal.
+	questionBankService := service.NewQuestionBankService(bankQuestionRepo, questionRepo, formRepo)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
@@ -84,6 +89,10 @@ func main() {
 	publicHandler := handler.NewPublicHandler(formService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	metricsHandler := handler.NewMetricsHandler(metricsService)
+	// FIX: sebelumnya AIHandler tidak pernah diinstantiate sama sekali.
+	aiHandler := handler.NewAIHandler(aiService)
+	// FIX: handler baru untuk Bank Soal.
+	questionBankHandler := handler.NewQuestionBankHandler(questionBankService)
 
 	// Router
 	r := router.SetupRouter(&router.RouterConfig{
@@ -95,9 +104,10 @@ func main() {
 		PublicHandler:   publicHandler,
 		AdminHandler:    adminHandler,
 		MetricsHandler:  metricsHandler,
+		AIHandler:       aiHandler,
+		QuestionBankHandler: questionBankHandler,
 		JWTManager:      jwtManager,
-		SessionSecret:   cfg.JWTSecret,
-		RedisClient:     redisClient,
+		Cfg:             cfg,
 	})
 
 	// Auto-seed default SuperAdmin and Test Exam Form for load testing

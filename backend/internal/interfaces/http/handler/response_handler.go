@@ -8,6 +8,7 @@ import (
 	"backend/internal/application/service"
 	"backend/internal/infrastructure/security"
 	"backend/internal/interfaces/http/middleware"
+	"backend/pkg/pagination"
 	"backend/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -57,12 +58,14 @@ func (h *ResponseHandler) SubmitForm(c *gin.Context) {
 }
 
 // GetFormResponses godoc
-// @Summary Get all responses for a form
+// @Summary Get all responses for a form (paginated)
 // @Tags Responses
 // @Produce json
 // @Security BearerAuth
 // @Param form_id path string true "Form ID"
-// @Success 200 {object} response.APIResponse{data=[]dto.ResponseDetailDTO}
+// @Param limit query int false "Items per page (default 25, max 100)"
+// @Param offset query int false "Items to skip (default 0)"
+// @Success 200 {object} response.APIResponse{data=dto.PaginatedResponsesDTO}
 // @Router /api/v1/forms/{form_id}/responses [get]
 func (h *ResponseHandler) GetFormResponses(c *gin.Context) {
 	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
@@ -73,13 +76,23 @@ func (h *ResponseHandler) GetFormResponses(c *gin.Context) {
 		return
 	}
 
-	responses, err := h.responseService.GetFormResponses(c.Request.Context(), claims.UserID, formID)
+	// FIX: sebelumnya endpoint ini selalu menarik SEMUA response tanpa batas.
+	// Default 25/halaman, maksimal 100/halaman supaya query tidak berat walau
+	// form punya 800-1000 submission.
+	pg := pagination.FromQuery(c, 25, 100)
+
+	responses, total, err := h.responseService.GetFormResponses(c.Request.Context(), claims.UserID, formID, pg)
 	if err != nil {
 		response.BadRequest(c, err.Error(), err)
 		return
 	}
 
-	response.OK(c, "Responses retrieved successfully", responses)
+	response.OK(c, "Responses retrieved successfully", dto.PaginatedResponsesDTO{
+		Items:  responses,
+		Total:  total,
+		Limit:  pg.Limit,
+		Offset: pg.Offset,
+	})
 }
 
 // GetMySubmissions godoc

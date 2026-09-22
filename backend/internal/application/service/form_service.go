@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
+	"net/url"
+	"strings"
 	"time"
 
 	"backend/internal/application/dto"
 	"backend/internal/domain"
 	"backend/internal/infrastructure/cache"
-	sessionpkg "backend/pkg/session"
 	"backend/pkg/utils"
 	"github.com/google/uuid"
 )
@@ -26,21 +28,34 @@ type FormService interface {
 	GetPublicForm(ctx context.Context, identifier string) (*dto.PublicFormDTO, error)
 	GetFormQRCode(ctx context.Context, identifier string) (string, error)
 	VerifyExamToken(ctx context.Context, formID uuid.UUID, req dto.VerifyExamTokenRequest) (*dto.VerifyExamTokenResponse, error)
+
+	// FIX: Share Monitoring — tiga method baru untuk mengelola guru lain yang diberi
+	// akses monitoring (read-only) ke sebuah form.
+	AddCollaborator(ctx context.Context, ownerID uuid.UUID, formID uuid.UUID, email string) (*dto.CollaboratorDTO, error)
+	ListCollaborators(ctx context.Context, ownerID uuid.UUID, formID uuid.UUID) ([]dto.CollaboratorDTO, error)
+	RemoveCollaborator(ctx context.Context, ownerID uuid.UUID, formID uuid.UUID, collaboratorUserID uuid.UUID) error
 }
 
 type formService struct {
-	formRepo      domain.FormRepository
-	responseRepo  domain.ResponseRepository
-	redisClient   *cache.RedisClient
-	sessionSecret string
+	formRepo     domain.FormRepository
+	responseRepo domain.ResponseRepository
+	redisClient  *cache.RedisClient
+	// FIX: sebelumnya tidak ada base URL sama sekali, jadi GetFormQRCode generate QR
+	// dari custom_url MENTAH tanpa domain (lihat fix di GetFormQRCode di bawah).
+	appBaseURL string
+	// FIX: dua dependency baru untuk fitur Share Monitoring.
+	collabRepo domain.CollaboratorRepository
+	userRepo   domain.UserRepository
 }
 
-func NewFormService(formRepo domain.FormRepository, responseRepo domain.ResponseRepository, redisClient *cache.RedisClient, sessionSecret string) FormService {
+func NewFormService(formRepo domain.FormRepository, responseRepo domain.ResponseRepository, redisClient *cache.RedisClient, appBaseURL string, collabRepo domain.CollaboratorRepository, userRepo domain.UserRepository) FormService {
 	return &formService{
-		formRepo:      formRepo,
-		responseRepo:  responseRepo,
-		redisClient:   redisClient,
-		sessionSecret: sessionSecret,
+		formRepo:     formRepo,
+		responseRepo: responseRepo,
+		redisClient:  redisClient,
+		appBaseURL:   appBaseURL,
+		collabRepo:   collabRepo,
+		userRepo:     userRepo,
 	}
 }
 
@@ -196,6 +211,7 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 		AutoActiveDays:      req.AutoActiveDays,
 		IsActiveImmediately: req.IsActiveImmediately,
 		IsOneTimeSubmission: req.IsOneTimeSubmission,
+		MaxAttempts:         0,
 		RandomizeQuestions:  req.RandomizeQuestions,
 		RandomizeOptions:    req.RandomizeOptions,
 		StartTime:           req.StartTime,
@@ -247,6 +263,11 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 	}
 	if req.IsTokenProtected != nil {
 		settings.IsTokenProtected = *req.IsTokenProtected
+	}
+	if req.MaxAttempts != nil {
+		settings.MaxAttempts = *req.MaxAttempts
+	} else if existingSettings != nil {
+		settings.MaxAttempts = existingSettings.MaxAttempts
 	}
 
 	if err := s.formRepo.UpsertFormSettings(ctx, settings); err != nil {
@@ -535,10 +556,6 @@ func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req
 		})
 	}
 
-	if session == nil {
-		return nil, errors.New("failed to initialize exam session")
-	}
-
 	sessionState := &dto.SessionStateDTO{
 		ResponseID:            session.ID,
 		FormID:                formID,
@@ -551,14 +568,8 @@ func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req
 		Questions:             sessionQuestions,
 	}
 
-	sessionToken := ""
-	if s.sessionSecret != "" {
-		sessionToken = sessionpkg.GenerateExamSessionToken(session.ID.String(), s.sessionSecret)
-	}
-
 	return &dto.VerifyExamTokenResponse{
 		ResponseID:   session.ID,
-		SessionToken: sessionToken,
 		Form:         publicForm,
 		SessionState: sessionState,
 	}, nil
@@ -570,7 +581,11 @@ func (s *formService) GetFormQRCode(ctx context.Context, identifier string) (str
 		return "", err
 	}
 
-	qrURL := "https://quickchart.io/qr?text=" + form.CustomURL + "&size=300"
+	// FIX: sebelumnya cuma pakai form.CustomURL mentah (mis. "ujian-ipa-8b"), bukan
+	// URL publik lengkap — jadi QR yang dipindai tidak mengarah ke mana pun yang valid.
+	base := strings.TrimRight(s.appBaseURL, "/")
+	publicURL := base + "/f/" + form.CustomURL
+	qrURL := "https://quickchart.io/qr?text=" + url.QueryEscape(publicURL) + "&size=300"
 	return qrURL, nil
 }
 
@@ -630,4 +645,90 @@ func (s *formService) mapFormToDTOWithCount(ctx context.Context, form *domain.Fo
 		FormSettings:  form.FormSettings,
 		Questions:     questionDTOs,
 	}
+}
+
+// FIX: Share Monitoring — implementasi 3 method baru.
+
+func (s *formService) AddCollaborator(ctx context.Context, ownerID uuid.UUID, formID uuid.UUID, email string) (*dto.CollaboratorDTO, error) {
+	form, err := s.formRepo.GetByID(ctx, formID)
+	if err != nil {
+		return nil, err
+	}
+	if form.UserID != ownerID {
+		return nil, domain.ErrForbidden
+	}
+
+	target, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("guru dengan email %s tidak ditemukan", email)
+	}
+	if target.ID == ownerID {
+		return nil, fmt.Errorf("tidak bisa menambahkan diri sendiri sebagai kolaborator")
+	}
+
+	alreadyCollab, _ := s.collabRepo.IsCollaborator(ctx, formID, target.ID)
+	if alreadyCollab {
+		return nil, fmt.Errorf("guru ini sudah punya akses monitoring ke form ini")
+	}
+
+	collab := &domain.FormCollaborator{
+		ID:        uuid.New(),
+		FormID:    formID,
+		UserID:    target.ID,
+		Role:      domain.CollaboratorRoleMonitor,
+		InvitedBy: ownerID,
+	}
+	if err := s.collabRepo.Add(ctx, collab); err != nil {
+		return nil, err
+	}
+
+	return &dto.CollaboratorDTO{
+		UserID:    target.ID,
+		Name:      target.Name,
+		Email:     target.Email,
+		Role:      string(collab.Role),
+		CreatedAt: collab.CreatedAt,
+	}, nil
+}
+
+func (s *formService) ListCollaborators(ctx context.Context, ownerID uuid.UUID, formID uuid.UUID) ([]dto.CollaboratorDTO, error) {
+	form, err := s.formRepo.GetByID(ctx, formID)
+	if err != nil {
+		return nil, err
+	}
+	if form.UserID != ownerID {
+		return nil, domain.ErrForbidden
+	}
+
+	items, err := s.collabRepo.ListByForm(ctx, formID)
+	if err != nil {
+		return nil, err
+	}
+
+	var dtos []dto.CollaboratorDTO
+	for _, c := range items {
+		name, email := "", ""
+		if c.User != nil {
+			name, email = c.User.Name, c.User.Email
+		}
+		dtos = append(dtos, dto.CollaboratorDTO{
+			UserID:    c.UserID,
+			Name:      name,
+			Email:     email,
+			Role:      string(c.Role),
+			CreatedAt: c.CreatedAt,
+		})
+	}
+	return dtos, nil
+}
+
+func (s *formService) RemoveCollaborator(ctx context.Context, ownerID uuid.UUID, formID uuid.UUID, collaboratorUserID uuid.UUID) error {
+	form, err := s.formRepo.GetByID(ctx, formID)
+	if err != nil {
+		return err
+	}
+	if form.UserID != ownerID {
+		return domain.ErrForbidden
+	}
+	return s.collabRepo.Remove(ctx, formID, collaboratorUserID)
 }

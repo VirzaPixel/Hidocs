@@ -104,26 +104,3 @@ func (r *userRepository) GetPasswordResetByToken(ctx context.Context, token stri
 func (r *userRepository) DeletePasswordReset(ctx context.Context, email string) error {
 	return r.db.WithContext(ctx).Delete(&domain.PasswordReset{}, "email = ?", email).Error
 }
-
-func (r *userRepository) CreateRefreshToken(ctx context.Context, rt *domain.RefreshToken) error {
-	return r.db.WithContext(ctx).Create(rt).Error
-}
-
-func (r *userRepository) GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
-	var rt domain.RefreshToken
-	if err := r.db.WithContext(ctx).First(&rt, "token = ?", token).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrInvalidToken
-		}
-		return nil, err
-	}
-	return &rt, nil
-}
-
-func (r *userRepository) DeleteRefreshToken(ctx context.Context, token string) error {
-	return r.db.WithContext(ctx).Delete(&domain.RefreshToken{}, "token = ?", token).Error
-}
-
-func (r *userRepository) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
-	return r.db.WithContext(ctx).Delete(&domain.RefreshToken{}, "user_id = ?", userID).Error
-}

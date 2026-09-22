@@ -75,17 +75,10 @@ func (h *PublicHandler) GetFormQRCode(c *gin.Context) {
 // @Success 200 {object} response.APIResponse{data=dto.VerifyExamTokenResponse}
 // @Router /api/v1/public/forms/{form_id}/verify-token [post]
 func (h *PublicHandler) VerifyExamToken(c *gin.Context) {
-	ident := c.Param("form_id")
-	var formID uuid.UUID
-	if parsed, err := uuid.Parse(ident); err == nil {
-		formID = parsed
-	} else {
-		publicForm, err := h.formService.GetPublicForm(c.Request.Context(), ident)
-		if err != nil {
-			response.NotFound(c, "Form tidak ditemukan", err)
-			return
-		}
-		formID = publicForm.ID
+	formID, err := uuid.Parse(c.Param("form_id"))
+	if err != nil {
+		response.BadRequest(c, "Invalid form_id UUID format", err)
+		return
 	}
 
 	var req dto.VerifyExamTokenRequest

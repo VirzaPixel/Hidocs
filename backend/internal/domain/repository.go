@@ -20,12 +20,6 @@ type UserRepository interface {
 	CreatePasswordReset(ctx context.Context, reset *PasswordReset) error
 	GetPasswordResetByToken(ctx context.Context, token string) (*PasswordReset, error)
 	DeletePasswordReset(ctx context.Context, email string) error
-
-	// Refresh tokens (rotasi + reuse detection)
-	CreateRefreshToken(ctx context.Context, rt *RefreshToken) error
-	GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error)
-	DeleteRefreshToken(ctx context.Context, token string) error
-	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 }
 
 type FormRepository interface {
@@ -65,16 +59,23 @@ type ResponseRepository interface {
 	CreateResponse(ctx context.Context, resp *FormResponse) error
 	GetResponseByID(ctx context.Context, id uuid.UUID) (*FormResponse, error)
 	GetResponsesByFormID(ctx context.Context, formID uuid.UUID) ([]FormResponse, error)
+	// FIX: baru ditambahkan untuk endpoint list responses (GET /forms/:id/responses),
+	// supaya tidak menarik SEMUA response sekaligus saat form punya 800-1000 pengerjaan.
+	// GetResponsesByFormID (di atas) TETAP dipakai apa adanya oleh fitur export,
+	// karena export memang butuh data lengkap, bukan sebagian halaman.
+	GetResponsesByFormIDPaginated(ctx context.Context, formID uuid.UUID, pg Pagination) ([]FormResponse, int64, error)
 	GetResponsesByEmail(ctx context.Context, email string) ([]FormResponse, error)
 	GetActiveResponseSession(ctx context.Context, formID uuid.UUID, email string) (*FormResponse, error)
 	CheckUserAlreadySubmitted(ctx context.Context, formID uuid.UUID, email string) (bool, error)
+	// FIX: baru — untuk batas percobaan NUMERIK (max_attempts), pengganti
+	// CheckUserAlreadySubmitted yang cuma bisa on/off (1x atau tidak dibatasi).
+	CountSubmissionsByEmail(ctx context.Context, formID uuid.UUID, email string) (int64, error)
 	UpdateResponseGrade(ctx context.Context, responseID uuid.UUID, totalScore float64) error
 	UpdateResponseStatus(ctx context.Context, responseID uuid.UUID, status ResponseStatus) error
 	
 	// Autosave & Incremental Answers
 	UpsertAnswer(ctx context.Context, answer *ResponseAnswer) error
 	UpsertAnswersBatch(ctx context.Context, answers []ResponseAnswer) error
-	TouchHeartbeat(ctx context.Context, responseID uuid.UUID) error
 	
 	// Live Proctoring, Telemetry & Creator Restart
 	UpdateTelemetry(ctx context.Context, responseID uuid.UUID, eventType string, eventMessage *string, currentQuestionIdx int, metadata *string) error

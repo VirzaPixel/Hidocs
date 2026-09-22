@@ -3,6 +3,7 @@ package parser
 import (
 	"testing"
 
+	"backend/internal/domain"
 	"github.com/google/uuid"
 )
 
@@ -98,5 +99,53 @@ func TestParseLinesToForm_WithTitleAndDescription(t *testing.T) {
 
 	if !extracted.Questions[0].Options[1].IsCorrect {
 		t.Fatalf("Expected Option B to be correct")
+	}
+}
+
+func TestParseLinesToForm_Markers(t *testing.T) {
+	lines := []string{
+		"1. [ESAI] Jelaskan dampak pemanasan global secara rinci!",
+		"Para siswa diminta menulis minimal 3 dampak beserta contoh nyata.",
+		"2. [MATCHING] Cocokkan istilah dengan definisinya.",
+		"A. Ekosistem -> Tempat interaksi makhluk hidup dan lingkungannya",
+		"B. Populasi -> Kumpulan individu sejenis pada suatu wilayah",
+		"3. [GAMBAR] Amati gambar berikut dengan saksama.",
+	}
+
+	formID := uuid.New()
+	extracted, err := parseLinesToForm(lines, formID)
+	if err != nil {
+		t.Fatalf("parseLinesToForm failed: %v", err)
+	}
+
+	if len(extracted.Questions) != 3 {
+		t.Fatalf("Expected 3 questions, got %d", len(extracted.Questions))
+	}
+
+	q1 := extracted.Questions[0]
+	if q1.QuestionType != domain.TypeLongText {
+		t.Fatalf("Expected LONG_TEXT for [ESAI], got %v", q1.QuestionType)
+	}
+	if q1.IsAutoScored {
+		t.Fatalf("Expected esai to not be auto scored")
+	}
+	if q1.Points != 5 {
+		t.Fatalf("Expected 5 points for esai, got %d", q1.Points)
+	}
+
+	q2 := extracted.Questions[1]
+	if q2.QuestionType != domain.TypeMatching {
+		t.Fatalf("Expected MATCHING for [MATCHING], got %v", q2.QuestionType)
+	}
+	if len(q2.Options) != 2 {
+		t.Fatalf("Expected 2 match options, got %d", len(q2.Options))
+	}
+	if q2.Options[0].MatchTargetText == nil || *q2.Options[0].MatchTargetText != "Tempat interaksi makhluk hidup dan lingkungannya" {
+		t.Fatalf("Expected match target split via '->', got %v", q2.Options[0].MatchTargetText)
+	}
+
+	q3 := extracted.Questions[2]
+	if q3.QuestionType != domain.TypeImage {
+		t.Fatalf("Expected IMAGE for [GAMBAR], got %v", q3.QuestionType)
 	}
 }

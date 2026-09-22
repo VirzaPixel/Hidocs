@@ -75,8 +75,19 @@ func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
 	}
 
 	// Performance Optimization for 500+ Concurrent Students (Tuned Pool Settings)
-	sqlDB.SetMaxOpenConns(150)
-	sqlDB.SetMaxIdleConns(30)
+	// FIX: sebelumnya hardcoded 150/30, mengabaikan DB_MAX_OPEN_CONNS/DB_MAX_IDLE_CONNS
+	// yang sudah ada di .env.example. Sekarang dibaca dari config (dengan default sama
+	// seperti sebelumnya kalau env tidak diisi).
+	maxOpen := cfg.DBMaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = 150
+	}
+	maxIdle := cfg.DBMaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = 30
+	}
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxIdle)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
 
@@ -90,7 +101,6 @@ func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
 		err = db.AutoMigrate(
 			&domain.User{},
 			&domain.PasswordReset{},
-			&domain.RefreshToken{},
 			&domain.Form{},
 			&domain.FormSettings{},
 			&domain.Question{},
@@ -98,6 +108,10 @@ func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
 			&domain.FormResponse{},
 			&domain.ResponseAnswer{},
 			&domain.ProctoringLog{},
+			// FIX: tabel baru untuk Bank Soal dan Share Monitoring.
+			&domain.BankQuestion{},
+			&domain.BankQuestionOption{},
+			&domain.FormCollaborator{},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("auto migration failed: %w", err)

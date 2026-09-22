@@ -1,12 +1,8 @@
 package handler
 
 import (
-	"os"
-
 	"backend/internal/application/dto"
 	"backend/internal/application/service"
-	"backend/internal/infrastructure/security"
-	"backend/internal/interfaces/http/middleware"
 	"backend/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -120,48 +116,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.OK(c, "Login successful", res)
 }
 
-// RefreshToken godoc
-// @Summary Refresh JWT access token (rotasi + reuse detection)
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param request body dto.RefreshTokenRequest true "Refresh Payload"
-// @Success 200 {object} response.APIResponse{data=dto.AuthResponse}
-// @Router /api/v1/auth/refresh [post]
-func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req dto.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request payload", err)
-		return
-	}
-
-	res, err := h.authService.RefreshToken(c.Request.Context(), req)
-	if err != nil {
-		response.Unauthorized(c, err.Error(), err)
-		return
-	}
-
-	response.OK(c, "Token refreshed successfully", res)
-}
-
-// Logout godoc
-// @Summary Logout (revoke semua refresh token user)
-// @Tags Auth
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} response.APIResponse
-// @Router /api/v1/auth/logout [post]
-func (h *AuthHandler) Logout(c *gin.Context) {
-	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
-
-	if err := h.authService.Logout(c.Request.Context(), claims.UserID); err != nil {
-		response.BadRequest(c, err.Error(), err)
-		return
-	}
-
-	response.OK(c, "Logged out successfully", nil)
-}
-
 // ForgotPassword godoc
 // @Summary Request password reset
 // @Description Generate password reset token
@@ -184,11 +138,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	payload := gin.H{"email": req.Email}
-	if os.Getenv("APP_ENV") != "production" && os.Getenv("SMTP_USER") == "" && token != "" {
-		payload["reset_token"] = token
-	}
-	response.OK(c, "If the email is registered, a password reset token has been sent", payload)
+	response.OK(c, "Password reset token generated successfully", gin.H{"reset_token": token})
 }
 
 // ResetPassword godoc

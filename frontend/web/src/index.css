@@ -1,215 +1,66 @@
-/* =========================================================
-   GLOBAL RESET & TYPOGRAPHY — HIDOCS
-========================================================= */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
-*,
-*::before,
-*::after {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-    --hp-pri: #2168b4;
-    --hp-pri-dark: #174d87;
-    --hp-pri-lt: #eef5fd;
-    --nb-pri: #2168b4;
-    --nb-pri-lt: #eef5fd;
-    --app-bg: #f4f7fb;
-    --app-text: #1d2c3f;
-    --app-border: #e5ebf2;
-    --app-card: #ffffff;
-    font-family: 'Inter', sans-serif;
+  --hp-pri: #2168b4;
+  --hp-pri-hover: #1a5490;
+  --app-bg: #ffffff;
+  --app-bg-secondary: #f4f6f9;
+  --app-surface: #ffffff;
+  --app-border: #e2e8f0;
+  --app-text: #16202c;
+  --app-text-secondary: #64748b;
+  --app-danger: #dc2626;
+  --app-success: #16a34a;
+  --app-warning: #d97706;
 }
 
-html.dark, body.dark, .dark {
-    --app-bg: #091420;
-    --app-text: #dde9f6;
-    --app-border: #1b2e40;
-    --app-card: #0f1c2b;
-    --hp-pri-lt: #111e30;
-    --nb-pri-lt: #111e30;
-    background-color: #091420 !important;
-    color: #dde9f6 !important;
+html.dark {
+  --hp-pri: #2f7fd6;
+  --hp-pri-hover: #4a94e6;
+  --app-bg: #0a0a0a;
+  --app-bg-secondary: #161616;
+  --app-surface: #161616;
+  --app-border: #2c2c2c;
+  --app-text: #f5f5f5;
+  --app-text-secondary: #a3a3a3;
+  --app-danger: #ef4444;
+  --app-success: #22c55e;
+  --app-warning: #f59e0b;
 }
 
-html {
-    width: 100%;
-    min-height: 100%;
-    height: auto;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scroll-behavior: smooth;
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-    width: 100%;
-    min-height: 100vh;
-    height: auto;
-    max-height: none;
-    margin: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    position: static;
-    background: #f4f7fb;
-    color: #1d2c3f;
-    font-family: "Inter", sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-#root {
-    position: relative;
-    width: 100%;
-    min-height: 100vh;
-    height: auto;
-    max-height: none;
-    overflow: visible;
-}
-
-/* Form Elements Reset */
-button,
-input,
-textarea,
-select {
-    font-family: inherit;
-    font-size: inherit;
-}
-
-button {
-    cursor: pointer;
-}
-
-img {
-    display: block;
-    max-width: 100%;
-}
-
-a {
-    color: inherit;
-    text-decoration: none;
-}
-
-/* Global Theme Harmonization */
-.details-header,
-.fillform-header,
-.form-result-header {
-    background: linear-gradient(135deg, var(--hp-pri, #2168b4) 0%, color-mix(in srgb, var(--hp-pri, #2168b4) 70%, #4b9fe8) 100%) !important;
-}
-
-.details-start-btn,
-.fillform-submit-btn,
-.fillform-nav-btn.primary,
-.success-primary-btn {
-    background-color: var(--hp-pri, #2168b4) !important;
-    border-color: var(--hp-pri, #2168b4) !important;
-}
-
-.fillform-progress-fill {
-    background-color: var(--hp-pri, #2168b4) !important;
-}
-
-/* Global Auth Pages (Login, Register, VerifyOtp) Theme Synchronization */
-.login-page,
-.register-page,
-.verify-page {
-    background-color: color-mix(in srgb, var(--hp-pri, #2168b4) 40%, #030b18) !important;
-}
-
-.login-page:before,
-.register-page:before,
-.verify-page:before {
-    background: linear-gradient(
-        120deg,
-        color-mix(in srgb, var(--hp-pri, #2168b4) 22%, #020712) 0%,
-        color-mix(in srgb, var(--hp-pri, #2168b4) 52%, #051428) 55%,
-        color-mix(in srgb, var(--hp-pri, #2168b4) 82%, #0a2544) 100%
-    ) !important;
-}
-
-.login-blob.one,
-.register-blob.one,
-.verify-blob.one {
-    background: color-mix(in srgb, var(--hp-pri, #2168b4) 30%, transparent) !important;
-}
-
-.login-blob.two,
-.register-blob.two,
-.verify-blob.two {
-    background: color-mix(in srgb, var(--hp-pri, #2168b4) 20%, transparent) !important;
-}
-
-.login-btn,
-.register-btn,
-.verify-btn {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--hp-pri, #2168b4) 85%, #000000),
-        var(--hp-pri, #2168b4)
-    ) !important;
-    box-shadow: 0 8px 22px color-mix(in srgb, var(--hp-pri, #2168b4) 38%, transparent) !important;
-}
-
-.login-btn:hover:not(:disabled),
-.register-btn:hover:not(:disabled),
-.verify-btn:hover:not(:disabled) {
-    box-shadow: 0 12px 28px color-mix(in srgb, var(--hp-pri, #2168b4) 45%, transparent) !important;
-}
-
-.login-register a,
-.register-link a,
-.register-terms a,
-.verify-back a,
-.verify-resend-btn,
-.verify-form-header p strong {
-    color: var(--hp-pri, #2168b4) !important;
-}
-
-.login-input-wrapper:focus-within,
-.register-input-wrapper:focus-within,
-.verify-otp-input:focus {
-    border-color: var(--hp-pri, #2168b4) !important;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--hp-pri, #2168b4) 16%, transparent) !important;
-}
-
-/* Global Admin Pages Theme Synchronization */
-.admin-hero,
-.manage-forms-hero,
-.admin-profile-hero,
-.admin-form-details-hero,
-.admin-results-hero {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--hp-pri, #2168b4) 75%, #020914) 0%,
-        var(--hp-pri, #2168b4) 56%,
-        color-mix(in srgb, var(--hp-pri, #2168b4) 65%, #60a5fa) 100%
-    ) !important;
-}
-
-.admin-sidebar-item.active,
-.admin-tab-btn.active,
-.admin-btn-primary {
-    background-color: var(--hp-pri, #2168b4) !important;
-    border-color: var(--hp-pri, #2168b4) !important;
-}
-
-/* Smooth Scrollbar */
 ::-webkit-scrollbar {
-    width: 7px;
-    height: 7px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-    background: transparent;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(150, 168, 186, 0.4);
-    border-radius: 4px;
+  background-color: var(--app-border);
+  border-radius: 9999px;
 }
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(150, 168, 186, 0.7);
+
+/* Dipakai halaman Preview Simulasi Siswa untuk warna theme_color per-form,
+   sengaja TERPISAH dari variabel --hp-pri di atas (warna brand aplikasi). */
+.preview-frame {
+  --preview-accent: #4f46e5;
 }

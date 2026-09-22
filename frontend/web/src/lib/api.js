@@ -1,0 +1,120 @@
+import apiClient, { toFormData, AI_TIMEOUT_MS } from './apiClient';
+
+/* ============================= AUTH ============================= */
+export const authApi = {
+  register: (payload) => apiClient.post('/auth/register', payload),
+  verifyOtp: (payload) => apiClient.post('/auth/verify-otp', payload),
+  resendOtp: (payload) => apiClient.post('/auth/resend-otp', payload),
+  login: (payload) => apiClient.post('/auth/login', payload),
+  forgotPassword: (payload) => apiClient.post('/auth/forgot-password', payload),
+  resetPassword: (payload) => apiClient.post('/auth/reset-password', payload),
+};
+
+/* ============================= USER ============================= */
+export const userApi = {
+  getMe: () => apiClient.get('/users/me'),
+  updateMe: (payload) => apiClient.put('/users/me', payload),
+  importStudents: (payload) => apiClient.post('/users/students/import', payload),
+};
+
+/* ============================= FORMS ============================= */
+export const formApi = {
+  list: (params) => apiClient.get('/forms', { params }),
+  categories: () => apiClient.get('/forms/categories'),
+  create: (payload) => apiClient.post('/forms', payload),
+  getById: (formId) => apiClient.get(`/forms/${formId}`),
+  update: (formId, payload) => apiClient.put(`/forms/${formId}`, payload),
+  remove: (formId) => apiClient.delete(`/forms/${formId}`),
+  updateSettings: (formId, payload) => apiClient.put(`/forms/${formId}/settings`, payload),
+
+  importDocx: (file) =>
+    apiClient.post('/forms/import-docx', toFormData('file', file), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  importExcel: (file) =>
+    apiClient.post('/forms/import-excel', toFormData('file', file), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  importPdf: (file) =>
+    apiClient.post('/forms/import-pdf', toFormData('file', file), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  getQrCode: (shortCode) => apiClient.get(`/public/forms/${shortCode}/qr`),
+
+  // Share Monitoring
+  listCollaborators: (formId) => apiClient.get(`/forms/${formId}/collaborators`),
+  addCollaborator: (formId, email) => apiClient.post(`/forms/${formId}/collaborators`, { email }),
+  removeCollaborator: (formId, userId) =>
+    apiClient.delete(`/forms/${formId}/collaborators/${userId}`),
+};
+
+/* ============================= QUESTIONS ============================= */
+export const questionApi = {
+  listByForm: (formId) => apiClient.get(`/forms/${formId}/questions`),
+  create: (formId, payload) => apiClient.post(`/forms/${formId}/questions`, payload),
+  update: (questionId, payload) => apiClient.put(`/questions/${questionId}`, payload),
+  remove: (questionId) => apiClient.delete(`/questions/${questionId}`),
+  removeOption: (optionId) => apiClient.delete(`/options/${optionId}`),
+
+  uploadImage: (file) =>
+    apiClient.post('/questions/upload-image', toFormData('image', file), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  uploadMedia: (file) =>
+    apiClient.post('/questions/upload-media', toFormData('file', file), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  saveToBank: (questionId, payload) =>
+    apiClient.post(`/questions/${questionId}/save-to-bank`, payload),
+};
+
+/* ============================= QUESTION BANK ============================= */
+export const questionBankApi = {
+  list: (params) => apiClient.get('/question-bank', { params }),
+  create: (payload) => apiClient.post('/question-bank', payload),
+  update: (id, payload) => apiClient.put(`/question-bank/${id}`, payload),
+  remove: (id) => apiClient.delete(`/question-bank/${id}`),
+  addToForm: (id, formId) => apiClient.post(`/question-bank/${id}/add-to-form`, { form_id: formId }),
+};
+
+/* ============================= RESPONSES / MONITORING ============================= */
+export const responseApi = {
+  liveMonitoring: (formId) => apiClient.get(`/forms/${formId}/live-monitoring`),
+  restartSession: (formId, responseId, warningMessage) =>
+    apiClient.post(`/forms/${formId}/responses/${responseId}/restart`, {
+      warning_message: warningMessage || 'Sesi direset oleh pengawas.',
+    }),
+  listByForm: (formId, params) => apiClient.get(`/forms/${formId}/responses`, { params }),
+  // Export butuh header Authorization (JWT), jadi TIDAK BISA dipakai sebagai <a href>
+  // biasa — harus di-fetch dengan token lalu diunduh sebagai blob. Lihat
+  // downloadExport() di lib/utils.js untuk pemakaiannya.
+  exportBlob: (formId) => apiClient.get(`/forms/${formId}/export`, { responseType: 'blob' }),
+  analytics: (formId) => apiClient.get(`/forms/${formId}/analytics`),
+  getById: (responseId) => apiClient.get(`/responses/${responseId}`),
+  mySubmissions: () => apiClient.get('/responses/me'),
+  grade: (responseId, payload) => apiClient.put(`/responses/${responseId}/grade`, payload),
+};
+
+/* ============================= AI ============================= */
+export const aiApi = {
+  templatePrompt: () => apiClient.get('/ai/template-prompt'),
+  generatePreview: (payload) => apiClient.post('/ai/generate-preview', payload, { timeout: AI_TIMEOUT_MS }),
+  generateForm: (payload) => apiClient.post('/ai/generate-form', payload, { timeout: AI_TIMEOUT_MS }),
+  gradeEssay: (payload) => apiClient.post('/ai/grade-essay', payload, { timeout: AI_TIMEOUT_MS }),
+  gradeResponse: (payload) => apiClient.post('/ai/grade-response', payload, { timeout: AI_TIMEOUT_MS }),
+  transcribe: (formData) =>
+    apiClient.post('/ai/transcribe', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: AI_TIMEOUT_MS,
+    }),
+  // FIX: baru — dipakai untuk fitur "lampirkan PDF/Word sebagai materi AI".
+  // Backend mengekstrak teks mentah (bukan parsing soal), lalu teks itu
+  // digabung ke raw_prompt sebelum generate-preview/generate-form.
+  extractMaterial: (file) =>
+    apiClient.post('/ai/extract-material', toFormData('file', file), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: AI_TIMEOUT_MS,
+    }),
+};
