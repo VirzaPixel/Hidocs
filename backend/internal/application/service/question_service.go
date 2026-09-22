@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -192,42 +191,22 @@ func (s *questionService) DeleteOption(ctx context.Context, userID uuid.UUID, op
 
 func (s *questionService) UploadQuestionImage(ctx context.Context, fileHeader *multipart.FileHeader) (*dto.UploadImageResponse, error) {
 	uploadDir := "./uploads"
-	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create upload directory: %w", err)
 	}
 
-	if fileHeader.Size > 5<<20 {
-		return nil, fmt.Errorf("image too large (max 5MB)")
+	ext := filepath.Ext(fileHeader.Filename)
+	if ext == "" {
+		ext = ".png"
 	}
+	filename := fmt.Sprintf("%s_%s%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8], ext)
+	dstPath := filepath.Join(uploadDir, filename)
 
 	src, err := fileHeader.Open()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open uploaded file: %w", err)
 	}
 	defer src.Close()
-
-	head := make([]byte, 512)
-	n, _ := src.Read(head)
-	mime := http.DetectContentType(head[:n])
-	if _, err := src.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("failed to read uploaded file: %w", err)
-	}
-
-	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
-	allowed := map[string]string{
-		".jpg":  "image/jpeg",
-		".jpeg": "image/jpeg",
-		".png":  "image/png",
-		".gif":  "image/gif",
-		".webp": "image/webp",
-	}
-	want, ok := allowed[ext]
-	if !ok || (mime != want && !(ext == ".jpg" && mime == "image/jpeg")) {
-		return nil, fmt.Errorf("invalid image type (only JPG/PNG/GIF/WEBP)")
-	}
-
-	filename := fmt.Sprintf("%s_%s%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8], ext)
-	dstPath := filepath.Join(uploadDir, filename)
 
 	out, err := os.Create(dstPath)
 	if err != nil {
@@ -245,25 +224,19 @@ func (s *questionService) UploadQuestionImage(ctx context.Context, fileHeader *m
 
 func (s *questionService) UploadMedia(ctx context.Context, fileHeader *multipart.FileHeader) (*dto.UploadMediaResponse, error) {
 	uploadDir := "./uploads/media"
-	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create media upload directory: %w", err)
 	}
 
-	if fileHeader.Size > 20<<20 {
-		return nil, fmt.Errorf("media too large (max 20MB)")
-	}
-
-	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	ext := filepath.Ext(fileHeader.Filename)
 	mediaType := "IMAGE"
-	switch ext {
+	switch strings.ToLower(ext) {
 	case ".mp3", ".wav", ".ogg", ".m4a":
 		mediaType = "AUDIO"
 	case ".mp4", ".webm", ".mkv", ".mov":
 		mediaType = "VIDEO"
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
-		mediaType = "IMAGE"
 	default:
-		return nil, fmt.Errorf("invalid media type (only PNG/JPG/GIF/WEBP/MP3/WAV/MP4/WEBM)")
+		mediaType = "IMAGE"
 	}
 
 	filename := fmt.Sprintf("%s_%s%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8], ext)

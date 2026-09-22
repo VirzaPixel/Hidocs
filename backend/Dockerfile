@@ -1,4 +1,3 @@
-# Stage 1: Build binary Golang (Gunakan versi 1.26-alpine)
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
@@ -10,13 +9,13 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o hidocs-backend ./cmd/api
 
-# Stage 2: Final Minimal Image
 FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root/
 
 COPY --from=builder /app/hidocs-backend .
+COPY --from=builder /app/.env.example .env
 
 EXPOSE 8080
 

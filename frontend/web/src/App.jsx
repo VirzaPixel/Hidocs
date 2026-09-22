@@ -1,106 +1,62 @@
-import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import AppLayout from "./components/AppLayout";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import VerifyOtp from "./pages/VerifyOtp";
-import Dashboard from "./pages/Dashboard";
-import UserForms from "./pages/UserForms";
-import History from "./pages/History";
-import Profile from "./pages/Profile";
-import FormDetails from "./pages/FormDetails";
-import FillForm from "./pages/FillForm";
-import SubmitSuccess from "./pages/SubmitSuccess";
-import FormResult from "./pages/FormResult";
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminFormDetails from "./pages/AdminFormDetails";
-import AdminResults from "./pages/AdminResults";
-import ManageForms from "./pages/ManageForms";
-import CreateForm from "./pages/CreateForm";
-import EditForm from "./pages/EditForm";
-import ImportWord from "./pages/ImportWord";
-import AdminProfile from "./pages/AdminProfile";
-import ChooseRole from "./pages/ChooseRole";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ToastProvider } from './shared/Toast';
+import ProtectedRoute from './routes/ProtectedRoute';
+import AppLayout from './shared/layouts/AppLayout';
 
-function ScrollManager() {
-  const { pathname } = useLocation();
+import LoginPage from './features/auth/LoginPage';
+import RegisterPage from './features/auth/RegisterPage';
+import VerifyOtpPage from './features/auth/VerifyOtpPage';
+import ForgotPasswordPage from './features/auth/ForgotPasswordPage';
+import ResetPasswordPage from './features/auth/ResetPasswordPage';
 
-  useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    const root = document.getElementById("root");
+import DashboardPage from './features/dashboard/DashboardPage';
+import FormBuilderPage from './features/form-builder/FormBuilderPage';
+import QuestionBankPage from './features/question-bank/QuestionBankPage';
+import MonitoringPage from './features/monitoring/MonitoringPage';
+import StudentPreviewPage from './features/preview/StudentPreviewPage';
+import ProfilePage from './features/profile/ProfilePage';
 
-    body.classList.remove("modal-open", "offcanvas-open");
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 15000,
+    },
+  },
+});
 
-    ["overflow", "height", "position"].forEach((p) => html.style.removeProperty(p));
-    ["overflow", "overflow-x", "overflow-y", "height", "max-height", "position", "padding-right"].forEach((p) =>
-      body.style.removeProperty(p)
-    );
-
-    if (root) {
-      ["overflow", "height", "max-height", "position"].forEach((p) => root.style.removeProperty(p));
-    }
-
-    html.style.cssText += "overflow-x:hidden;overflow-y:auto;height:auto;min-height:100%;";
-    body.style.cssText += "overflow-x:hidden;overflow-y:auto;height:auto;min-height:100vh;";
-
-    if (root) {
-      root.style.cssText += "width:100%;min-height:100vh;height:auto;overflow:visible;";
-    }
-
-    window.scrollTo(0, 0);
-    document.querySelectorAll(".modal-backdrop,.offcanvas-backdrop").forEach((el) => el.remove());
-  }, [pathname]);
-
-  return null;
-}
-
-function AppRoutes() {
+export default function App() {
   return (
-    <>
-      <ScrollManager />
-      <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Auth */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-otp" element={<VerifyOtpPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        <Route path="/login"       element={<Login />} />
-        <Route path="/register"    element={<Register />} />
-        <Route path="/verify-otp"  element={<VerifyOtp />} />
-        <Route path="/choose-role" element={<ChooseRole />} />
+            {/* Protected app */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/question-bank" element={<QuestionBankPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/forms/:formId" element={<FormBuilderPage />} />
+                <Route path="/forms/:formId/preview" element={<StudentPreviewPage />} />
+                <Route path="/forms/:formId/monitoring" element={<MonitoringPage />} />
+              </Route>
+            </Route>
 
-        <Route element={<AppLayout />}>
-          {/* User Routes */}
-          <Route path="/dashboard"          element={<Dashboard />} />
-          <Route path="/forms"              element={<UserForms />} />
-          <Route path="/history"            element={<History />} />
-          <Route path="/profile"            element={<Profile />} />
-          <Route path="/form-details/:id"   element={<FormDetails />} />
-          <Route path="/fill-form/:id"      element={<FillForm />} />
-          <Route path="/submit-success"     element={<SubmitSuccess />} />
-          <Route path="/form-result/:id"    element={<FormResult />} />
-
-          {/* Admin Routes */}
-          <Route path="/admin"                     element={<AdminDashboard />} />
-          <Route path="/admin/profile"             element={<AdminProfile />} />
-          <Route path="/admin/forms"               element={<ManageForms />} />
-          <Route path="/create-form"               element={<CreateForm />} />
-          <Route path="/admin/import-word"         element={<ImportWord />} />
-          <Route path="/admin/forms/:id/edit"      element={<EditForm />} />
-          <Route path="/admin/forms/:id/results"   element={<AdminResults />} />
-          <Route path="/admin/forms/:id"           element={<AdminFormDetails />} />
-        </Route>
-
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }
-
-function App() {
-  return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  );
-}
-
-export default App;

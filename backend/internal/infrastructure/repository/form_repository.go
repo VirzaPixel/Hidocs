@@ -84,6 +84,10 @@ func (r *formRepository) GetByUserIDWithCounts(ctx context.Context, userID uuid.
 		Table("forms").
 		Select("forms.*, COALESCE(COUNT(form_responses.id), 0) AS response_count").
 		Joins("LEFT JOIN form_responses ON form_responses.form_id = forms.id").
+		// FIX: sebelumnya tidak ada Preload sama sekali, jadi form_settings selalu
+		// null di daftar form dashboard — banner (cover_image_url) & pengaturan lain
+		// tidak pernah ikut ke frontend padahal sudah disimpan.
+		Preload("FormSettings").
 		Where("forms.user_id = ?", userID).
 		Group("forms.id")
 

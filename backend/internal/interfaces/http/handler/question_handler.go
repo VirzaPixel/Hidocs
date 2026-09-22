@@ -31,8 +31,6 @@ func NewQuestionHandler(qService service.QuestionService, fService service.FormS
 // @Success 200 {object} response.APIResponse{data=[]dto.QuestionDTO}
 // @Router /api/v1/forms/{form_id}/questions [get]
 func (h *QuestionHandler) GetQuestionsByFormID(c *gin.Context) {
-	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
-
 	formID, err := uuid.Parse(c.Param("form_id"))
 	if err != nil {
 		response.BadRequest(c, "Invalid form_id UUID format", err)
@@ -42,11 +40,6 @@ func (h *QuestionHandler) GetQuestionsByFormID(c *gin.Context) {
 	form, err := h.formService.GetFormByID(c.Request.Context(), formID)
 	if err != nil {
 		response.NotFound(c, err.Error(), err)
-		return
-	}
-
-	if form.UserID != claims.UserID {
-		response.Forbidden(c, "You do not have permission to access this resource", nil)
 		return
 	}
 

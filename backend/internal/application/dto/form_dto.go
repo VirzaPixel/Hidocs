@@ -22,7 +22,7 @@ type UpdateFormRequest struct {
 	Category    string            `json:"category"`
 	Type        domain.FormType   `json:"type" binding:"required,oneof=SURVEY EXAM"`
 	CustomURL   string            `json:"custom_url"`
-	Status      domain.FormStatus `json:"status" binding:"required,oneof=DRAFT ACTIVE CLOSED"`
+	Status      domain.FormStatus `json:"status" binding:"required,oneof=DRAFT REVIEW ACTIVE CLOSED"`
 	IsTemplate  bool              `json:"is_template"`
 }
 
@@ -31,6 +31,7 @@ type UpdateFormSettingsRequest struct {
 	AutoActiveDays      int        `json:"auto_active_days"`
 	IsActiveImmediately bool       `json:"is_active_immediately"`
 	IsOneTimeSubmission bool       `json:"is_one_time_submission"`
+	MaxAttempts         *int       `json:"max_attempts"`
 	RandomizeQuestions  bool       `json:"randomize_questions"`
 	RandomizeOptions    bool       `json:"randomize_options"`
 	StartTime           *time.Time `json:"start_time"`
@@ -130,8 +131,7 @@ type VerifyExamTokenRequest struct {
 }
 
 type VerifyExamTokenResponse struct {
-	ResponseID   uuid.UUID        `json:"response_id"`
-	SessionToken string           `json:"session_token,omitempty"`
-	Form         *PublicFormDTO   `json:"form"`
+	ResponseID   uuid.UUID      `json:"response_id"`
+	Form         *PublicFormDTO `json:"form"`
 	SessionState *SessionStateDTO `json:"session_state"`
 }

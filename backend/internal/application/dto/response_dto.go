@@ -13,7 +13,6 @@ type MatchPairItem struct {
 
 type SubmitFormRequest struct {
 	ResponseID      *uuid.UUID           `json:"response_id,omitempty"`
-	SessionToken    string               `json:"session_token,omitempty"`
 	RespondentEmail string               `json:"respondent_email" binding:"required,email"`
 	Passcode        string               `json:"passcode"`
 	IsAutoSubmitted bool                 `json:"is_auto_submitted"`
@@ -115,6 +114,14 @@ type AnswerDetailDTO struct {
 	IsCorrect        *bool      `json:"is_correct,omitempty"`
 	PointsEarned     float64    `json:"points_earned"`
 	ScoreGiven       *float64   `json:"score_given,omitempty"`
+}
+
+// FIX: DTO baru untuk endpoint list responses yang sekarang paginated.
+type PaginatedResponsesDTO struct {
+	Items  []ResponseDetailDTO `json:"items"`
+	Total  int64               `json:"total"`
+	Limit  int                 `json:"limit"`
+	Offset int                 `json:"offset"`
 }
 
 type LiveMonitoringStudentDTO struct {

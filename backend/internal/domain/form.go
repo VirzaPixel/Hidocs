@@ -14,6 +14,9 @@ const (
 	TypeExam   FormType = "EXAM"
 
 	StatusDraft  FormStatus = "DRAFT"
+	// FIX: status baru untuk workflow Draft -> Review -> Publish. Guru menandai form
+	// "siap dicek" tanpa langsung mempublikasikannya ke siswa.
+	StatusReview FormStatus = "REVIEW"
 	StatusActive FormStatus = "ACTIVE"
 	StatusClosed FormStatus = "CLOSED"
 )
@@ -44,6 +47,11 @@ type FormSettings struct {
 	AutoActiveDays      int        `gorm:"type:int;default:30" json:"auto_active_days"`
 	IsActiveImmediately bool       `gorm:"type:boolean;default:false" json:"is_active_immediately"`
 	IsOneTimeSubmission bool       `gorm:"type:boolean;default:false" json:"is_one_time_submission"`
+	// FIX: field baru — pengganti IsOneTimeSubmission yang cuma on/off. 0 = tidak
+	// dibatasi. IsOneTimeSubmission TETAP ada untuk kompatibilitas mundur: kalau
+	// MaxAttempts diisi 0 tapi IsOneTimeSubmission true, tetap diperlakukan sebagai
+	// maks 1 percobaan (lihat response_service.go).
+	MaxAttempts         int        `gorm:"type:int;default:0" json:"max_attempts"`
 	RandomizeQuestions  bool       `gorm:"type:boolean;default:false" json:"randomize_questions"`
 	RandomizeOptions    bool       `gorm:"type:boolean;default:false" json:"randomize_options"`
 	StartTime           *time.Time `gorm:"type:timestamp" json:"start_time,omitempty"`

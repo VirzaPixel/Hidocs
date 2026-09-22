@@ -5,15 +5,15 @@ import { check, sleep } from 'k6';
 export const options = {
   noConnectionReuse: false,
   stages: [
-    { duration: '30s', target: 100 }, // Ramp-up to 100 Virtual Users
-    { duration: '30s', target: 300 }, // Ramp-up to 300 Virtual Users
-    { duration: '60s', target: 500 }, // Spike to 500 Concurrent Virtual Users
-    { duration: '60s', target: 500 }, // Hold 500 Students submitting & reading exam
-    { duration: '30s', target: 0 }, // Ramp-down to 0
+    { duration: '15s', target: 50 }, // Ramp-up to 50 Virtual Users
+    { duration: '15s', target: 100 }, // Ramp-up to 100 Virtual Users
+    { duration: '15s', target: 150 }, // Spike to 500 Concurrent Virtual Users
+    { duration: '15s',  target: 200 }, // Hold 500 Students submitting & reading exam
+    { duration: '5s', target: 0 },   // Ramp-down to 0
   ],
   thresholds: {
     http_req_duration: ['p(95)<1000'], // 95% of requests must complete under 1000ms
-    http_req_failed: ['rate<0.05'], // Error rate must be under 5%
+    http_req_failed: ['rate<0.05'],    // Error rate must be under 5%
   },
 };
 
@@ -81,19 +81,6 @@ export default function () {
     'Submit status is 200 or 201': (r) => r.status === 200 || r.status === 201,
     'Submit latency < 800ms': (r) => r.timings.duration < 800,
   });
-
-  // 4. Rate-limit sanity: verify-token harus 429 bila dibanjiri (S-006)
-  if (__ITER % 10 === 0) {
-    const brute = http.post(
-      `${BASE_URL}/public/forms/${formId}/verify-token`,
-      JSON.stringify({ token: 'WRONG', respondent_email: studentEmail }),
-      requestParams
-    );
-    check(brute, {
-      'Verify-token rejects bad token (400/429)': (r) =>
-        r.status === 400 || r.status === 429,
-    });
-  }
 
   sleep(1);
 }

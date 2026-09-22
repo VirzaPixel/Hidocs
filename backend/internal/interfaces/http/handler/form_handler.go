@@ -289,3 +289,130 @@ func (h *FormHandler) ImportExcel(c *gin.Context) {
 
 	response.Created(c, "Form imported successfully from Excel spreadsheet", form)
 }
+
+// ImportPdf godoc
+// @Summary Import form from PDF file
+// @Tags Forms
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param file formData file true "PDF Document (.pdf)"
+// @Success 201 {object} response.APIResponse{data=dto.FormResponseDTO}
+// @Router /api/v1/forms/import-pdf [post]
+func (h *FormHandler) ImportPdf(c *gin.Context) {
+	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		response.BadRequest(c, "File is required", err)
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		response.BadRequest(c, "Failed to open file", err)
+		return
+	}
+	defer file.Close()
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		response.BadRequest(c, "Failed to read file", err)
+		return
+	}
+
+	form, err := h.docxService.ImportFormFromPDF(c.Request.Context(), claims.UserID, fileBytes)
+	if err != nil {
+		response.BadRequest(c, err.Error(), err)
+		return
+	}
+
+	response.Created(c, "Form imported successfully from PDF document", form)
+}
+
+// AddCollaborator godoc
+// @Summary Share monitoring access of a form to another teacher (by email)
+// @Tags Forms
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param form_id path string true "Form ID"
+// @Success 201 {object} response.APIResponse{data=dto.CollaboratorDTO}
+// @Router /api/v1/forms/{form_id}/collaborators [post]
+func (h *FormHandler) AddCollaborator(c *gin.Context) {
+	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
+
+	formID, err := uuid.Parse(c.Param("form_id"))
+	if err != nil {
+		response.BadRequest(c, "Invalid form_id UUID format", err)
+		return
+	}
+
+	var req dto.AddCollaboratorRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request payload", err)
+		return
+	}
+
+	collab, err := h.formService.AddCollaborator(c.Request.Context(), claims.UserID, formID, req.Email)
+	if err != nil {
+		response.BadRequest(c, err.Error(), err)
+		return
+	}
+	response.Created(c, "Collaborator added successfully", collab)
+}
+
+// ListCollaborators godoc
+// @Summary List teachers who have shared monitoring access to a form
+// @Tags Forms
+// @Produce json
+// @Security BearerAuth
+// @Param form_id path string true "Form ID"
+// @Success 200 {object} response.APIResponse{data=[]dto.CollaboratorDTO}
+// @Router /api/v1/forms/{form_id}/collaborators [get]
+func (h *FormHandler) ListCollaborators(c *gin.Context) {
+	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
+
+	formID, err := uuid.Parse(c.Param("form_id"))
+	if err != nil {
+		response.BadRequest(c, "Invalid form_id UUID format", err)
+		return
+	}
+
+	items, err := h.formService.ListCollaborators(c.Request.Context(), claims.UserID, formID)
+	if err != nil {
+		response.BadRequest(c, err.Error(), err)
+		return
+	}
+	response.OK(c, "Collaborators retrieved successfully", items)
+}
+
+// RemoveCollaborator godoc
+// @Summary Revoke a teacher's shared monitoring access to a form
+// @Tags Forms
+// @Produce json
+// @Security BearerAuth
+// @Param form_id path string true "Form ID"
+// @Param user_id path string true "Collaborator User ID"
+// @Success 200 {object} response.APIResponse
+// @Router /api/v1/forms/{form_id}/collaborators/{user_id} [delete]
+func (h *FormHandler) RemoveCollaborator(c *gin.Context) {
+	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
+
+	formID, err := uuid.Parse(c.Param("form_id"))
+	if err != nil {
+		response.BadRequest(c, "Invalid form_id UUID format", err)
+		return
+	}
+	collabUserID, err := uuid.Parse(c.Param("user_id"))
+	if err != nil {
+		response.BadRequest(c, "Invalid user_id UUID format", err)
+		return
+	}
+
+	if err := h.formService.RemoveCollaborator(c.Request.Context(), claims.UserID, formID, collabUserID); err != nil {
+		response.BadRequest(c, err.Error(), err)
+		return
+	}
+	response.OK(c, "Collaborator removed successfully", nil)
+}

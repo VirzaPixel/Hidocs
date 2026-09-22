@@ -58,6 +58,63 @@ type parsedParagraph struct {
 	ImageURL string
 }
 
+// FIX: baru — ExtractRawText mengekstrak teks polos dari .docx (dipakai untuk
+// fitur "lampirkan materi PDF/Word ke AI"), TANPA mencoba mem-parsing jadi
+// struktur soal (beda dari ParseDocx di atas). Memakai ulang logic parsing
+// word/document.xml yang sama supaya konsisten.
+func (p *DocxParser) ExtractRawText(fileBytes []byte) (string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(fileBytes), int64(len(fileBytes)))
+	if err != nil {
+		return "", fmt.Errorf("failed to open docx as zip archive: %w", err)
+	}
+
+	var documentFile *zip.File
+	for _, f := range reader.File {
+		cleanName := strings.TrimPrefix(f.Name, "/")
+		if cleanName == "word/document.xml" {
+			documentFile = f
+			break
+		}
+	}
+	if documentFile == nil {
+		return "", fmt.Errorf("invalid docx file: missing word/document.xml")
+	}
+
+	rc, err := documentFile.Open()
+	if err != nil {
+		return "", fmt.Errorf("failed to open document.xml: %w", err)
+	}
+	defer rc.Close()
+
+	xmlData, err := io.ReadAll(rc)
+	if err != nil {
+		return "", fmt.Errorf("failed to read document.xml: %w", err)
+	}
+
+	var doc documentXML
+	if err := xml.Unmarshal(xmlData, &doc); err != nil {
+		return "", fmt.Errorf("failed to parse document.xml: %w", err)
+	}
+
+	textTagRegex := regexp.MustCompile(`(?s)<(?:[a-zA-Z0-9_-]+:)?t(?:\s+[^>]*)?>([^<]*)</(?:[a-zA-Z0-9_-]+:)?t>`)
+
+	var lines []string
+	for _, para := range doc.Body.Paragraphs {
+		var textBuilder strings.Builder
+		for _, tm := range textTagRegex.FindAllStringSubmatch(para.InnerXML, -1) {
+			if len(tm) > 1 {
+				textBuilder.WriteString(tm[1])
+			}
+		}
+		line := strings.TrimSpace(textBuilder.String())
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
 func (p *DocxParser) ParseDocx(fileBytes []byte, formID uuid.UUID) (*ExtractedForm, error) {
 	reader, err := zip.NewReader(bytes.NewReader(fileBytes), int64(len(fileBytes)))
 	if err != nil {

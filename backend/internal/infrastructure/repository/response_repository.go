@@ -54,6 +54,30 @@ func (r *responseRepository) GetResponsesByFormID(ctx context.Context, formID uu
 	return responses, err
 }
 
+// FIX: baru — versi paginated dari method di atas, dipakai endpoint list responses
+// supaya query tetap ringan berapa pun banyaknya siswa yang sudah submit.
+func (r *responseRepository) GetResponsesByFormIDPaginated(ctx context.Context, formID uuid.UUID, pg domain.Pagination) ([]domain.FormResponse, int64, error) {
+	var total int64
+	if err := r.db.WithContext(ctx).
+		Model(&domain.FormResponse{}).
+		Where("form_id = ?", formID).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var responses []domain.FormResponse
+	err := r.db.WithContext(ctx).
+		Preload("Answers").
+		Preload("Answers.SelectedOption").
+		Where("form_id = ?", formID).
+		Order("submitted_at desc").
+		Limit(pg.Limit).
+		Offset(pg.Offset).
+		Find(&responses).Error
+
+	return responses, total, err
+}
+
 func (r *responseRepository) GetResponsesByEmail(ctx context.Context, email string) ([]domain.FormResponse, error) {
 	var responses []domain.FormResponse
 	err := r.db.WithContext(ctx).
@@ -95,6 +119,17 @@ func (r *responseRepository) CheckUserAlreadySubmitted(ctx context.Context, form
 	return count > 0, err
 }
 
+// FIX: baru — hitung total submission (bukan cuma ada/tidak) untuk batas percobaan numerik.
+func (r *responseRepository) CountSubmissionsByEmail(ctx context.Context, formID uuid.UUID, email string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.FormResponse{}).
+		Where("form_id = ? AND respondent_email = ? AND status = ?", formID, email, domain.ResponseStatusSubmitted).
+		Count(&count).Error
+
+	return count, err
+}
+
 func (r *responseRepository) UpdateResponseGrade(ctx context.Context, responseID uuid.UUID, totalScore float64) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.FormResponse{}).
@@ -126,12 +161,6 @@ func (r *responseRepository) UpsertAnswersBatch(ctx context.Context, answers []d
 			Columns:   []clause.Column{{Name: "response_id"}, {Name: "question_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"selected_option_id", "answer_text", "score_given", "is_flagged", "match_pair_json"}),
 		}).CreateInBatches(answers, 100).Error
-}
-
-func (r *responseRepository) TouchHeartbeat(ctx context.Context, responseID uuid.UUID) error {
-	return r.db.WithContext(ctx).Model(&domain.FormResponse{}).
-		Where("id = ?", responseID).
-		Update("last_heartbeat", gorm.Expr("NOW()")).Error
 }
 
 func (r *responseRepository) UpdateTelemetry(ctx context.Context, responseID uuid.UUID, eventType string, eventMessage *string, currentQuestionIdx int, metadata *string) error {

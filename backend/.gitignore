@@ -1,5 +1,2 @@
 .env
 seed_superadmin.sql
-
-API_DOCUMENTATION.md
-FRONTEND_INTEGRATION_GUIDE.md

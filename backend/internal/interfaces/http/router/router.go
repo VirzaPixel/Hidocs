@@ -1,10 +1,8 @@
 package router
 
 import (
-	"os"
-
+	"backend/config"
 	"backend/internal/domain"
-	"backend/internal/infrastructure/cache"
 	"backend/internal/infrastructure/security"
 	"backend/internal/interfaces/http/handler"
 	"backend/internal/interfaces/http/middleware"
@@ -23,9 +21,15 @@ type RouterConfig struct {
 	PublicHandler   *handler.PublicHandler
 	AdminHandler    *handler.AdminHandler
 	MetricsHandler  *handler.MetricsHandler
-	JWTManager      *security.JWTManager
-	SessionSecret   string
-	RedisClient     *cache.RedisClient
+	// FIX: sebelumnya tidak ada field ini sama sekali, jadi seluruh endpoint AI
+	// (generate soal, grading esai) tidak mungkin di-route walau handler-nya sudah jadi.
+	AIHandler  *handler.AIHandler
+	// FIX: baru — handler untuk Bank Soal.
+	QuestionBankHandler *handler.QuestionBankHandler
+	JWTManager *security.JWTManager
+	// FIX: dibutuhkan supaya CORS, RateLimiter, dan BodyLimit bisa pakai nilai dari
+	// env (config) alih-alih angka/daftar yang di-hardcode di file ini.
+	Cfg *config.Config
 }
 
 func SetupRouter(cfg *RouterConfig) *gin.Engine {
@@ -35,17 +39,32 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 	} else {
 		r.Use(gin.Recovery())
 	}
-	r.Use(middleware.CORS())
-	r.Use(middleware.RateLimiterRedis(500, cfg.RedisClient)) // Max 500 requests per minute per IP
-	r.Use(middleware.TrackMetrics())                         // Telemetry & Traffic Collector Middleware
+
+	rateLimitPerMin := 500
+	bodyLimitMB := 2
+	var allowedOrigins []string
+	if cfg.Cfg != nil {
+		if cfg.Cfg.RateLimitPerMin > 0 {
+			rateLimitPerMin = cfg.Cfg.RateLimitPerMin
+		}
+		if cfg.Cfg.BodyLimitMB > 0 {
+			bodyLimitMB = cfg.Cfg.BodyLimitMB
+		}
+		allowedOrigins = cfg.Cfg.AllowedOrigins
+	}
+
+	r.Use(middleware.CORS(allowedOrigins))
+	r.Use(middleware.RateLimiter(rateLimitPerMin))
+	// FIX: middleware ini sudah ditulis lengkap sebelumnya tapi tidak pernah dipasang,
+	// jadi tidak ada batas ukuran body request JSON sama sekali di level global.
+	r.Use(middleware.BodyLimit(bodyLimitMB))
+	r.Use(middleware.TrackMetrics()) // Telemetry & Traffic Collector Middleware
 
 	// Serve Uploaded Local Images Static Files
 	r.Static("/uploads", "./uploads")
 
-	// Swagger API Docs (S-015: nonaktif di production)
-	if gin.Mode() == gin.DebugMode {
-		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	}
+	// Swagger API Docs
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Healthcheck
 	r.GET("/health", func(c *gin.Context) {
@@ -66,29 +85,25 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 
 		// 1. Access Short Link / Public Forms & Live Exam Engine
 		public := api.Group("/public")
-		public.Use(middleware.RateLimiterRedis(60, cfg.RedisClient))
 		{
 			public.GET("/forms/:short_code", cfg.PublicHandler.GetPublicForm)
 			public.GET("/forms/:short_code/qr", cfg.PublicHandler.GetFormQRCode)
-			public.POST("/forms/:form_id/verify-token", middleware.RateLimiterRedis(10, cfg.RedisClient), cfg.PublicHandler.VerifyExamToken)
+			public.POST("/forms/:form_id/verify-token", cfg.PublicHandler.VerifyExamToken)
 
-		// Live Student Session, Autosave, Telemetry (Anti-Cheat)
-		sessionGuard := middleware.RequireExamSession(cfg.SessionSecret)
-		public.POST("/responses/:response_id/autosave", sessionGuard, cfg.ResponseHandler.AutosaveAnswer)
-		public.POST("/responses/:response_id/telemetry", sessionGuard, cfg.ResponseHandler.SendTelemetry)
-		public.GET("/responses/:response_id/session", sessionGuard, cfg.ResponseHandler.GetSessionState)
-		public.POST("/responses/:response_id/acknowledge-warning", sessionGuard, cfg.ResponseHandler.AcknowledgeWarning)
+			// Live Student Session, Autosave, Telemetry (Anti-Cheat)
+			public.POST("/responses/:response_id/autosave", cfg.ResponseHandler.AutosaveAnswer)
+			public.POST("/responses/:response_id/telemetry", cfg.ResponseHandler.SendTelemetry)
+			public.GET("/responses/:response_id/session", cfg.ResponseHandler.GetSessionState)
+			public.POST("/responses/:response_id/acknowledge-warning", cfg.ResponseHandler.AcknowledgeWarning)
 		}
 
-		// 2. Authentication & OTP Verification (Strict Rate Limiting: max 10 requests per minute per IP)
+		// 2. Authentication & OTP Verification
 		auth := api.Group("/auth")
-		auth.Use(middleware.RateLimiterRedis(10, cfg.RedisClient))
 		{
 			auth.POST("/register", cfg.AuthHandler.Register)
 			auth.POST("/verify-otp", cfg.AuthHandler.VerifyOTP)
 			auth.POST("/resend-otp", cfg.AuthHandler.ResendOTP)
 			auth.POST("/login", cfg.AuthHandler.Login)
-			auth.POST("/refresh", cfg.AuthHandler.RefreshToken)
 			auth.POST("/forgot-password", cfg.AuthHandler.ForgotPassword)
 			auth.POST("/reset-password", cfg.AuthHandler.ResetPassword)
 		}
@@ -97,8 +112,6 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		protected := api.Group("")
 		protected.Use(middleware.RequireAuth(cfg.JWTManager))
 		{
-			protected.POST("/auth/logout", cfg.AuthHandler.Logout)
-
 			// 3. User Profile & Student Import
 			users := protected.Group("/users")
 			{
@@ -115,6 +128,9 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				forms.POST("", cfg.FormHandler.CreateForm)
 				forms.POST("/import-docx", cfg.FormHandler.ImportDocx)
 				forms.POST("/import-excel", cfg.FormHandler.ImportExcel)
+				// FIX: handler & service sudah dibuat (ImportFormFromPDF), tapi
+				// sebelumnya belum ada route yang mengarah ke sana sama sekali.
+				forms.POST("/import-pdf", cfg.FormHandler.ImportPdf)
 				forms.GET("/:form_id", cfg.FormHandler.GetFormByID)
 				forms.PUT("/:form_id", cfg.FormHandler.UpdateForm)
 				forms.DELETE("/:form_id", cfg.FormHandler.DeleteForm)
@@ -132,14 +148,15 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				forms.GET("/:form_id/responses", cfg.ResponseHandler.GetFormResponses)
 				forms.GET("/:form_id/export", cfg.ResponseHandler.ExportResponses)
 				forms.GET("/:form_id/analytics", cfg.ResponseHandler.GetAnalytics)
+
+				// FIX: Share Monitoring — undang/lihat/hapus guru pengawas lain.
+				forms.POST("/:form_id/collaborators", cfg.FormHandler.AddCollaborator)
+				forms.GET("/:form_id/collaborators", cfg.FormHandler.ListCollaborators)
+				forms.DELETE("/:form_id/collaborators/:user_id", cfg.FormHandler.RemoveCollaborator)
 			}
 
-		// Public Submit Endpoint (S-018: exambro header bila EXAMBRO_REQUIRED=true)
-		if os.Getenv("EXAMBRO_REQUIRED") == "true" {
-			api.POST("/forms/:form_id/submit", middleware.RequireExambroHeader(), cfg.ResponseHandler.SubmitForm)
-		} else {
+			// Public Submit Endpoint (or with passcode)
 			api.POST("/forms/:form_id/submit", cfg.ResponseHandler.SubmitForm)
-		}
 
 			// 5. Questions, Options & Media Storage Upload
 			questions := protected.Group("/questions")
@@ -148,6 +165,18 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				questions.POST("/upload-media", cfg.QuestionHandler.UploadMedia)
 				questions.PUT("/:question_id", cfg.QuestionHandler.UpdateQuestion)
 				questions.DELETE("/:question_id", cfg.QuestionHandler.DeleteQuestion)
+				// FIX: Bank Soal — simpan soal form yang sudah ada ke bank.
+				questions.POST("/:question_id/save-to-bank", cfg.QuestionBankHandler.SaveFromQuestion)
+			}
+
+			// FIX: Bank Soal — CRUD + salin ke form.
+			bank := protected.Group("/question-bank")
+			{
+				bank.GET("", cfg.QuestionBankHandler.List)
+				bank.POST("", cfg.QuestionBankHandler.Create)
+				bank.PUT("/:id", cfg.QuestionBankHandler.Update)
+				bank.DELETE("/:id", cfg.QuestionBankHandler.Delete)
+				bank.POST("/:id/add-to-form", cfg.QuestionBankHandler.AddToForm)
 			}
 			options := protected.Group("/options")
 			{
@@ -162,7 +191,23 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				responses.PUT("/:response_id/grade", cfg.ResponseHandler.GradeResponse)
 			}
 
-			// 7. Admin Exclusive Endpoints
+			// 7. AI — Generate Soal & Auto-Grading
+			// FIX: seluruh grup ini sebelumnya TIDAK ADA di router, padahal
+			// AIHandler + AIService sudah lengkap diimplementasikan. Tanpa ini,
+			// endpoint AI selalu 404 walau kodenya sudah jadi.
+			ai := protected.Group("/ai")
+			{
+				ai.GET("/template-prompt", cfg.AIHandler.TemplatePrompt)
+				ai.POST("/generate-preview", cfg.AIHandler.GeneratePreview)
+				ai.POST("/generate-form", cfg.AIHandler.CreateForm)
+				ai.POST("/grade-essay", cfg.AIHandler.GradeEssay)
+				ai.POST("/grade-response", cfg.AIHandler.GradeResponse)
+				ai.POST("/transcribe", cfg.AIHandler.Transcribe)
+				// FIX: baru — ekstraksi materi PDF/Word untuk lampiran AI generate.
+				ai.POST("/extract-material", cfg.AIHandler.ExtractMaterial)
+			}
+
+			// 8. Admin Exclusive Endpoints
 			admin := protected.Group("/admin")
 			admin.Use(middleware.RequireRole(domain.RoleAdmin, domain.RoleSuperAdmin))
 			{
@@ -184,7 +229,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				}
 			}
 
-			// 8. Superadmin Exclusive 
+			// 9. Superadmin Exclusive
 			superadmin := protected.Group("/superadmin")
 			superadmin.Use(middleware.RequireRole(domain.RoleSuperAdmin))
 			{

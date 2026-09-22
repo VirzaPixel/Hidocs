@@ -7,7 +7,6 @@ import (
 
 	"backend/internal/application/dto"
 	"backend/internal/domain"
-	sessionpkg "backend/pkg/session"
 	"github.com/google/uuid"
 )
 
@@ -19,7 +18,9 @@ type ResponseService interface {
 	AcknowledgeWarning(ctx context.Context, responseID uuid.UUID) error
 	GetLiveMonitoring(ctx context.Context, userID uuid.UUID, formID uuid.UUID) ([]dto.LiveMonitoringStudentDTO, error)
 	RestartStudentSession(ctx context.Context, userID uuid.UUID, formID uuid.UUID, responseID uuid.UUID, req dto.RestartStudentSessionRequest) error
-	GetFormResponses(ctx context.Context, userID uuid.UUID, formID uuid.UUID) ([]dto.ResponseDetailDTO, error)
+	// FIX: sekarang menerima domain.Pagination dan mengembalikan total count,
+	// dipakai endpoint list responses supaya tidak menarik semua data sekaligus.
+	GetFormResponses(ctx context.Context, userID uuid.UUID, formID uuid.UUID, pg domain.Pagination) ([]dto.ResponseDetailDTO, int64, error)
 	GetMySubmissions(ctx context.Context, email string) ([]dto.ResponseDetailDTO, error)
 	GetResponseByID(ctx context.Context, userID uuid.UUID, responseID uuid.UUID) (*dto.ResponseDetailDTO, error)
 	GradeResponse(ctx context.Context, userID uuid.UUID, responseID uuid.UUID, req dto.GradeResponseRequest) error
@@ -27,29 +28,36 @@ type ResponseService interface {
 }
 
 type responseService struct {
-	responseRepo  domain.ResponseRepository
-	formRepo      domain.FormRepository
-	questionRepo  domain.QuestionRepository
-	sessionSecret string
+	responseRepo domain.ResponseRepository
+	formRepo     domain.FormRepository
+	questionRepo domain.QuestionRepository
+	// FIX: baru — dipakai canAccessForMonitoring() untuk fitur Share Monitoring.
+	collabRepo domain.CollaboratorRepository
 }
 
-func NewResponseService(respRepo domain.ResponseRepository, formRepo domain.FormRepository, questionRepo domain.QuestionRepository, sessionSecret string) ResponseService {
+func NewResponseService(respRepo domain.ResponseRepository, formRepo domain.FormRepository, questionRepo domain.QuestionRepository, collabRepo domain.CollaboratorRepository) ResponseService {
 	return &responseService{
-		responseRepo:  respRepo,
-		formRepo:      formRepo,
-		questionRepo:  questionRepo,
-		sessionSecret: sessionSecret,
+		responseRepo: respRepo,
+		formRepo:     formRepo,
+		questionRepo: questionRepo,
+		collabRepo:   collabRepo,
 	}
 }
 
-func (s *responseService) requireSessionOwner(responseID uuid.UUID, token string) error {
-	if s.sessionSecret == "" {
-		return nil
+// FIX: baru — dipakai di GetLiveMonitoring, RestartStudentSession, GetFormResponses,
+// dan GetAnalytics. Akses diberikan ke PEMILIK form ATAU guru yang di-invite lewat
+// Share Monitoring (role MONITOR, read-only). GetResponseByID & GradeResponse SENGAJA
+// tidak diubah — tetap owner-only, karena itu aksi grading/detail per-jawaban, bukan
+// dashboard monitoring.
+func (s *responseService) canAccessForMonitoring(ctx context.Context, form *domain.Form, userID uuid.UUID) bool {
+	if form.UserID == userID {
+		return true
 	}
-	if !sessionpkg.ValidateExamSessionToken(responseID.String(), token, s.sessionSecret) {
-		return domain.ErrUnauthorized
+	if s.collabRepo == nil {
+		return false
 	}
-	return nil
+	ok, _ := s.collabRepo.IsCollaborator(ctx, form.ID, userID)
+	return ok
 }
 
 func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, req dto.SubmitFormRequest) (*dto.SubmitResponseResult, error) {
@@ -73,22 +81,25 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		}
 	}
 
-	// Check if one-time submission is enforced
-	if form.FormSettings != nil && form.FormSettings.IsOneTimeSubmission {
-		alreadySubmitted, _ := s.responseRepo.CheckUserAlreadySubmitted(ctx, formID, req.RespondentEmail)
-		if alreadySubmitted {
-			return nil, domain.ErrAlreadySubmitted
+	// FIX: sebelumnya cuma cek IsOneTimeSubmission (on/off). Sekarang mendukung
+	// MaxAttempts numerik (mis. maks 2x), dengan IsOneTimeSubmission tetap dihormati
+	// untuk form lama yang belum pernah set MaxAttempts (diperlakukan sebagai maks 1x).
+	if form.FormSettings != nil {
+		maxAttempts := form.FormSettings.MaxAttempts
+		if maxAttempts <= 0 && form.FormSettings.IsOneTimeSubmission {
+			maxAttempts = 1
+		}
+		if maxAttempts > 0 {
+			count, _ := s.responseRepo.CountSubmissionsByEmail(ctx, formID, req.RespondentEmail)
+			if count >= int64(maxAttempts) {
+				return nil, domain.ErrAlreadySubmitted
+			}
 		}
 	}
 
 	responseID := uuid.New()
 	if req.ResponseID != nil && *req.ResponseID != uuid.Nil {
 		responseID = *req.ResponseID
-		if err := s.requireSessionOwner(responseID, req.SessionToken); err != nil {
-			return nil, err
-		}
-	} else if form.FormSettings != nil && form.FormSettings.IsTokenProtected {
-		return nil, domain.ErrUnauthorized
 	}
 
 	var totalScore float64 = 0
@@ -204,10 +215,6 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 }
 
 func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UUID, req dto.AutosaveAnswerRequest) (*dto.AutosaveResponse, error) {
-	if err := s.requireLiveSession(ctx, responseID); err != nil {
-		return nil, err
-	}
-
 	var matchPairJSON *string
 	if len(req.MatchPairs) > 0 {
 		if b, err := json.Marshal(req.MatchPairs); err == nil {
@@ -240,32 +247,10 @@ func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UU
 }
 
 func (s *responseService) SendTelemetry(ctx context.Context, responseID uuid.UUID, req dto.TelemetryEventRequest) error {
-	if err := s.requireLiveSession(ctx, responseID); err != nil {
-		return err
-	}
 	return s.responseRepo.UpdateTelemetry(ctx, responseID, req.EventType, req.EventMessage, req.CurrentQuestionIndex, req.Metadata)
 }
 
-func (s *responseService) requireLiveSession(ctx context.Context, responseID uuid.UUID) error {
-	resp, err := s.responseRepo.GetResponseByID(ctx, responseID)
-	if err != nil {
-		return err
-	}
-	if resp.Status != domain.ResponseStatusInProgress && resp.Status != domain.ResponseStatusRestarted {
-		return domain.ErrFormClosed
-	}
-	if time.Since(resp.LastHeartbeat) > 5*time.Minute {
-		_ = s.responseRepo.UpdateResponseStatus(ctx, responseID, domain.ResponseStatusBlocked)
-		return domain.ErrFormEnded
-	}
-	_ = s.responseRepo.TouchHeartbeat(ctx, responseID)
-	return nil
-}
-
 func (s *responseService) GetSessionState(ctx context.Context, responseID uuid.UUID) (*dto.SessionStateDTO, error) {
-	if err := s.requireLiveSession(ctx, responseID); err != nil {
-		return nil, err
-	}
 	resp, err := s.responseRepo.GetResponseByID(ctx, responseID)
 	if err != nil {
 		return nil, err
@@ -336,7 +321,7 @@ func (s *responseService) GetLiveMonitoring(ctx context.Context, userID uuid.UUI
 		return nil, err
 	}
 
-	if form.UserID != userID {
+	if !s.canAccessForMonitoring(ctx, form, userID) {
 		return nil, domain.ErrForbidden
 	}
 
@@ -374,33 +359,33 @@ func (s *responseService) RestartStudentSession(ctx context.Context, userID uuid
 		return err
 	}
 
-	if form.UserID != userID {
+	if !s.canAccessForMonitoring(ctx, form, userID) {
 		return domain.ErrForbidden
 	}
 
 	return s.responseRepo.RestartStudentResponse(ctx, responseID, req.WarningMessage)
 }
 
-func (s *responseService) GetFormResponses(ctx context.Context, userID uuid.UUID, formID uuid.UUID) ([]dto.ResponseDetailDTO, error) {
+func (s *responseService) GetFormResponses(ctx context.Context, userID uuid.UUID, formID uuid.UUID, pg domain.Pagination) ([]dto.ResponseDetailDTO, int64, error) {
 	form, err := s.formRepo.GetByID(ctx, formID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	if form.UserID != userID {
-		return nil, domain.ErrForbidden
+	if !s.canAccessForMonitoring(ctx, form, userID) {
+		return nil, 0, domain.ErrForbidden
 	}
 
-	responses, err := s.responseRepo.GetResponsesByFormID(ctx, formID)
+	responses, total, err := s.responseRepo.GetResponsesByFormIDPaginated(ctx, formID, pg)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var dtos []dto.ResponseDetailDTO
 	for _, r := range responses {
 		dtos = append(dtos, *s.mapResponseToDTO(&r))
 	}
-	return dtos, nil
+	return dtos, total, nil
 }
 
 func (s *responseService) GetMySubmissions(ctx context.Context, email string) ([]dto.ResponseDetailDTO, error) {
@@ -448,7 +433,7 @@ func (s *responseService) GetAnalytics(ctx context.Context, userID uuid.UUID, fo
 		return nil, err
 	}
 
-	if form.UserID != userID {
+	if !s.canAccessForMonitoring(ctx, form, userID) {
 		return nil, domain.ErrForbidden
 	}
 
