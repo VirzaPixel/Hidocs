@@ -827,59 +827,6 @@ class _FormsTabState extends State<_FormsTab> {
   }
 }
 
-class _FormSearchDelegate extends SearchDelegate {
-  final List<FormModel> forms;
-  _FormSearchDelegate(this.forms);
-
-  @override
-  String get searchFieldLabel => 'Cari form...';
-
-  @override
-  List<Widget>? buildActions(BuildContext context) => [
-        IconButton(
-            icon: const Icon(Icons.clear_rounded),
-            onPressed: () => query = ''),
-      ];
-
-  @override
-  Widget? buildLeading(BuildContext context) => IconButton(
-      icon: const Icon(Icons.arrow_back_rounded),
-      onPressed: () => close(context, null));
-
-  @override
-  Widget buildResults(BuildContext context) => _buildList(context);
-
-  @override
-  Widget buildSuggestions(BuildContext context) => _buildList(context);
-
-  Widget _buildList(BuildContext context) {
-    final q = query.trim().toLowerCase();
-    final filtered = q.isEmpty
-        ? forms
-        : forms.where((f) {
-            final s =
-                '${f.title} ${f.slug} ${f.customLinkAlias} ${f.typeForApi}'.toLowerCase();
-            return s.contains(q);
-          }).toList();
-    if (filtered.isEmpty) {
-      return const Center(child: Text('Tidak ada hasil'));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      itemCount: filtered.length,
-      itemBuilder: (_, i) => _FormCard(
-        form: filtered[i],
-        onTap: () {
-          close(context, null);
-          Navigator.push(
-              context,
-              CustomPageRoute(page: FormDetailScreen(form: filtered[i])));
-        },
-      ),
-    );
-  }
-}
-
 class _FormCard extends StatelessWidget {
   final FormModel form;
   final VoidCallback onTap;

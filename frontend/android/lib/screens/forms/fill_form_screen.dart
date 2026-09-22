@@ -541,6 +541,11 @@ class _FillFormScreenState extends State<FillFormScreen>
       listen: false,
     );
 
+    final responseProvider = Provider.of<ResponseProvider>(
+      context,
+      listen: false,
+    );
+
     final answers = <Map<String, dynamic>>[];
 
     for (final q in _questions) {
@@ -673,10 +678,7 @@ class _FillFormScreenState extends State<FillFormScreen>
       } catch (_) {}
     }
 
-    Provider.of<ResponseProvider>(
-      context,
-      listen: false,
-    ).recordSubmission(
+    responseProvider.recordSubmission(
       formId: widget.form.id,
       formTitle: widget.form.title,
       responseId: (result['response_id'] ?? '').toString(),
@@ -809,7 +811,7 @@ class _FillFormScreenState extends State<FillFormScreen>
             children: [
               Text(
                 l10n.questionNo,
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 12),
               Wrap(

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
@@ -181,8 +181,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(
                           30,
                           28,
                           30,
@@ -193,12 +193,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const HiDocsLogo(
+                              HiDocsLogo(
                                 size: 38,
                                 showShadow: false,
                               ),
-                              const SizedBox(width: 11),
-                              const Text(
+                              SizedBox(width: 11),
+                              Text(
                                 'HiDocs!',
                                 style: TextStyle(
                                   fontSize: 25,

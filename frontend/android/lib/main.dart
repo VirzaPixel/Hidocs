@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -112,17 +112,17 @@ class FormMakerApp extends StatelessWidget {
                   break;
                 case '/admin-home':
                 case '/super-admin-home':
-                  page = _GuardedRoute(
+                  page = const _GuardedRoute(
                     allow: RoleGate.canAccessAdmin,
-                    fallback: const NotFoundScreen(),
-                    child: const AdminDashboardScreen(),
+                    fallback: NotFoundScreen(),
+                    child: AdminDashboardScreen(),
                   );
                   break;
                 case '/admin-traffic':
-                  page = _GuardedRoute(
+                  page = const _GuardedRoute(
                     allow: RoleGate.canAccessAdmin,
-                    fallback: const NotFoundScreen(),
-                    child: const AdminTrafficScreen(),
+                    fallback: NotFoundScreen(),
+                    child: AdminTrafficScreen(),
                   );
                   break;
                 case '/scan-form':

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/utils/theme_context.dart';
@@ -126,7 +126,7 @@ class UserFormDetailScreen extends StatelessWidget {
                       ),
                     ] else ...[
                       const SizedBox(height: 14),
-                      _InfoRow(
+                      const _InfoRow(
                         icon: Icons.check_circle_outline,
                         title: 'Pengiriman',
                         value: 'Hanya bisa dikirim satu kali',

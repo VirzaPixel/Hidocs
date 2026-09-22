@@ -943,7 +943,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: context.primaryWith(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: context.primaryWith(0.15))),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.lightbulb_outline_rounded, size: 16, color: context.primary), SizedBox(width: 8), Expanded(child: Text('Tips antisipasi lonjakan: pantau RPS, P95 Latency, CPU & DB Pool. Jika RPS >80 atau DB >80% → scale DB max_connections / tambah instance. Cek Traffic History untuk tren.', style: TextStyle(fontSize: 12, height: 1.4, color: AppTheme.textSecondary)))]),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.lightbulb_outline_rounded, size: 16, color: context.primary), const SizedBox(width: 8), const Expanded(child: Text('Tips antisipasi lonjakan: pantau RPS, P95 Latency, CPU & DB Pool. Jika RPS >80 atau DB >80% → scale DB max_connections / tambah instance. Cek Traffic History untuk tren.', style: TextStyle(fontSize: 12, height: 1.4, color: AppTheme.textSecondary)))]),
           ),
         ],
       ),

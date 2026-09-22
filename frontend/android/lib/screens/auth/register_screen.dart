@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -345,8 +345,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(
         30,
         28,
         30,
@@ -354,12 +354,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       child: Row(
         children: [
-          const HiDocsLogo(
+          HiDocsLogo(
             size: 38,
             showShadow: false,
           ),
-          const SizedBox(width: 11),
-          const Text(
+          SizedBox(width: 11),
+          Text(
             'HiDocs!',
             style: TextStyle(
               fontSize: 25,
@@ -418,7 +418,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               color: mutedColor,
             ),
             children: [
-              TextSpan(
+              const TextSpan(
                 text: 'Kami telah mengirimkan ',
               ),
               TextSpan(
@@ -427,7 +427,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              TextSpan(
+              const TextSpan(
                 text: '\nke email ',
               ),
               TextSpan(

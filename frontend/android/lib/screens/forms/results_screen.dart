@@ -245,7 +245,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                             });
                           },
                           child: Padding(
-                            padding: EdgeInsets.symmetric(
+                            padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 4),
                             child: Text(
                               'Open Grading',

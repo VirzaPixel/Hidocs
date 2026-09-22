@@ -802,18 +802,18 @@ class _SummaryCard extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.hourglass_empty_rounded,
                     size: 18,
                     color: Colors.white70,
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Menunggu penilaian',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: Colors.white70,
                         fontWeight: FontWeight.w500,
