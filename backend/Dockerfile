@@ -15,7 +15,6 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root/
 
 COPY --from=builder /app/hidocs-backend .
-COPY --from=builder /app/.env.example .env
 
 EXPOSE 8080
 
