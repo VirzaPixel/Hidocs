@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs: ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       # checkout repo
@@ -19,7 +19,7 @@ jobs:
 
       # setup JDK
       - name: Setup Java JDK
-        uses: action/setup-java@v4
+        uses: actions/setup-java@v4
         with: 
           distribution: 'zulu'
           java-version: '17'
