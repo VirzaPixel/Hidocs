@@ -16,10 +16,15 @@ type OTPCache interface {
 	SetOTP(ctx context.Context, email, otp string, ttl time.Duration) error
 	GetOTP(ctx context.Context, email string) (string, error)
 	DeleteOTP(ctx context.Context, email string) error
-	
+
 	// Temporary user registration storage during OTP verification
 	SetPendingUser(ctx context.Context, email, payload string, ttl time.Duration) error
 	GetPendingUser(ctx context.Context, email string) (string, error)
+
+	// S-014: brute-force guard (maks 5 percobaan) + resend throttle (maks 3x/jam)
+	IncrOTPAttempts(ctx context.Context, email string) (int64, error)
+	ClearOTPAttempts(ctx context.Context, email string) error
+	IncrOTPResend(ctx context.Context, email string) (int64, error)
 }
 
 type RedisClient struct {
@@ -172,4 +177,53 @@ func (c *RedisClient) DeleteCache(ctx context.Context, key string) error {
 		return nil
 	}
 	return c.rdb.Del(ctx, key).Err()
+}
+
+func (c *RedisClient) incrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	if c.isFallback {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		item, exists := c.memStore[key]
+		var n int64 = 1
+		if exists && time.Now().Before(item.expiresAt) {
+			var cur int64
+			_, _ = fmt.Sscanf(item.value, "%d", &cur)
+			n = cur + 1
+		}
+		c.memStore[key] = memItem{
+			value:     fmt.Sprintf("%d", n),
+			expiresAt: time.Now().Add(ttl),
+		}
+		return n, nil
+	}
+	n, err := c.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	if n == 1 {
+		_ = c.rdb.Expire(ctx, key, ttl).Err()
+	}
+	return n, nil
+}
+
+func (c *RedisClient) IncrOTPAttempts(ctx context.Context, email string) (int64, error) {
+	return c.incrWithTTL(ctx, "otp_attempts:"+cleanEmail(email), 10*time.Minute)
+}
+
+func (c *RedisClient) ClearOTPAttempts(ctx context.Context, email string) error {
+	if c.isFallback {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.memStore, "otp_attempts:"+cleanEmail(email))
+		return nil
+	}
+	return c.rdb.Del(ctx, "otp_attempts:"+cleanEmail(email)).Err()
+}
+
+func (c *RedisClient) IncrOTPResend(ctx context.Context, email string) (int64, error) {
+	return c.incrWithTTL(ctx, "otp_resend:"+cleanEmail(email), time.Hour)
+}
+
+func (c *RedisClient) IncrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	return c.incrWithTTL(ctx, key, ttl)
 }

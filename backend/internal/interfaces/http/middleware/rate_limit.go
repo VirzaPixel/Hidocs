@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"backend/internal/infrastructure/cache"
 	"backend/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -39,26 +40,44 @@ func initRateLimitCleaner() {
 }
 
 func RateLimiter(requestsPerMinute int) gin.HandlerFunc {
+	return rateLimiter(requestsPerMinute, nil)
+}
+
+// S-016: Redis-backed limiter (jalan di multi-replica). Fallback ke
+// in-memory bila client nil.
+func RateLimiterRedis(requestsPerMinute int, client *cache.RedisClient) gin.HandlerFunc {
+	return rateLimiter(requestsPerMinute, client)
+}
+
+func rateLimiter(requestsPerMinute int, redisClient *cache.RedisClient) gin.HandlerFunc {
 	cleanOnce.Do(initRateLimitCleaner)
 
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// 1. Bypass rate limiter for school/campus NAT WiFi on active student exam endpoints
-		// (Autosave, Telemetry, Session State, Submit, Verify Token)
-		if strings.Contains(path, "/public/responses/") ||
-			strings.HasSuffix(path, "/submit") ||
-			strings.HasSuffix(path, "/verify-token") {
+		// 1. Autosave, Telemetry, Session State bypass global limiter
+		// (diproteksi session-token + dibatasi group limiter 60/mnt).
+		// verify-token & submit TIDAK di-bypass (anti brute-force).
+		if strings.Contains(path, "/public/responses/") {
 			c.Next()
 			return
 		}
 
 		ip := c.ClientIP()
 
-		// 2. Bypass rate limiter for localhost/loopback IP
-		if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
-			c.Next()
-			return
+		// S-016: Redis fixed-window per IP+path (multi-replica safe)
+		if redisClient != nil {
+			key := "ratelimit:" + c.Request.URL.Path + ":" + ip
+			n, err := redisClient.IncrWithTTL(c.Request.Context(), key, time.Minute)
+			if err == nil {
+				if int(n) > requestsPerMinute {
+					response.Error(c, http.StatusTooManyRequests, "Terlalu banyak permintaan. Silakan coba beberapa saat lagi.", nil)
+					c.Abort()
+					return
+				}
+				c.Next()
+				return
+			}
 		}
 
 		rateMu.Lock()

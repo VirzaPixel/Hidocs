@@ -36,6 +36,8 @@ func (j *JWTManager) GenerateToken(user *domain.User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(j.expireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "hidocs-backend",
+			Audience:  jwt.ClaimStrings{"hidocs-app"},
 		},
 	}
 

@@ -90,6 +90,7 @@ func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
 		err = db.AutoMigrate(
 			&domain.User{},
 			&domain.PasswordReset{},
+			&domain.RefreshToken{},
 			&domain.Form{},
 			&domain.FormSettings{},
 			&domain.Question{},

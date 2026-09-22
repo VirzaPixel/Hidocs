@@ -130,7 +130,8 @@ type VerifyExamTokenRequest struct {
 }
 
 type VerifyExamTokenResponse struct {
-	ResponseID   uuid.UUID      `json:"response_id"`
-	Form         *PublicFormDTO `json:"form"`
+	ResponseID   uuid.UUID        `json:"response_id"`
+	SessionToken string           `json:"session_token,omitempty"`
+	Form         *PublicFormDTO   `json:"form"`
 	SessionState *SessionStateDTO `json:"session_state"`
 }

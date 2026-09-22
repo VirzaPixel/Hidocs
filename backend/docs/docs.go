@@ -21,6 +21,11 @@ const docTemplate = `{
     "paths": {
         "/api/v1/admin/creators": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -50,14 +55,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -98,16 +103,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/creators/{creator_id}/status": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -143,16 +148,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/dashboard/stats": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -179,16 +184,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/forms": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -218,16 +223,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/forms/{form_id}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "Admin"
                 ],
@@ -248,16 +253,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/forms/{form_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Track live active students taking a specific exam form in real-time.",
                 "produces": [
                     "application/json"
@@ -294,16 +299,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/live-exams": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Monitor active exams currently in progress and distribution of students taking each exam.",
                 "produces": [
                     "application/json"
@@ -319,16 +324,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.LiveExamsResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/realtime": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Stream live telemetry via WebSocket or retrieve instantaneous snapshot JSON (RPS, Latency P95/P99, Active Users, Submissions).",
                 "produces": [
                     "application/json"
@@ -344,16 +349,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.RealtimeMetricsResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/system": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Monitor CPU, memory allocations, goroutines count, and database connection pool status during peak load.",
                 "produces": [
                     "application/json"
@@ -369,16 +374,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.SystemMetricsResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/traffic-history": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Retrieve traffic time-series (RPS, Latency ms, Error count) over the last 1-2 hours for Line Chart visualization.",
                 "produces": [
                     "application/json"
@@ -402,12 +407,7 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.TrafficHistoryResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/auth/forgot-password": {
@@ -491,6 +491,75 @@ const docTemplate = `{
                         "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Logout (revoke semua refresh token user)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Refresh JWT access token (rotasi + reuse detection)",
+                "parameters": [
+                    {
+                        "description": "Refresh Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RefreshTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.AuthResponse"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -657,6 +726,11 @@ const docTemplate = `{
         },
         "/api/v1/forms": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -700,14 +774,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -748,16 +822,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/categories": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -787,16 +861,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/import-docx": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -835,16 +909,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/import-excel": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -883,16 +957,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -928,14 +1002,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -983,14 +1057,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "tags": [
                     "Forms"
                 ],
@@ -1011,16 +1085,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/analytics": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1056,16 +1130,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/export": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "Responses"
                 ],
@@ -1092,16 +1166,16 @@ const docTemplate = `{
                             "type": "file"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/live-monitoring": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1140,16 +1214,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/questions": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1188,14 +1262,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1243,16 +1317,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/responses": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1291,16 +1365,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/responses/{response_id}/restart": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1343,16 +1417,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/settings": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1400,12 +1474,7 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/submit": {
@@ -1462,6 +1531,11 @@ const docTemplate = `{
         },
         "/api/v1/options/{option_id}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "Questions"
                 ],
@@ -1482,12 +1556,7 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/public/forms/{form_id}/verify-token": {
@@ -1772,6 +1841,11 @@ const docTemplate = `{
         },
         "/api/v1/questions/upload-image": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1810,16 +1884,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/questions/upload-media": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1858,16 +1932,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/questions/{question_id}": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1915,14 +1989,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "tags": [
                     "Questions"
                 ],
@@ -1943,16 +2017,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/responses/me": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1982,16 +2056,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/responses/{response_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2027,16 +2101,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/responses/{response_id}/grade": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2072,16 +2146,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/superadmin/create-admin": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2122,16 +2196,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/superadmin/list-admin": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2161,16 +2235,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/users/me": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2197,14 +2271,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2245,16 +2319,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/users/students/import": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2283,12 +2357,7 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         }
     },
@@ -2534,6 +2603,9 @@ const docTemplate = `{
         "dto.AuthResponse": {
             "type": "object",
             "properties": {
+                "refresh_token": {
+                    "type": "string"
+                },
                 "token": {
                     "type": "string"
                 },
@@ -3317,6 +3389,17 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.RefreshTokenRequest": {
+            "type": "object",
+            "required": [
+                "refresh_token"
+            ],
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.RegisterRequest": {
             "type": "object",
             "required": [
@@ -3531,6 +3614,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "response_id": {
+                    "type": "string"
+                },
+                "session_token": {
                     "type": "string"
                 }
             }
@@ -3917,6 +4003,9 @@ const docTemplate = `{
                 },
                 "session_state": {
                     "$ref": "#/definitions/dto.SessionStateDTO"
+                },
+                "session_token": {
+                    "type": "string"
                 }
             }
         },

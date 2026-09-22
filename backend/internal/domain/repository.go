@@ -20,6 +20,12 @@ type UserRepository interface {
 	CreatePasswordReset(ctx context.Context, reset *PasswordReset) error
 	GetPasswordResetByToken(ctx context.Context, token string) (*PasswordReset, error)
 	DeletePasswordReset(ctx context.Context, email string) error
+
+	// Refresh tokens (rotasi + reuse detection)
+	CreateRefreshToken(ctx context.Context, rt *RefreshToken) error
+	GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error)
+	DeleteRefreshToken(ctx context.Context, token string) error
+	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 }
 
 type FormRepository interface {
@@ -68,6 +74,7 @@ type ResponseRepository interface {
 	// Autosave & Incremental Answers
 	UpsertAnswer(ctx context.Context, answer *ResponseAnswer) error
 	UpsertAnswersBatch(ctx context.Context, answers []ResponseAnswer) error
+	TouchHeartbeat(ctx context.Context, responseID uuid.UUID) error
 	
 	// Live Proctoring, Telemetry & Creator Restart
 	UpdateTelemetry(ctx context.Context, responseID uuid.UUID, eventType string, eventMessage *string, currentQuestionIdx int, metadata *string) error

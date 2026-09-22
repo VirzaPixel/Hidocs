@@ -128,6 +128,12 @@ func (r *responseRepository) UpsertAnswersBatch(ctx context.Context, answers []d
 		}).CreateInBatches(answers, 100).Error
 }
 
+func (r *responseRepository) TouchHeartbeat(ctx context.Context, responseID uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&domain.FormResponse{}).
+		Where("id = ?", responseID).
+		Update("last_heartbeat", gorm.Expr("NOW()")).Error
+}
+
 func (r *responseRepository) UpdateTelemetry(ctx context.Context, responseID uuid.UUID, eventType string, eventMessage *string, currentQuestionIdx int, metadata *string) error {
 	// 1. Create log record
 	log := &domain.ProctoringLog{

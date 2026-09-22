@@ -20,6 +20,7 @@ import (
 	"backend/internal/interfaces/http/router"
 
 	"github.com/google/uuid"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -38,6 +39,10 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
+
+	if cfg.AppEnv == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	// Initialize Postgres DB
 	db, err := database.NewPostgresDB(cfg)
@@ -62,9 +67,9 @@ func main() {
 	// Services
 	authService := service.NewAuthService(userRepo, hasher, jwtManager, redisClient, emailSender)
 	userService := service.NewUserService(userRepo, hasher)
-	formService := service.NewFormService(formRepo, responseRepo, redisClient)
+	formService := service.NewFormService(formRepo, responseRepo, redisClient, cfg.JWTSecret)
 	questionService := service.NewQuestionService(questionRepo, formRepo)
-	responseService := service.NewResponseService(responseRepo, formRepo, questionRepo)
+	responseService := service.NewResponseService(responseRepo, formRepo, questionRepo, cfg.JWTSecret)
 	docxService := service.NewDocxService(docxParser, formRepo, questionRepo)
 	exportService := service.NewExportService(formRepo, responseRepo, questionRepo)
 	adminService := service.NewAdminService(adminRepo, userRepo, hasher)
@@ -91,6 +96,8 @@ func main() {
 		AdminHandler:    adminHandler,
 		MetricsHandler:  metricsHandler,
 		JWTManager:      jwtManager,
+		SessionSecret:   cfg.JWTSecret,
+		RedisClient:     redisClient,
 	})
 
 	// Auto-seed default SuperAdmin and Test Exam Form for load testing

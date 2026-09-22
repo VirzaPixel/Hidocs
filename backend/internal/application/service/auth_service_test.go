@@ -14,11 +14,12 @@ import (
 )
 
 type mockUserRepo struct {
-	users map[string]*domain.User
+	users  map[string]*domain.User
+	resets map[string]*domain.PasswordReset
 }
 
 func newMockUserRepo() *mockUserRepo {
-	return &mockUserRepo{users: make(map[string]*domain.User)}
+	return &mockUserRepo{users: make(map[string]*domain.User), resets: make(map[string]*domain.PasswordReset)}
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *domain.User) error {
@@ -74,20 +75,50 @@ func (m *mockUserRepo) ListAll(ctx context.Context, offset, limit int) ([]domain
 }
 
 func (m *mockUserRepo) CreatePasswordReset(ctx context.Context, reset *domain.PasswordReset) error {
+	m.resets[reset.Token] = reset
+	return nil
+}
+
+func (m *mockUserRepo) CreateRefreshToken(ctx context.Context, rt *domain.RefreshToken) error {
+	return nil
+}
+
+func (m *mockUserRepo) GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
+	return nil, domain.ErrInvalidToken
+}
+
+func (m *mockUserRepo) DeleteRefreshToken(ctx context.Context, token string) error {
+	return nil
+}
+
+func (m *mockUserRepo) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
 func (m *mockUserRepo) GetPasswordResetByToken(ctx context.Context, token string) (*domain.PasswordReset, error) {
-	return nil, nil
+	r, ok := m.resets[token]
+	if !ok {
+		return nil, domain.ErrInvalidToken
+	}
+	return r, nil
 }
 
 func (m *mockUserRepo) DeletePasswordReset(ctx context.Context, email string) error {
+	for tok, r := range m.resets {
+		if r.Email == email {
+			delete(m.resets, tok)
+		}
+	}
 	return nil
 }
 
 type mockEmailSender struct{}
 
 func (m *mockEmailSender) SendOTPEmail(toEmail, otpCode string) error {
+	return nil
+}
+
+func (m *mockEmailSender) SendResetEmail(toEmail, resetToken string) error {
 	return nil
 }
 
@@ -175,5 +206,59 @@ func TestAuthService_RegisterAndResendOTP(t *testing.T) {
 	}
 	if err.Error() != "User is already registered and verified. Please login." {
 		t.Fatalf("Unexpected error message: %v", err)
+	}
+}
+
+func TestAuthService_ForgotAndResetPassword(t *testing.T) {
+	cfg := &config.Config{RedisHost: "localhost:9999"}
+	userRepo := newMockUserRepo()
+	hasher := security.NewBcryptHasher()
+	jwtMgr := security.NewJWTManager("test-secret-key-12345678901234567890", 24)
+	otpCache := cache.NewRedisClient(cfg)
+	emailSender := &mockEmailSender{}
+	authSvc := service.NewAuthService(userRepo, hasher, jwtMgr, otpCache, emailSender)
+	ctx := context.Background()
+
+	email := "resetuser@example.com"
+	hash, _ := hasher.HashPassword("oldpass123")
+	u := &domain.User{ID: uuid.New(), Name: "Reset User", Email: email, PasswordHash: hash, Role: domain.RoleUser, IsActive: true}
+	if err := userRepo.Create(ctx, u); err != nil {
+		t.Fatalf("seed user failed: %v", err)
+	}
+
+	// 1. ForgotPassword must return a usable token
+	token, err := authSvc.ForgotPassword(ctx, dto.ForgotPasswordRequest{Email: email})
+	if err != nil {
+		t.Fatalf("ForgotPassword failed: %v", err)
+	}
+	if token == "" {
+		t.Fatalf("ForgotPassword returned empty token (regression: token dibuang)")
+	}
+
+	// 2. Unknown email must NOT leak (empty token, nil error)
+	ghost, err := authSvc.ForgotPassword(ctx, dto.ForgotPasswordRequest{Email: "ghost@example.com"})
+	if err != nil || ghost != "" {
+		t.Fatalf("expected generic empty response for unknown email, got token=%q err=%v", ghost, err)
+	}
+
+	// 3. ResetPassword with valid token works and invalidates token
+	if err := authSvc.ResetPassword(ctx, dto.ResetPasswordRequest{Token: token, NewPassword: "newpass123"}); err != nil {
+		t.Fatalf("ResetPassword failed: %v", err)
+	}
+
+	// 4. Login with new password works
+	res, err := authSvc.Login(ctx, dto.LoginRequest{Email: email, Password: "newpass123"})
+	if err != nil || res.Token == "" {
+		t.Fatalf("login with new password failed: %v", err)
+	}
+
+	// 5. Reused token must be rejected
+	if err := authSvc.ResetPassword(ctx, dto.ResetPasswordRequest{Token: token, NewPassword: "otherpass1"}); err == nil {
+		t.Fatalf("expected error on token reuse, got nil")
+	}
+
+	// 6. Invalid token rejected
+	if err := authSvc.ResetPassword(ctx, dto.ResetPasswordRequest{Token: "invalid", NewPassword: "otherpass1"}); err == nil {
+		t.Fatalf("expected error on invalid token, got nil")
 	}
 }

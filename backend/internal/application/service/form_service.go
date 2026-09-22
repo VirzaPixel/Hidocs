@@ -10,6 +10,7 @@ import (
 	"backend/internal/application/dto"
 	"backend/internal/domain"
 	"backend/internal/infrastructure/cache"
+	sessionpkg "backend/pkg/session"
 	"backend/pkg/utils"
 	"github.com/google/uuid"
 )
@@ -28,16 +29,18 @@ type FormService interface {
 }
 
 type formService struct {
-	formRepo     domain.FormRepository
-	responseRepo domain.ResponseRepository
-	redisClient  *cache.RedisClient
+	formRepo      domain.FormRepository
+	responseRepo  domain.ResponseRepository
+	redisClient   *cache.RedisClient
+	sessionSecret string
 }
 
-func NewFormService(formRepo domain.FormRepository, responseRepo domain.ResponseRepository, redisClient *cache.RedisClient) FormService {
+func NewFormService(formRepo domain.FormRepository, responseRepo domain.ResponseRepository, redisClient *cache.RedisClient, sessionSecret string) FormService {
 	return &formService{
-		formRepo:     formRepo,
-		responseRepo: responseRepo,
-		redisClient:  redisClient,
+		formRepo:      formRepo,
+		responseRepo:  responseRepo,
+		redisClient:   redisClient,
+		sessionSecret: sessionSecret,
 	}
 }
 
@@ -532,6 +535,10 @@ func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req
 		})
 	}
 
+	if session == nil {
+		return nil, errors.New("failed to initialize exam session")
+	}
+
 	sessionState := &dto.SessionStateDTO{
 		ResponseID:            session.ID,
 		FormID:                formID,
@@ -544,8 +551,14 @@ func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req
 		Questions:             sessionQuestions,
 	}
 
+	sessionToken := ""
+	if s.sessionSecret != "" {
+		sessionToken = sessionpkg.GenerateExamSessionToken(session.ID.String(), s.sessionSecret)
+	}
+
 	return &dto.VerifyExamTokenResponse{
 		ResponseID:   session.ID,
+		SessionToken: sessionToken,
 		Form:         publicForm,
 		SessionState: sessionState,
 	}, nil

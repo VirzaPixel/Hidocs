@@ -33,3 +33,11 @@ type PasswordReset struct {
 	ExpiresAt time.Time `gorm:"type:timestamp;not null" json:"expires_at"`
 	CreatedAt time.Time `gorm:"type:timestamp;not null;default:now()" json:"created_at"`
 }
+
+type RefreshToken struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	Token     string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"-"`
+	ExpiresAt time.Time `gorm:"type:timestamp;not null" json:"expires_at"`
+	CreatedAt time.Time `gorm:"type:timestamp;not null;default:now()" json:"created_at"`
+}

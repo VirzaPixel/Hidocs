@@ -13,6 +13,7 @@ type MatchPairItem struct {
 
 type SubmitFormRequest struct {
 	ResponseID      *uuid.UUID           `json:"response_id,omitempty"`
+	SessionToken    string               `json:"session_token,omitempty"`
 	RespondentEmail string               `json:"respondent_email" binding:"required,email"`
 	Passcode        string               `json:"passcode"`
 	IsAutoSubmitted bool                 `json:"is_auto_submitted"`

@@ -170,6 +170,8 @@ definitions:
     type: object
   dto.AuthResponse:
     properties:
+      refresh_token:
+        type: string
       token:
         type: string
       user:
@@ -683,6 +685,13 @@ definitions:
       success:
         type: boolean
     type: object
+  dto.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
   dto.RegisterRequest:
     properties:
       email:
@@ -823,6 +832,8 @@ definitions:
       respondent_email:
         type: string
       response_id:
+        type: string
+      session_token:
         type: string
     required:
     - answers
@@ -1079,6 +1090,8 @@ definitions:
         type: string
       session_state:
         $ref: '#/definitions/dto.SessionStateDTO'
+      session_token:
+        type: string
     type: object
   dto.VerifyOTPRequest:
     properties:
@@ -1389,6 +1402,46 @@ paths:
           schema:
             $ref: '#/definitions/response.APIResponse'
       summary: Login user
+      tags:
+      - Auth
+  /api/v1/auth/logout:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Logout (revoke semua refresh token user)
+      tags:
+      - Auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthResponse'
+              type: object
+      summary: Refresh JWT access token (rotasi + reuse detection)
       tags:
       - Auth
   /api/v1/auth/register:

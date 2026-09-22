@@ -25,8 +25,6 @@ func RequireAuth(jwtManager *security.JWTManager) gin.HandlerFunc {
 		tokenStr := authHeader
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenStr = strings.TrimPrefix(authHeader, "Bearer ")
-		} else if strings.HasPrefix(authHeader, "bearer ") {
-			tokenStr = strings.TrimPrefix(authHeader, "bearer ")
 		}
 
 		tokenStr = strings.TrimSpace(tokenStr)

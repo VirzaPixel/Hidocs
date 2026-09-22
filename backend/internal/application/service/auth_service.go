@@ -21,6 +21,8 @@ type AuthService interface {
 	VerifyOTP(ctx context.Context, req dto.VerifyOTPRequest) (*dto.AuthResponse, error)
 	ResendOTP(ctx context.Context, req dto.ResendOTPRequest) error
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error)
+	RefreshToken(ctx context.Context, req dto.RefreshTokenRequest) (*dto.AuthResponse, error)
+	Logout(ctx context.Context, userID uuid.UUID) error
 	ForgotPassword(ctx context.Context, req dto.ForgotPasswordRequest) (string, error)
 	ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error
 }
@@ -53,7 +55,7 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (st
 	emailStr := strings.ToLower(strings.TrimSpace(req.Email))
 	existing, _ := s.userRepo.GetByEmail(ctx, emailStr)
 	if existing != nil {
-		return "", domain.ErrUserAlreadyExists
+		return "OTP code has been sent to your email. Valid for 180 seconds.", nil
 	}
 
 	hashedPassword, err := s.passwordHasher.HashPassword(req.Password)
@@ -99,10 +101,14 @@ func (s *authService) VerifyOTP(ctx context.Context, req dto.VerifyOTPRequest) (
 		return nil, errors.New("OTP code has expired or is invalid. Please request a new OTP.")
 	}
 
-	// 2. Validate OTP code
+	// 2. Validate OTP code (S-014: maks 5 percobaan lalu invalidate)
 	if storedOTP != req.OTPCode {
+		if n, _ := s.otpCache.IncrOTPAttempts(ctx, emailStr); n >= 5 {
+			_ = s.otpCache.DeleteOTP(ctx, emailStr)
+		}
 		return nil, errors.New("Invalid OTP code. Please check your email and try again.")
 	}
+	_ = s.otpCache.ClearOTPAttempts(ctx, emailStr)
 
 	// 3. Fetch pending user payload from Redis
 	pendingStr, err := s.otpCache.GetPendingUser(ctx, emailStr)
@@ -132,27 +138,16 @@ func (s *authService) VerifyOTP(ctx context.Context, req dto.VerifyOTPRequest) (
 	// 5. Delete OTP & pending data from Redis
 	_ = s.otpCache.DeleteOTP(ctx, emailStr)
 
-	// 6. Generate JWT Session Token
-	token, err := s.jwtManager.GenerateToken(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.AuthResponse{
-		Token: token,
-		User: dto.UserResponse{
-			ID:        user.ID,
-			Name:      user.Name,
-			Email:     user.Email,
-			Role:      user.Role,
-			IsActive:  user.IsActive,
-			CreatedAt: user.CreatedAt,
-		},
-	}, nil
+	// 6. Generate JWT Session Token + refresh token
+	return s.issueSession(ctx, user)
 }
 
 func (s *authService) ResendOTP(ctx context.Context, req dto.ResendOTPRequest) error {
 	emailStr := strings.ToLower(strings.TrimSpace(req.Email))
+
+	if n, _ := s.otpCache.IncrOTPResend(ctx, emailStr); n > 3 {
+		return errors.New("Too many OTP resend requests. Please try again in an hour.")
+	}
 
 	pendingStr, err := s.otpCache.GetPendingUser(ctx, emailStr)
 	if err != nil || pendingStr == "" {
@@ -192,13 +187,28 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 		return nil, domain.ErrInvalidCredentials
 	}
 
+	return s.issueSession(ctx, user)
+}
+
+func (s *authService) issueSession(ctx context.Context, user *domain.User) (*dto.AuthResponse, error) {
 	token, err := s.jwtManager.GenerateToken(user)
 	if err != nil {
 		return nil, err
 	}
 
+	rt := &domain.RefreshToken{
+		ID:        uuid.New(),
+		UserID:    user.ID,
+		Token:     utils.RandomString(48),
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+	}
+	if err := s.userRepo.CreateRefreshToken(ctx, rt); err != nil {
+		return nil, err
+	}
+
 	return &dto.AuthResponse{
-		Token: token,
+		Token:        token,
+		RefreshToken: rt.Token,
 		User: dto.UserResponse{
 			ID:        user.ID,
 			Name:      user.Name,
@@ -211,11 +221,36 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 	}, nil
 }
 
+func (s *authService) RefreshToken(ctx context.Context, req dto.RefreshTokenRequest) (*dto.AuthResponse, error) {
+	stored, err := s.userRepo.GetRefreshToken(ctx, req.RefreshToken)
+	if err != nil {
+		return nil, domain.ErrInvalidToken
+	}
+
+	if time.Now().After(stored.ExpiresAt) {
+		_ = s.userRepo.DeleteRefreshToken(ctx, req.RefreshToken)
+		return nil, domain.ErrInvalidToken
+	}
+
+	user, err := s.userRepo.GetByID(ctx, stored.UserID)
+	if err != nil || !user.IsActive {
+		_ = s.userRepo.DeleteRefreshToken(ctx, req.RefreshToken)
+		return nil, domain.ErrInvalidToken
+	}
+
+	_ = s.userRepo.DeleteRefreshToken(ctx, req.RefreshToken)
+	return s.issueSession(ctx, user)
+}
+
+func (s *authService) Logout(ctx context.Context, userID uuid.UUID) error {
+	return s.userRepo.DeleteUserRefreshTokens(ctx, userID)
+}
+
 func (s *authService) ForgotPassword(ctx context.Context, req dto.ForgotPasswordRequest) (string, error) {
 	emailStr := strings.ToLower(strings.TrimSpace(req.Email))
 	user, err := s.userRepo.GetByEmail(ctx, emailStr)
 	if err != nil {
-		return "", domain.ErrUserNotFound
+		return "", nil
 	}
 
 	token := utils.RandomString(32)
@@ -231,12 +266,19 @@ func (s *authService) ForgotPassword(ctx context.Context, req dto.ForgotPassword
 		return "", err
 	}
 
+	go s.emailSender.SendResetEmail(user.Email, token)
+
 	return token, nil
 }
 
 func (s *authService) ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error {
 	reset, err := s.userRepo.GetPasswordResetByToken(ctx, req.Token)
 	if err != nil {
+		return domain.ErrInvalidToken
+	}
+
+	if time.Now().After(reset.ExpiresAt) {
+		_ = s.userRepo.DeletePasswordReset(ctx, reset.Email)
 		return domain.ErrInvalidToken
 	}
 

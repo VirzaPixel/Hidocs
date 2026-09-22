@@ -7,6 +7,7 @@ import (
 
 	"backend/internal/application/dto"
 	"backend/internal/domain"
+	sessionpkg "backend/pkg/session"
 	"github.com/google/uuid"
 )
 
@@ -26,17 +27,29 @@ type ResponseService interface {
 }
 
 type responseService struct {
-	responseRepo domain.ResponseRepository
-	formRepo     domain.FormRepository
-	questionRepo domain.QuestionRepository
+	responseRepo  domain.ResponseRepository
+	formRepo      domain.FormRepository
+	questionRepo  domain.QuestionRepository
+	sessionSecret string
 }
 
-func NewResponseService(respRepo domain.ResponseRepository, formRepo domain.FormRepository, questionRepo domain.QuestionRepository) ResponseService {
+func NewResponseService(respRepo domain.ResponseRepository, formRepo domain.FormRepository, questionRepo domain.QuestionRepository, sessionSecret string) ResponseService {
 	return &responseService{
-		responseRepo: respRepo,
-		formRepo:     formRepo,
-		questionRepo: questionRepo,
+		responseRepo:  respRepo,
+		formRepo:      formRepo,
+		questionRepo:  questionRepo,
+		sessionSecret: sessionSecret,
 	}
+}
+
+func (s *responseService) requireSessionOwner(responseID uuid.UUID, token string) error {
+	if s.sessionSecret == "" {
+		return nil
+	}
+	if !sessionpkg.ValidateExamSessionToken(responseID.String(), token, s.sessionSecret) {
+		return domain.ErrUnauthorized
+	}
+	return nil
 }
 
 func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, req dto.SubmitFormRequest) (*dto.SubmitResponseResult, error) {
@@ -71,6 +84,11 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 	responseID := uuid.New()
 	if req.ResponseID != nil && *req.ResponseID != uuid.Nil {
 		responseID = *req.ResponseID
+		if err := s.requireSessionOwner(responseID, req.SessionToken); err != nil {
+			return nil, err
+		}
+	} else if form.FormSettings != nil && form.FormSettings.IsTokenProtected {
+		return nil, domain.ErrUnauthorized
 	}
 
 	var totalScore float64 = 0
@@ -186,6 +204,10 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 }
 
 func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UUID, req dto.AutosaveAnswerRequest) (*dto.AutosaveResponse, error) {
+	if err := s.requireLiveSession(ctx, responseID); err != nil {
+		return nil, err
+	}
+
 	var matchPairJSON *string
 	if len(req.MatchPairs) > 0 {
 		if b, err := json.Marshal(req.MatchPairs); err == nil {
@@ -218,10 +240,32 @@ func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UU
 }
 
 func (s *responseService) SendTelemetry(ctx context.Context, responseID uuid.UUID, req dto.TelemetryEventRequest) error {
+	if err := s.requireLiveSession(ctx, responseID); err != nil {
+		return err
+	}
 	return s.responseRepo.UpdateTelemetry(ctx, responseID, req.EventType, req.EventMessage, req.CurrentQuestionIndex, req.Metadata)
 }
 
+func (s *responseService) requireLiveSession(ctx context.Context, responseID uuid.UUID) error {
+	resp, err := s.responseRepo.GetResponseByID(ctx, responseID)
+	if err != nil {
+		return err
+	}
+	if resp.Status != domain.ResponseStatusInProgress && resp.Status != domain.ResponseStatusRestarted {
+		return domain.ErrFormClosed
+	}
+	if time.Since(resp.LastHeartbeat) > 5*time.Minute {
+		_ = s.responseRepo.UpdateResponseStatus(ctx, responseID, domain.ResponseStatusBlocked)
+		return domain.ErrFormEnded
+	}
+	_ = s.responseRepo.TouchHeartbeat(ctx, responseID)
+	return nil
+}
+
 func (s *responseService) GetSessionState(ctx context.Context, responseID uuid.UUID) (*dto.SessionStateDTO, error) {
+	if err := s.requireLiveSession(ctx, responseID); err != nil {
+		return nil, err
+	}
 	resp, err := s.responseRepo.GetResponseByID(ctx, responseID)
 	if err != nil {
 		return nil, err
