@@ -54,9 +54,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginNow => 'Login now';
 
   @override
-  String get forgotPassword => 'Forgot password?';
-
-  @override
   String get otpVerification => 'OTP Verification';
 
   @override
@@ -985,4 +982,515 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get darkMode => 'Dark Mode';
+
+  @override
+  String get accessRangeLabel => 'Access Range';
+
+  @override
+  String get activateImmediatelySub => 'Form goes live right after saving';
+
+  @override
+  String get activateImmediatelyTitle => 'Activate Immediately';
+
+  @override
+  String get addAtLeastOneQuestion => 'Add at least one question';
+
+  @override
+  String get addOptionLabel => 'Add Option';
+
+  @override
+  String get addQuestionLabel => 'Add Question';
+
+  @override
+  String get assignPointsLabel => 'Assign Points';
+
+  @override
+  String get closeLabel => 'Close';
+
+  @override
+  String get closeMustBeAfterOpen => 'Close time must be after open time';
+
+  @override
+  String get closeTimeBeforeOpenTime => 'Close time cannot be before open time';
+
+  @override
+  String get codePlaceholder => 'Write code here...';
+
+  @override
+  String get correctAnswerOptional => 'Correct answer (optional)';
+
+  @override
+  String get createForm => 'Create Form';
+
+  @override
+  String get customLinkHint => 'e.g. math-quiz-10';
+
+  @override
+  String get customLinkLabel => 'Custom Link';
+
+  @override
+  String get deleteOptionTooltip => 'Delete option';
+
+  @override
+  String get deleteQuestionTooltip => 'Delete question';
+
+  @override
+  String get editBlockedHasResponses =>
+      'Form cannot be edited because it already has responses';
+
+  @override
+  String get editForm => 'Edit Form';
+
+  @override
+  String get enterLatexFormula => 'Enter LaTeX formula';
+
+  @override
+  String get examDurationHintText => 'Leave empty for no time limit';
+
+  @override
+  String get examDurationLabel => 'Exam Duration';
+
+  @override
+  String get examModeSub => 'With timer, scores, and correct answers';
+
+  @override
+  String get examModeTitle => 'Exam Mode';
+
+  @override
+  String get failedToInsertImage => 'Failed to insert image';
+
+  @override
+  String get finishingUp => 'Finishing up...';
+
+  @override
+  String get formBehaviorLabel => 'Form Behavior';
+
+  @override
+  String get formCreatedSuccess => 'Form created successfully';
+
+  @override
+  String get formInformation => 'Form Information';
+
+  @override
+  String get formLinkDesc => 'Share this link so others can fill out the form';
+
+  @override
+  String get formLinkLabel => 'Form Link';
+
+  @override
+  String get formSaveError => 'Failed to save form';
+
+  @override
+  String get formTitleHint => 'e.g. Chapter 1 Math Quiz';
+
+  @override
+  String get formTitleLabel => 'Form Title';
+
+  @override
+  String get formTitleMinLength => 'Title must be at least 3 characters';
+
+  @override
+  String get formTitleRequired => 'Form title is required';
+
+  @override
+  String get formTypeSecurityMode => 'Form Type & Security';
+
+  @override
+  String get formUpdatedSuccess => 'Form updated successfully';
+
+  @override
+  String get hideResultsSub => 'Participants won\'t see results';
+
+  @override
+  String get hideResultsTitle => 'Hide Results';
+
+  @override
+  String get hoursLabel => 'Hours';
+
+  @override
+  String get insertCodeTitle => 'Insert Code';
+
+  @override
+  String get insertCodeTooltip => 'Insert code';
+
+  @override
+  String get insertFormulaLabel => 'Insert Formula';
+
+  @override
+  String get insertImageTooltip => 'Insert image';
+
+  @override
+  String get insertLabel => 'Insert';
+
+  @override
+  String get insertMathTooltip => 'Insert math formula';
+
+  @override
+  String get invalidLatexFormula => 'Invalid LaTeX formula';
+
+  @override
+  String get longTextHintNote => 'Long text answer for essays';
+
+  @override
+  String get mathFormulaTitle => 'Math Formula';
+
+  @override
+  String get mathHintNote => 'Use LaTeX to write formulas';
+
+  @override
+  String get minutesLabel => 'Minutes';
+
+  @override
+  String get moveDown => 'Move down';
+
+  @override
+  String get moveUp => 'Move up';
+
+  @override
+  String get mustBeLoggedInToCreateForm =>
+      'You must be logged in to create a form';
+
+  @override
+  String get noQuestionsYetSub => 'Tap add to create your first question';
+
+  @override
+  String get noQuestionsYetTitle => 'No questions yet';
+
+  @override
+  String get noTimeLimit => 'No time limit';
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get oneTimeSubmitSub => 'Participants can only submit once';
+
+  @override
+  String get oneTimeSubmitTitle => 'One-Time Submit';
+
+  @override
+  String get openLabel => 'Open';
+
+  @override
+  String get openUnlimited => 'Open with no time limit';
+
+  @override
+  String get optionTextHint => 'Option text...';
+
+  @override
+  String get pointsMax100 => 'Max 100 points';
+
+  @override
+  String get prepQuestionImages => 'Preparing question images...';
+
+  @override
+  String get previewLabel => 'Preview';
+
+  @override
+  String get previewPlaceholder => 'Preview will appear here';
+
+  @override
+  String get privateLabel => 'Private';
+
+  @override
+  String get privateSublabel => 'Only with access token';
+
+  @override
+  String get publicLabel => 'Public';
+
+  @override
+  String get publicSublabel => 'Anyone with the link can fill it';
+
+  @override
+  String get qCodeInput => 'Code Input';
+
+  @override
+  String get qCodeInputSub => 'Answer as program code';
+
+  @override
+  String get qEssay => 'Essay';
+
+  @override
+  String get qEssaySub => 'Long text answer';
+
+  @override
+  String get qImageChoice => 'Image Choice';
+
+  @override
+  String get qImageChoiceSub => 'Pick one image';
+
+  @override
+  String get qMathFormula => 'Math Formula';
+
+  @override
+  String get qMathFormulaSub => 'Answer as LaTeX formula';
+
+  @override
+  String get qMultipleChoice => 'Multiple Choice';
+
+  @override
+  String get qMultipleChoiceSub => 'Select one or more answers';
+
+  @override
+  String get qRating => 'Rating';
+
+  @override
+  String get qRatingSub => 'Star rating';
+
+  @override
+  String get qShortAnswer => 'Short Answer';
+
+  @override
+  String get qShortAnswerSub => 'Short single-line text';
+
+  @override
+  String get qYesNo => 'Yes / No';
+
+  @override
+  String get qYesNoSub => 'Yes or no choice';
+
+  @override
+  String get qCheckbox => 'Checkboxes';
+
+  @override
+  String get qCheckboxSub => 'Select multiple answers';
+
+  @override
+  String get qMatching => 'Matching';
+
+  @override
+  String get qMatchingSub => 'Match left-right pairs';
+
+  @override
+  String get addPairLabel => 'Add Pair';
+
+  @override
+  String get matchingLeftHint => 'Left...';
+
+  @override
+  String get matchingRightHint => 'Right...';
+
+  @override
+  String get matchingHintNote =>
+      'Add left-right pairs. Participants match each left item to the right answer.';
+
+  @override
+  String get deletePairTooltip => 'Delete pair';
+
+  @override
+  String get randomizeLinkTooltip => 'Randomize link';
+
+  @override
+  String get requiredLabel => 'Required';
+
+  @override
+  String get resultVisibilityDesc =>
+      'Control what participants see after submitting';
+
+  @override
+  String get resultVisibilityLabel => 'Result Visibility';
+
+  @override
+  String get scheduleDesc => 'Set form open and close schedule';
+
+  @override
+  String get scheduleLabel => 'Schedule';
+
+  @override
+  String get selectDate => 'Select date';
+
+  @override
+  String get selectTime => 'Select time';
+
+  @override
+  String get sharingVisibilityDesc => 'Control who can access the form';
+
+  @override
+  String get sharingVisibilityLabel => 'Sharing Visibility';
+
+  @override
+  String get shortTextHintNote => 'Short single-line text answer';
+
+  @override
+  String get showResultAndScoreSub =>
+      'Participants see correct answers and score';
+
+  @override
+  String get showResultAndScoreTitle => 'Show Result & Score';
+
+  @override
+  String get showResultOnlySub => 'Participants only see correct answers';
+
+  @override
+  String get showResultOnlyTitle => 'Show Result Only';
+
+  @override
+  String get shuffleOptionsSub => 'Option order is randomized per participant';
+
+  @override
+  String get shuffleOptionsTitle => 'Shuffle Options';
+
+  @override
+  String get shuffleQuestionsSub =>
+      'Question order is randomized per participant';
+
+  @override
+  String get shuffleQuestionsTitle => 'Shuffle Questions';
+
+  @override
+  String get signOut => 'Sign Out';
+
+  @override
+  String get starsLabel => 'Stars';
+
+  @override
+  String get starterCodeHint => 'Starter code for participants...';
+
+  @override
+  String get surveyModeSub => 'No scoring, focus on responses';
+
+  @override
+  String get surveyModeTitle => 'Survey Mode';
+
+  @override
+  String get tabInfo => 'Info';
+
+  @override
+  String get tabQuestions => 'Questions';
+
+  @override
+  String get tabSettings => 'Settings';
+
+  @override
+  String get timeAtLabel => 'at';
+
+  @override
+  String get writeQuestionHere => 'Write your question here...';
+
+  @override
+  String accessDurationDays(Object count) {
+    return '$count Days';
+  }
+
+  @override
+  String accessDurationDaysHours(Object days, Object hours) {
+    return '$days Days $hours Hours';
+  }
+
+  @override
+  String accessDurationHours(Object count) {
+    return '$count Hours';
+  }
+
+  @override
+  String accessDurationHoursMins(Object hours, Object mins) {
+    return '$hours Hours $mins Mins';
+  }
+
+  @override
+  String accessDurationMins(Object count) {
+    return '$count Mins';
+  }
+
+  @override
+  String convertingQuestionsToImages(Object done, Object total) {
+    return 'Converting $done of $total questions...';
+  }
+
+  @override
+  String mcqNeedsCorrectAnswer(Object index) {
+    return 'Question $index needs a correct answer';
+  }
+
+  @override
+  String questionContentEmpty(Object index) {
+    return 'Question $index content is empty';
+  }
+
+  @override
+  String get modeUser => 'User Mode';
+
+  @override
+  String get modeCreator => 'Creator Mode';
+
+  @override
+  String get modeUserDesc => 'Fill forms and view history';
+
+  @override
+  String get modeCreatorDesc => 'Create and manage your forms';
+
+  @override
+  String get switchToMode => 'Switch to';
+
+  @override
+  String get examTokenTitle => 'Exam Token';
+
+  @override
+  String get examTokenDesc =>
+      'Announce this token in class. Students enter it to start the exam.';
+
+  @override
+  String get examTokenProtectedTitle => 'Token Protection';
+
+  @override
+  String get examTokenProtectedSub =>
+      'Students must enter the token to start the exam';
+
+  @override
+  String get examTokenRegenerate => 'Regenerate';
+
+  @override
+  String get examTokenCopied => 'Exam token copied';
+
+  @override
+  String get modeExam => 'EXAM';
+
+  @override
+  String get modeSurvey => 'SURVEY';
+
+  @override
+  String get examBannerTitle => 'Exam mode — note the limits';
+
+  @override
+  String get questionBank => 'Question Bank';
+
+  @override
+  String get tabMyForms => 'My Forms';
+
+  @override
+  String get tabTemplates => 'Templates';
+
+  @override
+  String get takeFromBank => 'Take from Question Bank';
+
+  @override
+  String get noFormsBank => 'No forms yet';
+
+  @override
+  String get noTemplatesBank => 'No templates available';
+
+  @override
+  String get noQuestionsInForm => 'No questions in this form';
+
+  @override
+  String get categoryLabel => 'Category';
+
+  @override
+  String get categoryHint => 'e.g. Math, Science';
+
+  @override
+  String addToFormCount(Object count) {
+    return 'Add to form ($count)';
+  }
+
+  @override
+  String nOptions(Object count) {
+    return '$count options';
+  }
+
+  @override
+  String get filterAll => 'All';
+
+  @override
+  String get categoryFilterHint => 'Filter by category';
 }

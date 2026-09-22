@@ -1,5 +1,5 @@
-﻿import 'form_model.dart';
-import 'question_model.dart';
+﻿import 'package:hi_docs/models/form_model.dart';
+import 'package:hi_docs/models/question_model.dart';
 
 class ResponseModel {
   final String id;

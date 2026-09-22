@@ -1,13 +1,10 @@
 {
   "@@locale": "id",
-
   "appName": "HiDocs",
   "appTagline": "Form dinamis & kuis pintar",
-
   "login": "Masuk",
   "register": "Daftar",
   "user": "Pengguna",
-
   "email": "Email",
   "password": "Kata Sandi",
   "confirmPassword": "Konfirmasi Kata Sandi",
@@ -18,15 +15,12 @@
   "haveAccount": "Sudah punya akun? ",
   "signUpNow": "Daftar sekarang",
   "loginNow": "Masuk sekarang",
-  "forgotPassword": "Lupa kata sandi?",
-
   "otpVerification": "Verifikasi OTP",
   "enterOtp": "Masukkan kode OTP",
   "verify": "Verifikasi",
   "resendCode": "Kirim ulang kode",
   "welcomeBack": "Selamat datang kembali",
   "backToLogin": "Kembali ke Login",
-
   "home": "Beranda",
   "history": "Riwayat",
   "settings": "Pengaturan",
@@ -51,7 +45,6 @@
   "none": "Tidak ada",
   "all": "Semua",
   "searchPlaceholder": "Cari...",
-
   "nQuestions": "{count} soal",
   "active": "Aktif",
   "closed": "Ditutup",
@@ -60,12 +53,10 @@
   "type": "Tipe",
   "date": "Tanggal",
   "time": "Waktu",
-
   "language": "Bahasa",
   "language_switch_title": "Bahasa / Language",
   "indonesian": "Bahasa Indonesia",
   "english": "English",
-
   "question": "Soal",
   "fillForm": "Isi Form",
   "submitResponse": "Kirim Jawaban",
@@ -75,18 +66,15 @@
   "points": "Poin",
   "totalScore": "Total Skor",
   "responses": "Respons",
-
   "chooseMultiple": "Pilih lebih dari satu jawaban",
   "notSelected": "Belum dipilih",
   "outOfStars": "{value} dari {max} bintang",
-
   "flagged": "Ditandai ragu-ragu",
   "answered": "Dijawab",
   "notAnswered": "Belum dijawab",
   "current": "Sekarang",
   "questionNumber": "Nomor Soal",
   "questionsSummary": "Ringkasan soal",
-
   "colorScheme": "Skema Warna",
   "pickColorScheme": "Pilih Tema Warna",
   "pickColorSchemeSubtitle": "Kustomisasi warna sendiri",
@@ -96,7 +84,6 @@
   "pickCustomColor": "Pilih Warna Kustom",
   "pickAnyColor": "Pilih warna apa pun yang kamu mau",
   "apply": "Terapkan",
-
   "editProfile": "Edit Profil",
   "emailCannotChange": "Email tidak dapat diubah",
   "profileUpdated": "Profil berhasil diperbarui",
@@ -105,34 +92,28 @@
   "appearance": "Tampilan",
   "others": "Lainnya",
   "profile": "Profil",
-
   "authTokenTitle": "Token Akses",
   "shareToken": "Bagikan token ini kepada peserta. Token bersifat rahasia.",
   "enterToken": "Masukkan token akses",
-
   "scanForm": "Scan Form",
   "scanInstruction": "Arahkan kamera ke QR / barcode form",
   "scanSuccess": "Form ditemukan!",
   "scanFailed": "Barcode / link tidak valid. Coba lagi.",
   "linkInput": "Masukkan Link",
   "enterFormLink": "Masukkan link form",
-
   "answerRequired": "Mohon jawab semua pertanyaan wajib terlebih dahulu.",
   "submitSuccess": "Jawaban Anda berhasil dikirim.",
   "thankYou": "Terima Kasih!",
   "timeUpAutoSubmit": "Waktu habis! Jawaban Anda dikirim otomatis.",
   "noHistory": "Belum ada riwayat",
-
   "member": "Anggota",
   "memberSince": "Bergabung sejak {year}",
   "totalResponse": "Total Respons",
   "joined": "Bergabung",
   "selectLanguage": "Pilih Bahasa",
-
   "uploadImage": "Unggah Gambar",
   "removeImage": "Hapus Gambar",
   "imagePickError": "Gagal memuat gambar.",
-
   "loginScreenTitle": "Masuk ke Akun",
   "loginScreenSubtitle": "Silakan login untuk melanjutkan",
   "wrongEmail": "Email tidak valid",
@@ -145,10 +126,8 @@
   "userRequired": "Username wajib diisi",
   "nameRequired": "Nama wajib diisi",
   "invalidEmailFmt": "Format email tidak valid",
-
   "registerTitle": "Daftar & Mulai",
   "registerSubtitle": "Mari bergabung bersama HiDocs!",
-
   "verifyEmailBtn": "Verifikasi Email",
   "verifyCreate": "Verifikasi OTP",
   "otpCode": "Kode OTP",
@@ -160,16 +139,13 @@
   "backToRegister": "Edit data pendaftaran",
   "resendOtp": "Kirim Ulang OTP",
   "resendInSec": "Kirim ulang dalam {s} detik",
-
   "emailPlaceholder": "nama@domain.com",
   "emailAddress": "Alamat Email",
   "emailExample": "nama@domain.com",
   "usernameHint": "Pilih sebuah username",
   "code6Hint": "Masukkan kode 6 digit",
-
   "fillWorkForm": "Isi & kerjakan form",
   "formDigitalPlatform": "Platform form & ujian digital",
-
   "greetHi": "Halo, ",
   "helloWave": "Selamat datang 👋",
   "noFormsYetU": "Belum ada form yang diisi",
@@ -177,40 +153,31 @@
   "noHistorySub": "Form yang sudah kamu isi akan muncul di sini",
   "lastHistory": "Riwayat Terakhir",
   "seeAll": "Lihat semua",
-
   "noResultFilter": "Tidak ada form yang cocok",
   "changeFilter": "Coba ubah filter atau kata kunci.",
-
   "noResponseYet": "Belum ada respons",
   "formImageGagal": "Gambar gagal dimuat",
-
   "formDetail": "Detail Form",
   "formInfoSub": "Baca informasi di bawah sebelum mengisi form ini.",
   "startFill": "Mulai Mengisi Form",
   "fillAsExam": "Ini adalah form ujian. Pastikan kamu sudah siap sebelum memulai.",
-
   "duration": "Durasi",
   "timerMinutesStr": "{m} menit",
   "closedStatus": "Ditutup",
   "activeStatus": "Aktif",
   "draftStatus": "Nonaktif",
-
   "noQuestionYet": "Belum ada soal",
   "whichToken": "Diperlukan token dari pembuat form",
-
   "timerStartNote": "Waktu berjalan setelah form dimulai dan tidak bisa dihentikan.",
   "examReadyNote": "Pastikan kamu siap sebelum memulai.",
   "autoSubmitNote": "Jawaban dikirim otomatis saat waktu habis.",
   "noQuestionsYetF": "Form ini tidak memiliki soal.",
-
   "pleaseWait": "Mohon tunggu...",
   "processing": "Memproses...",
-
   "emptyResults": "Tidak ada hasil untuk ditampilkan.",
   "filter": "Filter",
   "sort": "Urutkan",
   "reset": "Reset",
-
   "formResult": "Hasil Form",
   "historyTitle": "Riwayat",
   "noHistoryU": "Belum ada riwayat",
@@ -218,14 +185,11 @@
   "historySubmitted": "Dikirim",
   "participant": "Peserta",
   "valueScore": "Nilai: {score}",
-
   "noSubmissionHistory": "Belum ada riwayat pengisian",
-
   "scorePct": "Skor {score}%",
   "nilaiMax": "Nilai: {score} / {max}",
   "nilaiOnly": "Nilai: {score}",
   "answerLabel": "Jawaban",
-
   "questionOf": "Soal {c} / {total}",
   "questionNo": "Nomor Soal",
   "legendAnswer": "Dijawab",
@@ -237,30 +201,24 @@
   "unflag": "Tanda ragu-ragu dihapus",
   "flagAdded": "Soal ditandai ragu-ragu",
   "flagCountNote": "{n} soal ditandai ragu-ragu",
-
   "shortAnsHint": "Tulis jawaban singkat...",
   "typingAnsHint": "Tulis jawaban Anda...",
   "writeCodeHint": "Tulis jawaban kode di sini...",
   "writeFormulaHint": "Tulis jawaban atau rumus...",
-
   "leftCol": "Kolom Kiri",
   "rightCol": "Kolom Kanan",
   "choosePair": "Pilih Pasangan",
   "pick": "Pilih...",
   "clearChoice": "Kosongkan",
-
   "submitAnswer": "Kirim Jawaban",
   "timeUp": "Waktu Habis",
   "notAnsweredDash": "— Tidak dijawab —",
-
   "preparingImages": "Menyiapkan gambar soal...",
   "convertingImages": "Mengubah soal menjadi gambar ({done}/{total})",
-
   "zoomOut": "Perkecil",
   "zoomIn": "Perbesar",
   "failSendResp": "Gagal mengirim jawaban. Periksa jaringan Anda.",
   "backToHome": "Kembali ke Beranda",
-
   "askTokenFrom": "Minta token dari pembuat form atau pengawas.",
   "wrongToken": "Token salah",
   "tokenEnsureCorrect": " — pastikan token benar",
@@ -270,22 +228,18 @@
   "hide": "Sembunyikan",
   "show": "Tampilkan",
   "tokenCopied": "Token akses disalin",
-
   "enterLinkFirst": "Masukkan link form terlebih dahulu.",
   "formNotFound": "Form tidak ditemukan.",
   "alreadySubmitted": "Anda sudah mengisi form ini",
   "pasteLinkToOpen": "Tempel link form untuk membuka dan mengisinya.",
   "scanQrCode": "Scan QR Code",
   "loadingForm": "Memuat Form...",
-
   "infoExamTime": "Waktu Ujian",
   "infoToken": "Token",
   "afterSubmitCant": "Setelah submit, kamu tidak bisa mengisi form ini lagi.",
   "enterTokenStart": "Masukkan Token & Mulai",
-
   "hdImage": "Gambar HD",
   "statQuestions": "Soal",
-
   "themeCustomize": "Kustom Tema",
   "pilihBahasa": "Pilih bahasa",
   "themeImage": "Gambar Header",
@@ -298,8 +252,6 @@
   "themePickImage": "Pilih Gambar",
   "themeRemoveImage": "Hapus Gambar",
   "pickImageFailed": "Gagal membaca gambar yang dipilih",
-  "pickColorSchemeSubtitle": "Kustomisasi warna sendiri",
-
   "navLegendAnswered": "Sudah dijawab",
   "navLegendFlagged": "Ditandai / Ragu-ragu",
   "navLegendUnanswered": "Belum dijawab",
@@ -308,16 +260,13 @@
   "unflagQuestion": "Hapus tanda ragu-ragu",
   "flaggedSummary": "Soal ditandai: {count}",
   "answeredSummary": "Sudah dijawab: {count}",
-
   "tokenRequiredErr": "Masukkan token ujian untuk melanjutkan",
-
   "scoreCorrect": "Benar",
   "scoreIncorrect": "Salah",
   "scoreLabel": "Nilai",
   "scoreFinal": "Nilai Akhir",
   "questionPoint": "Poin",
   "questionAnswered": "Terjawab",
-
   "aboutApp": "Tentang Aplikasi",
   "madeWith": "Dibuat dengan ❤",
   "aboutDesc": "HiDocs adalah platform form dinamis dan kuis otomatis berbasis web modern.",
@@ -328,7 +277,6 @@
   "featViewHistory": "Lihat Riwayat Pengisian",
   "featOneTimeSubmission": "Pengisian Satu Kali",
   "thanksForUsing": "Terima kasih telah menggunakan HiDocs!",
-
   "connectionFailed": "Koneksi gagal.",
   "failedGeneric": "Gagal",
   "failedDot": "Gagal.",
@@ -338,7 +286,6 @@
   "errOccurred": "Terjadi kesalahan: {error}",
   "failedErr": "Gagal: {error}",
   "errorErr": "Error: {error}",
-
   "invalidEmail": "Masukkan email yang valid",
   "invalidPassword": "Kata sandi minimal 8 karakter",
   "requiredField": "Kolom ini wajib diisi",
@@ -351,17 +298,227 @@
   "welcome": "Selamat Datang!",
   "loginSuccess": "Login berhasil.",
   "loginFailed": "Login gagal. Periksa kembali data Anda.",
-
   "copy": "Salin",
   "copied": "Disalin ke clipboard",
   "share": "Bagikan",
-
   "scanQrAction": "Scan QR",
   "pasteLinkAction": "Tempel Link",
   "helloNameWave": "Halo, {name} 👋",
-
   "notFound": "Tidak ditemukan",
-
   "lightMode": "Mode Terang",
-  "darkMode": "Mode Gelap"
+  "darkMode": "Mode Gelap",
+  "accessRangeLabel": "Rentang Akses",
+  "activateImmediatelySub": "Form langsung aktif setelah disimpan",
+  "activateImmediatelyTitle": "Aktifkan Sekarang",
+  "addAtLeastOneQuestion": "Tambahkan minimal satu soal",
+  "addOptionLabel": "Tambah Opsi",
+  "addQuestionLabel": "Tambah Soal",
+  "assignPointsLabel": "Beri Poin",
+  "closeLabel": "Tutup",
+  "closeMustBeAfterOpen": "Waktu tutup harus setelah waktu buka",
+  "closeTimeBeforeOpenTime": "Waktu tutup tidak boleh sebelum waktu buka",
+  "codePlaceholder": "Tulis kode di sini...",
+  "correctAnswerOptional": "Jawaban benar (opsional)",
+  "createForm": "Buat Form",
+  "customLinkHint": "cth: kuis-matematika-10",
+  "customLinkLabel": "Link Kustom",
+  "deleteOptionTooltip": "Hapus opsi",
+  "deleteQuestionTooltip": "Hapus soal",
+  "editBlockedHasResponses": "Form tidak dapat diedit karena sudah ada respons",
+  "editForm": "Edit Form",
+  "enterLatexFormula": "Masukkan rumus LaTeX",
+  "examDurationHintText": "Kosongkan jika tanpa batas waktu",
+  "examDurationLabel": "Durasi Ujian",
+  "examModeSub": "Dengan timer, nilai, dan jawaban benar",
+  "examModeTitle": "Mode Ujian",
+  "failedToInsertImage": "Gagal menyisipkan gambar",
+  "finishingUp": "Menyelesaikan...",
+  "formBehaviorLabel": "Perilaku Form",
+  "formCreatedSuccess": "Form berhasil dibuat",
+  "formInformation": "Informasi Form",
+  "formLinkDesc": "Bagikan link ini agar orang lain bisa mengisi form",
+  "formLinkLabel": "Link Form",
+  "formSaveError": "Gagal menyimpan form",
+  "formTitleHint": "cth: Kuis Matematika Bab 1",
+  "formTitleLabel": "Judul Form",
+  "formTitleMinLength": "Judul minimal 3 karakter",
+  "formTitleRequired": "Judul form wajib diisi",
+  "formTypeSecurityMode": "Tipe & Keamanan Form",
+  "formUpdatedSuccess": "Form berhasil diperbarui",
+  "hideResultsSub": "Peserta tidak melihat hasil",
+  "hideResultsTitle": "Sembunyikan Hasil",
+  "hoursLabel": "Jam",
+  "insertCodeTitle": "Sisipkan Kode",
+  "insertCodeTooltip": "Sisipkan kode",
+  "insertFormulaLabel": "Sisipkan Rumus",
+  "insertImageTooltip": "Sisipkan gambar",
+  "insertLabel": "Sisipkan",
+  "insertMathTooltip": "Sisipkan rumus matematika",
+  "invalidLatexFormula": "Rumus LaTeX tidak valid",
+  "longTextHintNote": "Jawaban teks panjang untuk uraian",
+  "mathFormulaTitle": "Rumus Matematika",
+  "mathHintNote": "Gunakan LaTeX untuk menulis rumus",
+  "minutesLabel": "Menit",
+  "moveDown": "Pindah ke bawah",
+  "moveUp": "Pindah ke atas",
+  "mustBeLoggedInToCreateForm": "Anda harus masuk untuk membuat form",
+  "noQuestionsYetSub": "Ketuk tambah untuk membuat soal pertama",
+  "noQuestionsYetTitle": "Belum ada soal",
+  "noTimeLimit": "Tanpa batas waktu",
+  "ok": "OK",
+  "oneTimeSubmitSub": "Peserta hanya bisa mengisi sekali",
+  "oneTimeSubmitTitle": "Isi Satu Kali",
+  "openLabel": "Buka",
+  "openUnlimited": "Buka tanpa batas waktu",
+  "optionTextHint": "Teks opsi...",
+  "pointsMax100": "Poin maksimal 100",
+  "prepQuestionImages": "Menyiapkan gambar soal...",
+  "previewLabel": "Pratinjau",
+  "previewPlaceholder": "Pratinjau akan tampil di sini",
+  "privateLabel": "Privat",
+  "privateSublabel": "Hanya dengan token akses",
+  "publicLabel": "Publik",
+  "publicSublabel": "Siapa pun dengan link bisa mengisi",
+  "qCodeInput": "Input Kode",
+  "qCodeInputSub": "Jawaban berupa kode program",
+  "qEssay": "Esai",
+  "qEssaySub": "Jawaban teks panjang",
+  "qImageChoice": "Pilihan Gambar",
+  "qImageChoiceSub": "Pilih salah satu gambar",
+  "qMathFormula": "Rumus Matematika",
+  "qMathFormulaSub": "Jawaban berupa rumus LaTeX",
+  "qMultipleChoice": "Pilihan Ganda",
+  "qMultipleChoiceSub": "Pilih satu atau beberapa jawaban",
+  "qRating": "Rating",
+  "qRatingSub": "Penilaian dengan bintang",
+  "qShortAnswer": "Jawaban Singkat",
+  "qShortAnswerSub": "Jawaban teks pendek",
+  "qYesNo": "Ya / Tidak",
+  "qYesNoSub": "Pilihan ya atau tidak",
+  "qCheckbox": "Kotak Centang",
+  "qCheckboxSub": "Pilih beberapa jawaban",
+  "qMatching": "Menjodohkan",
+  "qMatchingSub": "Jodohkan pasangan kiri-kanan",
+  "addPairLabel": "Tambah Pasangan",
+  "matchingLeftHint": "Kiri...",
+  "matchingRightHint": "Kanan...",
+  "matchingHintNote": "Tambahkan pasangan kiri-kanan. Peserta menjodohkan tiap item kiri ke jawaban kanan.",
+  "deletePairTooltip": "Hapus pasangan",
+  "randomizeLinkTooltip": "Acak link",
+  "requiredLabel": "Wajib",
+  "resultVisibilityDesc": "Atur apa yang dilihat peserta setelah submit",
+  "resultVisibilityLabel": "Visibilitas Hasil",
+  "scheduleDesc": "Atur jadwal buka dan tutup form",
+  "scheduleLabel": "Jadwal",
+  "selectDate": "Pilih tanggal",
+  "selectTime": "Pilih waktu",
+  "sharingVisibilityDesc": "Atur siapa yang bisa mengakses form",
+  "sharingVisibilityLabel": "Visibilitas Berbagi",
+  "shortTextHintNote": "Jawaban teks pendek satu baris",
+  "showResultAndScoreSub": "Peserta melihat jawaban benar dan skor",
+  "showResultAndScoreTitle": "Tampilkan Hasil & Skor",
+  "showResultOnlySub": "Peserta hanya melihat jawaban benar",
+  "showResultOnlyTitle": "Tampilkan Hasil Saja",
+  "shuffleOptionsSub": "Urutan opsi diacak setiap peserta",
+  "shuffleOptionsTitle": "Acak Opsi",
+  "shuffleQuestionsSub": "Urutan soal diacak setiap peserta",
+  "shuffleQuestionsTitle": "Acak Soal",
+  "signOut": "Keluar",
+  "starsLabel": "Bintang",
+  "starterCodeHint": "Kode awal untuk peserta...",
+  "surveyModeSub": "Tanpa nilai, fokus ke jawaban",
+  "surveyModeTitle": "Mode Survei",
+  "tabInfo": "Info",
+  "tabQuestions": "Soal",
+  "tabSettings": "Pengaturan",
+  "timeAtLabel": "pada",
+  "writeQuestionHere": "Tulis pertanyaan di sini...",
+  "accessDurationDays": "{count} Hari",
+  "@accessDurationDays": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "accessDurationDaysHours": "{days} Hari {hours} Jam",
+  "@accessDurationDaysHours": {
+    "placeholders": {
+      "days": {},
+      "hours": {}
+    }
+  },
+  "accessDurationHours": "{count} Jam",
+  "@accessDurationHours": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "accessDurationHoursMins": "{hours} Jam {mins} Menit",
+  "@accessDurationHoursMins": {
+    "placeholders": {
+      "hours": {},
+      "mins": {}
+    }
+  },
+  "accessDurationMins": "{count} Menit",
+  "@accessDurationMins": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "convertingQuestionsToImages": "Mengonversi {done} dari {total} pertanyaan...",
+  "@convertingQuestionsToImages": {
+    "placeholders": {
+      "done": {},
+      "total": {}
+    }
+  },
+  "mcqNeedsCorrectAnswer": "Soal {index} butuh jawaban benar",
+  "@mcqNeedsCorrectAnswer": {
+    "placeholders": {
+      "index": {}
+    }
+  },
+  "questionContentEmpty": "Isi soal {index} masih kosong",
+  "@questionContentEmpty": {
+    "placeholders": {
+      "index": {}
+    }
+  },
+  "modeUser": "Mode User",
+  "modeCreator": "Mode Creator",
+  "modeUserDesc": "Isi form dan lihat riwayat",
+  "modeCreatorDesc": "Buat dan kelola form milik Anda",
+  "switchToMode": "Beralih ke",
+  "examTokenTitle": "Token Ujian",
+  "examTokenDesc": "Umumkan token ini di kelas. Siswa memasukkan token untuk mulai ujian.",
+  "examTokenProtectedTitle": "Proteksi Token",
+  "examTokenProtectedSub": "Siswa wajib memasukkan token untuk mulai ujian",
+  "examTokenRegenerate": "Acak Baru",
+  "examTokenCopied": "Token ujian disalin",
+  "modeExam": "UJIAN",
+  "modeSurvey": "SURVEI",
+  "examBannerTitle": "Mode ujian — perhatikan batasan",
+  "questionBank": "Bank Soal",
+  "tabMyForms": "Form Saya",
+  "tabTemplates": "Template",
+  "takeFromBank": "Ambil dari Bank Soal",
+  "noFormsBank": "Belum ada form",
+  "noTemplatesBank": "Belum ada template",
+  "noQuestionsInForm": "Form ini belum memiliki soal",
+  "categoryLabel": "Kategori",
+  "categoryHint": "cth: Matematika, IPA",
+  "addToFormCount": "Tambah ke form ({count})",
+  "@addToFormCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "nOptions": "{count} opsi",
+  "@nOptions": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "filterAll": "Semua",
+  "categoryFilterHint": "Filter kategori"
 }

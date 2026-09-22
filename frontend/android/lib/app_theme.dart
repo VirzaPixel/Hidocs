@@ -83,7 +83,7 @@ class AppTheme {
       bodySmall:     TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: textMuted),
       labelLarge:    TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
       labelMedium:   TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: textSecondary),
-      labelSmall:    TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: textMuted,     letterSpacing: 0.5),
+      labelSmall:    TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: textMuted,     letterSpacing: 0.5),
     ),
     cardTheme: const CardThemeData(
       elevation: 0,
@@ -277,7 +277,7 @@ class AppTheme {
       bodySmall:     TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: darkTextMuted),
       labelLarge:    TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: darkTextPrimary),
       labelMedium:   TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: darkTextSecondary),
-      labelSmall:    TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: darkTextMuted,     letterSpacing: 0.5),
+      labelSmall:    TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: darkTextMuted,     letterSpacing: 0.5),
     ),
     cardTheme: const CardThemeData(
       elevation: 0,

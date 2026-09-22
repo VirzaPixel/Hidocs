@@ -7,3 +7,4 @@ node_modules/
 /github
 *.env
 backend/.env
+AUDIT_HIDOCS/

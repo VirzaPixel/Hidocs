@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import '../models/user_model.dart';
-import '../services/api_client.dart';
+import 'package:hi_docs/models/user_model.dart';
+import 'package:hi_docs/services/api/api_client.dart';
 
 class AdminProvider with ChangeNotifier {
   Map<String, dynamic>? _dashboardStats;

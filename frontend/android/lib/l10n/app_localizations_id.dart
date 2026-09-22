@@ -54,9 +54,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get loginNow => 'Masuk sekarang';
 
   @override
-  String get forgotPassword => 'Lupa kata sandi?';
-
-  @override
   String get otpVerification => 'Verifikasi OTP';
 
   @override
@@ -980,4 +977,515 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get darkMode => 'Mode Gelap';
+
+  @override
+  String get accessRangeLabel => 'Rentang Akses';
+
+  @override
+  String get activateImmediatelySub => 'Form langsung aktif setelah disimpan';
+
+  @override
+  String get activateImmediatelyTitle => 'Aktifkan Sekarang';
+
+  @override
+  String get addAtLeastOneQuestion => 'Tambahkan minimal satu soal';
+
+  @override
+  String get addOptionLabel => 'Tambah Opsi';
+
+  @override
+  String get addQuestionLabel => 'Tambah Soal';
+
+  @override
+  String get assignPointsLabel => 'Beri Poin';
+
+  @override
+  String get closeLabel => 'Tutup';
+
+  @override
+  String get closeMustBeAfterOpen => 'Waktu tutup harus setelah waktu buka';
+
+  @override
+  String get closeTimeBeforeOpenTime =>
+      'Waktu tutup tidak boleh sebelum waktu buka';
+
+  @override
+  String get codePlaceholder => 'Tulis kode di sini...';
+
+  @override
+  String get correctAnswerOptional => 'Jawaban benar (opsional)';
+
+  @override
+  String get createForm => 'Buat Form';
+
+  @override
+  String get customLinkHint => 'cth: kuis-matematika-10';
+
+  @override
+  String get customLinkLabel => 'Link Kustom';
+
+  @override
+  String get deleteOptionTooltip => 'Hapus opsi';
+
+  @override
+  String get deleteQuestionTooltip => 'Hapus soal';
+
+  @override
+  String get editBlockedHasResponses =>
+      'Form tidak dapat diedit karena sudah ada respons';
+
+  @override
+  String get editForm => 'Edit Form';
+
+  @override
+  String get enterLatexFormula => 'Masukkan rumus LaTeX';
+
+  @override
+  String get examDurationHintText => 'Kosongkan jika tanpa batas waktu';
+
+  @override
+  String get examDurationLabel => 'Durasi Ujian';
+
+  @override
+  String get examModeSub => 'Dengan timer, nilai, dan jawaban benar';
+
+  @override
+  String get examModeTitle => 'Mode Ujian';
+
+  @override
+  String get failedToInsertImage => 'Gagal menyisipkan gambar';
+
+  @override
+  String get finishingUp => 'Menyelesaikan...';
+
+  @override
+  String get formBehaviorLabel => 'Perilaku Form';
+
+  @override
+  String get formCreatedSuccess => 'Form berhasil dibuat';
+
+  @override
+  String get formInformation => 'Informasi Form';
+
+  @override
+  String get formLinkDesc =>
+      'Bagikan link ini agar orang lain bisa mengisi form';
+
+  @override
+  String get formLinkLabel => 'Link Form';
+
+  @override
+  String get formSaveError => 'Gagal menyimpan form';
+
+  @override
+  String get formTitleHint => 'cth: Kuis Matematika Bab 1';
+
+  @override
+  String get formTitleLabel => 'Judul Form';
+
+  @override
+  String get formTitleMinLength => 'Judul minimal 3 karakter';
+
+  @override
+  String get formTitleRequired => 'Judul form wajib diisi';
+
+  @override
+  String get formTypeSecurityMode => 'Tipe & Keamanan Form';
+
+  @override
+  String get formUpdatedSuccess => 'Form berhasil diperbarui';
+
+  @override
+  String get hideResultsSub => 'Peserta tidak melihat hasil';
+
+  @override
+  String get hideResultsTitle => 'Sembunyikan Hasil';
+
+  @override
+  String get hoursLabel => 'Jam';
+
+  @override
+  String get insertCodeTitle => 'Sisipkan Kode';
+
+  @override
+  String get insertCodeTooltip => 'Sisipkan kode';
+
+  @override
+  String get insertFormulaLabel => 'Sisipkan Rumus';
+
+  @override
+  String get insertImageTooltip => 'Sisipkan gambar';
+
+  @override
+  String get insertLabel => 'Sisipkan';
+
+  @override
+  String get insertMathTooltip => 'Sisipkan rumus matematika';
+
+  @override
+  String get invalidLatexFormula => 'Rumus LaTeX tidak valid';
+
+  @override
+  String get longTextHintNote => 'Jawaban teks panjang untuk uraian';
+
+  @override
+  String get mathFormulaTitle => 'Rumus Matematika';
+
+  @override
+  String get mathHintNote => 'Gunakan LaTeX untuk menulis rumus';
+
+  @override
+  String get minutesLabel => 'Menit';
+
+  @override
+  String get moveDown => 'Pindah ke bawah';
+
+  @override
+  String get moveUp => 'Pindah ke atas';
+
+  @override
+  String get mustBeLoggedInToCreateForm =>
+      'Anda harus masuk untuk membuat form';
+
+  @override
+  String get noQuestionsYetSub => 'Ketuk tambah untuk membuat soal pertama';
+
+  @override
+  String get noQuestionsYetTitle => 'Belum ada soal';
+
+  @override
+  String get noTimeLimit => 'Tanpa batas waktu';
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get oneTimeSubmitSub => 'Peserta hanya bisa mengisi sekali';
+
+  @override
+  String get oneTimeSubmitTitle => 'Isi Satu Kali';
+
+  @override
+  String get openLabel => 'Buka';
+
+  @override
+  String get openUnlimited => 'Buka tanpa batas waktu';
+
+  @override
+  String get optionTextHint => 'Teks opsi...';
+
+  @override
+  String get pointsMax100 => 'Poin maksimal 100';
+
+  @override
+  String get prepQuestionImages => 'Menyiapkan gambar soal...';
+
+  @override
+  String get previewLabel => 'Pratinjau';
+
+  @override
+  String get previewPlaceholder => 'Pratinjau akan tampil di sini';
+
+  @override
+  String get privateLabel => 'Privat';
+
+  @override
+  String get privateSublabel => 'Hanya dengan token akses';
+
+  @override
+  String get publicLabel => 'Publik';
+
+  @override
+  String get publicSublabel => 'Siapa pun dengan link bisa mengisi';
+
+  @override
+  String get qCodeInput => 'Input Kode';
+
+  @override
+  String get qCodeInputSub => 'Jawaban berupa kode program';
+
+  @override
+  String get qEssay => 'Esai';
+
+  @override
+  String get qEssaySub => 'Jawaban teks panjang';
+
+  @override
+  String get qImageChoice => 'Pilihan Gambar';
+
+  @override
+  String get qImageChoiceSub => 'Pilih salah satu gambar';
+
+  @override
+  String get qMathFormula => 'Rumus Matematika';
+
+  @override
+  String get qMathFormulaSub => 'Jawaban berupa rumus LaTeX';
+
+  @override
+  String get qMultipleChoice => 'Pilihan Ganda';
+
+  @override
+  String get qMultipleChoiceSub => 'Pilih satu atau beberapa jawaban';
+
+  @override
+  String get qRating => 'Rating';
+
+  @override
+  String get qRatingSub => 'Penilaian dengan bintang';
+
+  @override
+  String get qShortAnswer => 'Jawaban Singkat';
+
+  @override
+  String get qShortAnswerSub => 'Jawaban teks pendek';
+
+  @override
+  String get qYesNo => 'Ya / Tidak';
+
+  @override
+  String get qYesNoSub => 'Pilihan ya atau tidak';
+
+  @override
+  String get qCheckbox => 'Kotak Centang';
+
+  @override
+  String get qCheckboxSub => 'Pilih beberapa jawaban';
+
+  @override
+  String get qMatching => 'Menjodohkan';
+
+  @override
+  String get qMatchingSub => 'Jodohkan pasangan kiri-kanan';
+
+  @override
+  String get addPairLabel => 'Tambah Pasangan';
+
+  @override
+  String get matchingLeftHint => 'Kiri...';
+
+  @override
+  String get matchingRightHint => 'Kanan...';
+
+  @override
+  String get matchingHintNote =>
+      'Tambahkan pasangan kiri-kanan. Peserta menjodohkan tiap item kiri ke jawaban kanan.';
+
+  @override
+  String get deletePairTooltip => 'Hapus pasangan';
+
+  @override
+  String get randomizeLinkTooltip => 'Acak link';
+
+  @override
+  String get requiredLabel => 'Wajib';
+
+  @override
+  String get resultVisibilityDesc =>
+      'Atur apa yang dilihat peserta setelah submit';
+
+  @override
+  String get resultVisibilityLabel => 'Visibilitas Hasil';
+
+  @override
+  String get scheduleDesc => 'Atur jadwal buka dan tutup form';
+
+  @override
+  String get scheduleLabel => 'Jadwal';
+
+  @override
+  String get selectDate => 'Pilih tanggal';
+
+  @override
+  String get selectTime => 'Pilih waktu';
+
+  @override
+  String get sharingVisibilityDesc => 'Atur siapa yang bisa mengakses form';
+
+  @override
+  String get sharingVisibilityLabel => 'Visibilitas Berbagi';
+
+  @override
+  String get shortTextHintNote => 'Jawaban teks pendek satu baris';
+
+  @override
+  String get showResultAndScoreSub => 'Peserta melihat jawaban benar dan skor';
+
+  @override
+  String get showResultAndScoreTitle => 'Tampilkan Hasil & Skor';
+
+  @override
+  String get showResultOnlySub => 'Peserta hanya melihat jawaban benar';
+
+  @override
+  String get showResultOnlyTitle => 'Tampilkan Hasil Saja';
+
+  @override
+  String get shuffleOptionsSub => 'Urutan opsi diacak setiap peserta';
+
+  @override
+  String get shuffleOptionsTitle => 'Acak Opsi';
+
+  @override
+  String get shuffleQuestionsSub => 'Urutan soal diacak setiap peserta';
+
+  @override
+  String get shuffleQuestionsTitle => 'Acak Soal';
+
+  @override
+  String get signOut => 'Keluar';
+
+  @override
+  String get starsLabel => 'Bintang';
+
+  @override
+  String get starterCodeHint => 'Kode awal untuk peserta...';
+
+  @override
+  String get surveyModeSub => 'Tanpa nilai, fokus ke jawaban';
+
+  @override
+  String get surveyModeTitle => 'Mode Survei';
+
+  @override
+  String get tabInfo => 'Info';
+
+  @override
+  String get tabQuestions => 'Soal';
+
+  @override
+  String get tabSettings => 'Pengaturan';
+
+  @override
+  String get timeAtLabel => 'pada';
+
+  @override
+  String get writeQuestionHere => 'Tulis pertanyaan di sini...';
+
+  @override
+  String accessDurationDays(Object count) {
+    return '$count Hari';
+  }
+
+  @override
+  String accessDurationDaysHours(Object days, Object hours) {
+    return '$days Hari $hours Jam';
+  }
+
+  @override
+  String accessDurationHours(Object count) {
+    return '$count Jam';
+  }
+
+  @override
+  String accessDurationHoursMins(Object hours, Object mins) {
+    return '$hours Jam $mins Menit';
+  }
+
+  @override
+  String accessDurationMins(Object count) {
+    return '$count Menit';
+  }
+
+  @override
+  String convertingQuestionsToImages(Object done, Object total) {
+    return 'Mengonversi $done dari $total pertanyaan...';
+  }
+
+  @override
+  String mcqNeedsCorrectAnswer(Object index) {
+    return 'Soal $index butuh jawaban benar';
+  }
+
+  @override
+  String questionContentEmpty(Object index) {
+    return 'Isi soal $index masih kosong';
+  }
+
+  @override
+  String get modeUser => 'Mode User';
+
+  @override
+  String get modeCreator => 'Mode Creator';
+
+  @override
+  String get modeUserDesc => 'Isi form dan lihat riwayat';
+
+  @override
+  String get modeCreatorDesc => 'Buat dan kelola form milik Anda';
+
+  @override
+  String get switchToMode => 'Beralih ke';
+
+  @override
+  String get examTokenTitle => 'Token Ujian';
+
+  @override
+  String get examTokenDesc =>
+      'Umumkan token ini di kelas. Siswa memasukkan token untuk mulai ujian.';
+
+  @override
+  String get examTokenProtectedTitle => 'Proteksi Token';
+
+  @override
+  String get examTokenProtectedSub =>
+      'Siswa wajib memasukkan token untuk mulai ujian';
+
+  @override
+  String get examTokenRegenerate => 'Acak Baru';
+
+  @override
+  String get examTokenCopied => 'Token ujian disalin';
+
+  @override
+  String get modeExam => 'UJIAN';
+
+  @override
+  String get modeSurvey => 'SURVEI';
+
+  @override
+  String get examBannerTitle => 'Mode ujian — perhatikan batasan';
+
+  @override
+  String get questionBank => 'Bank Soal';
+
+  @override
+  String get tabMyForms => 'Form Saya';
+
+  @override
+  String get tabTemplates => 'Template';
+
+  @override
+  String get takeFromBank => 'Ambil dari Bank Soal';
+
+  @override
+  String get noFormsBank => 'Belum ada form';
+
+  @override
+  String get noTemplatesBank => 'Belum ada template';
+
+  @override
+  String get noQuestionsInForm => 'Form ini belum memiliki soal';
+
+  @override
+  String get categoryLabel => 'Kategori';
+
+  @override
+  String get categoryHint => 'cth: Matematika, IPA';
+
+  @override
+  String addToFormCount(Object count) {
+    return 'Tambah ke form ($count)';
+  }
+
+  @override
+  String nOptions(Object count) {
+    return '$count opsi';
+  }
+
+  @override
+  String get filterAll => 'Semua';
+
+  @override
+  String get categoryFilterHint => 'Filter kategori';
 }

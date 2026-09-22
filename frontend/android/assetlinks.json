@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "id.hidocs.app",
+      "sha256_cert_fingerprints": [
+        "30:F8:10:1E:40:B0:74:53:7E:C9:11:D6:FA:6C:DF:CA:8F:17:76:38:1E:53:72:58:7C:99:9A:E3:F1:BB:8C:B6"
+      ]
+    }
+  }
+]

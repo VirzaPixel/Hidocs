@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/response_model.dart';
+import 'package:hi_docs/models/response_model.dart';
+import 'package:hi_docs/services/api/api_client.dart';
 
 class ResponseProvider extends ChangeNotifier {
   static const _storageKey = 'my_submissions';
@@ -59,6 +60,99 @@ class ResponseProvider extends ChangeNotifier {
           .toList();
       await prefs.setStringList(_storageKey, stored);
     } catch (_) {}
+  }
+
+  List<ResponseModel> getResponsesByForm(String formId) =>
+      _responses.where((r) => r.formId == formId).toList();
+
+  Future<void> loadMySubmissions({dynamic formProvider}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final data = await ApiClient.get('/responses/me');
+      final list = data is List
+          ? data
+          : (data is Map && data['submissions'] is List
+              ? data['submissions'] as List
+              : const []);
+      for (final raw in list.whereType<Map>()) {
+        try {
+          final map = Map<String, dynamic>.from(raw);
+          final submission = ResponseModel.fromApiJson(map,
+              form: formProvider?.getFormById?.call(
+                      (map['form_id'] ?? '').toString()));
+          _responses.removeWhere((r) => r.id == submission.id);
+          _responses.add(submission);
+          _submissionIds.add(submission.id);
+        } catch (_) {}
+      }
+      await _saveSubmissions();
+    } catch (_) {
+      _error = 'Koneksi gagal. Periksa jaringan atau server.';
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> loadResponsesForForm(String formId,
+      {dynamic form}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final data = await ApiClient.get('/forms/$formId/responses');
+      if (data is List) {
+        for (final raw in data.whereType<Map>()) {
+          try {
+            final map = Map<String, dynamic>.from(raw);
+            final submission = ResponseModel.fromStoredJson(map);
+            _responses.removeWhere((r) => r.id == submission.id);
+            _responses.add(submission);
+            _submissionIds.add(submission.id);
+          } catch (_) {}
+        }
+        await _saveSubmissions();
+      }
+    } catch (_) {
+      _error = 'Koneksi gagal. Periksa jaringan atau server.';
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void removeResponsesByForm(String formId) {
+    _responses.removeWhere((r) => r.formId == formId);
+    _saveSubmissions();
+    notifyListeners();
+  }
+
+  Future<void> saveGrade(String responseId, double total) async {
+    final response = getResponse(responseId);
+    if (response == null) return;
+    // TODO: kirim grade ke ApiClient, simpan lokal dulu
+    _saveSubmissions();
+    notifyListeners();
+  }
+
+  void rememberGrades(String responseId, Map<String, double> essayScores) {
+    // TODO: persistensi nilai essay per respons
+    notifyListeners();
+  }
+
+  void updateResponse(ResponseModel updated) {
+    final index = _responses.indexWhere((r) => r.id == updated.id);
+    if (index >= 0) {
+      _responses[index] = updated;
+    } else {
+      _responses.add(updated);
+    }
+    _saveSubmissions();
+    notifyListeners();
   }
 
   void recordSubmission({

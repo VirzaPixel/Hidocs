@@ -1,0 +1,56 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+    # triggered from
+    paths:
+      - 'frontend/android/**'
+
+jobs:
+  build:
+    runs: ubuntu-latest
+
+    steps:
+      # checkout repo
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # setup JDK
+      - name: Setup Java JDK
+        uses: action/setup-java@v4
+        with: 
+          distribution: 'zulu'
+          java-version: '17'
+
+      # setup SDK
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # go to /frontend & install dependencies
+      - name: Install Dependencies
+        working-directory: ./frontend/android
+        run : flutter pub get
+      
+      # error analyze
+      - name: Code analyze
+        id: analyze
+        working-directory: ./frontend/android
+        run : flutter analyze
+
+      # handling error
+      - name: Handling error
+        if: failure() && steps.analyze.outcome == 'failure'
+        run: |
+          echo "Bug found when analyze the code"
+          echo "Build canceled"
+
+      # build apk
+      - name: Build APK
+        if: success()
+        working-directory: ./frontend/android
+        run : |
+          flutter build apk --release

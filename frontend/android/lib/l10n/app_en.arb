@@ -1,13 +1,10 @@
 {
   "@@locale": "en",
-
   "appName": "HiDocs",
   "appTagline": "Dynamic forms & smart quizzes",
-
   "login": "Login",
   "register": "Register",
   "user": "User",
-
   "email": "Email",
   "password": "Password",
   "confirmPassword": "Confirm Password",
@@ -18,15 +15,12 @@
   "haveAccount": "Already have an account? ",
   "signUpNow": "Sign up now",
   "loginNow": "Login now",
-  "forgotPassword": "Forgot password?",
-
   "otpVerification": "OTP Verification",
   "enterOtp": "Enter OTP code",
   "verify": "Verify",
   "resendCode": "Resend code",
   "welcomeBack": "Welcome back",
   "backToLogin": "Back to Login",
-
   "home": "Home",
   "history": "History",
   "settings": "Settings",
@@ -51,7 +45,6 @@
   "none": "None",
   "all": "All",
   "searchPlaceholder": "Search...",
-
   "nQuestions": "{count} questions",
   "active": "Active",
   "closed": "Closed",
@@ -60,12 +53,10 @@
   "type": "Type",
   "date": "Date",
   "time": "Time",
-
   "language": "Language",
   "language_switch_title": "Language",
   "indonesian": "Indonesian",
   "english": "English",
-
   "question": "Question",
   "fillForm": "Fill Form",
   "submitResponse": "Submit Answers",
@@ -75,18 +66,15 @@
   "points": "Points",
   "totalScore": "Total Score",
   "responses": "Responses",
-
   "chooseMultiple": "Select more than one answer",
   "notSelected": "Not selected",
   "outOfStars": "{value} out of {max} stars",
-
   "flagged": "Flagged for review",
   "answered": "Answered",
   "notAnswered": "Not answered",
   "current": "Current",
   "questionNumber": "Question Number",
   "questionsSummary": "Question Summary",
-
   "colorScheme": "Color Scheme",
   "pickColorScheme": "Choose Color Theme",
   "pickColorSchemeSubtitle": "Customize your own colors",
@@ -96,7 +84,6 @@
   "pickCustomColor": "Choose Custom Color",
   "pickAnyColor": "Choose any color you like",
   "apply": "Apply",
-
   "editProfile": "Edit Profile",
   "emailCannotChange": "Email cannot be changed",
   "profileUpdated": "Profile updated successfully",
@@ -105,34 +92,28 @@
   "appearance": "Appearance",
   "others": "Others",
   "profile": "Profile",
-
   "authTokenTitle": "Access Token",
   "shareToken": "Share this token with participants. Keep the token private.",
   "enterToken": "Enter access token",
-
   "scanForm": "Scan Form",
   "scanInstruction": "Point your camera at the form QR code or barcode",
   "scanSuccess": "Form found!",
   "scanFailed": "Invalid QR code, barcode, or link. Try again.",
   "linkInput": "Enter Link",
   "enterFormLink": "Enter form link",
-
   "answerRequired": "Please answer all required questions first.",
   "submitSuccess": "Your answers were submitted successfully.",
   "thankYou": "Thank You!",
   "timeUpAutoSubmit": "Time is up! Your answers have been submitted automatically.",
   "noHistory": "No history yet",
-
   "member": "Member",
   "memberSince": "Joined since {year}",
   "totalResponse": "Total Responses",
   "joined": "Joined",
   "selectLanguage": "Choose Language",
-
   "uploadImage": "Upload Image",
   "removeImage": "Remove Image",
   "imagePickError": "Failed to load image.",
-
   "loginScreenTitle": "Login to Your Account",
   "loginScreenSubtitle": "Please login to continue",
   "wrongEmail": "Invalid email",
@@ -145,10 +126,8 @@
   "userRequired": "Username is required",
   "nameRequired": "Name is required",
   "invalidEmailFmt": "Invalid email format",
-
   "registerTitle": "Sign Up & Get Started",
   "registerSubtitle": "Join HiDocs today!",
-
   "verifyEmailBtn": "Verify Email",
   "verifyCreate": "Verify OTP",
   "otpCode": "OTP Code",
@@ -160,16 +139,13 @@
   "backToRegister": "Edit registration details",
   "resendOtp": "Resend OTP",
   "resendInSec": "Resend in {s} seconds",
-
   "emailPlaceholder": "name@domain.com",
   "emailAddress": "Email Address",
   "emailExample": "example@hidocs.com",
   "usernameHint": "Choose a username",
   "code6Hint": "Enter the 6-digit code",
-
   "fillWorkForm": "Fill out & complete forms",
   "formDigitalPlatform": "Digital form & exam platform",
-
   "greetHi": "Hello, ",
   "helloWave": "Welcome 👋",
   "noFormsYetU": "No completed forms yet",
@@ -177,41 +153,31 @@
   "noHistorySub": "Forms you have completed will appear here",
   "lastHistory": "Recent History",
   "seeAll": "See All",
-
   "noResultFilter": "No matching forms",
   "changeFilter": "Try changing the filter or keyword.",
-
   "noResponseYet": "No responses yet",
   "formImageGagal": "Failed to load image",
-
   "formDetail": "Form Details",
   "formInfoSub": "Read the information below before filling out this form.",
   "startFill": "Start Filling Form",
   "fillAsExam": "This is an exam form. Make sure you are ready before starting.",
-
   "duration": "Duration",
   "timerMinutesStr": "{m} minutes",
   "closedStatus": "Closed",
   "activeStatus": "Active",
   "draftStatus": "Inactive",
-
   "noQuestionYet": "No questions yet",
   "whichToken": "An access token from the form creator is required",
-
   "timerStartNote": "The timer starts when the form begins and cannot be paused.",
   "examReadyNote": "Make sure you are ready before starting.",
   "autoSubmitNote": "Answers are submitted automatically when time runs out.",
   "noQuestionsYetF": "This form has no questions.",
-
   "pleaseWait": "Please wait...",
   "processing": "Processing...",
-
-  "noHistory": "No history yet",
   "emptyResults": "No results to display.",
   "filter": "Filter",
   "sort": "Sort",
   "reset": "Reset",
-
   "formResult": "Form Results",
   "historyTitle": "History",
   "noHistoryU": "No history yet",
@@ -219,14 +185,11 @@
   "historySubmitted": "Submitted",
   "participant": "Participant",
   "valueScore": "Score: {score}",
-
   "noSubmissionHistory": "No submission history yet",
-
   "scorePct": "Score {score}%",
   "nilaiMax": "Score: {score} / {max}",
   "nilaiOnly": "Score: {score}",
   "answerLabel": "Answer",
-
   "questionOf": "Question {c} / {total}",
   "questionNo": "Question Number",
   "legendAnswer": "Answered",
@@ -238,30 +201,24 @@
   "unflag": "Review flag removed",
   "flagAdded": "Question flagged for review",
   "flagCountNote": "{n} questions flagged for review",
-
   "shortAnsHint": "Type a short answer...",
   "typingAnsHint": "Type your answer...",
   "writeCodeHint": "Write your code answer here...",
   "writeFormulaHint": "Write your answer or formula...",
-
   "leftCol": "Left Column",
   "rightCol": "Right Column",
   "choosePair": "Choose Pair",
   "pick": "Choose...",
   "clearChoice": "Clear",
-
   "submitAnswer": "Submit Answer",
   "timeUp": "Time's Up",
   "notAnsweredDash": "— Not answered —",
-
   "preparingImages": "Preparing question images...",
   "convertingImages": "Converting questions to images ({done}/{total})",
-
   "zoomOut": "Zoom Out",
   "zoomIn": "Zoom In",
   "failSendResp": "Failed to submit answers. Check your connection.",
   "backToHome": "Back to Home",
-
   "askTokenFrom": "Ask the form creator or supervisor for the token.",
   "wrongToken": "Incorrect token",
   "tokenEnsureCorrect": " — make sure the token is correct",
@@ -271,22 +228,18 @@
   "hide": "Hide",
   "show": "Show",
   "tokenCopied": "Access token copied",
-
   "enterLinkFirst": "Enter the form link first.",
   "formNotFound": "Form not found.",
   "alreadySubmitted": "You have already submitted this form",
   "pasteLinkToOpen": "Paste the form link to open and fill it out.",
   "scanQrCode": "Scan QR Code",
   "loadingForm": "Loading Form...",
-
   "infoExamTime": "Exam Time",
   "infoToken": "Token",
   "afterSubmitCant": "After submitting, you cannot fill out this form again.",
   "enterTokenStart": "Enter Token & Start",
-
   "hdImage": "HD Image",
   "statQuestions": "Questions",
-
   "themeCustomize": "Customize Theme",
   "pilihBahasa": "Choose Language",
   "themeImage": "Header Image",
@@ -299,8 +252,6 @@
   "themePickImage": "Choose Image",
   "themeRemoveImage": "Remove Image",
   "pickImageFailed": "Failed to read the selected image",
-  "pickColorSchemeSubtitle": "Customize your own colors",
-
   "navLegendAnswered": "Answered",
   "navLegendFlagged": "Flagged / Review",
   "navLegendUnanswered": "Not Answered",
@@ -309,16 +260,13 @@
   "unflagQuestion": "Remove Review Flag",
   "flaggedSummary": "Flagged Questions: {count}",
   "answeredSummary": "Answered: {count}",
-
   "tokenRequiredErr": "Enter the exam token to continue",
-
   "scoreCorrect": "Correct",
   "scoreIncorrect": "Incorrect",
   "scoreLabel": "Score",
   "scoreFinal": "Final Score",
   "questionPoint": "Points",
   "questionAnswered": "Answered",
-
   "aboutApp": "About Application",
   "madeWith": "Made with ❤",
   "aboutDesc": "HiDocs is a modern platform for creating and managing dynamic forms and online quizzes.",
@@ -329,7 +277,6 @@
   "featViewHistory": "View Submission History",
   "featOneTimeSubmission": "One-Time Submission",
   "thanksForUsing": "Thank you for using HiDocs!",
-
   "connectionFailed": "Connection failed.",
   "failedGeneric": "Failed",
   "failedDot": "Failed.",
@@ -339,7 +286,6 @@
   "errOccurred": "An error occurred: {error}",
   "failedErr": "Failed: {error}",
   "errorErr": "Error: {error}",
-
   "invalidEmail": "Enter a valid email",
   "invalidPassword": "Password must be at least 8 characters",
   "requiredField": "This field is required",
@@ -352,17 +298,227 @@
   "welcome": "Welcome!",
   "loginSuccess": "Login successful.",
   "loginFailed": "Login failed. Please check your credentials.",
-
   "copy": "Copy",
   "copied": "Copied to clipboard",
   "share": "Share",
-
   "scanQrAction": "Scan QR",
   "pasteLinkAction": "Paste Link",
   "helloNameWave": "Hello, {name} 👋",
-
   "notFound": "Not Found",
-
   "lightMode": "Light Mode",
-  "darkMode": "Dark Mode"
+  "darkMode": "Dark Mode",
+  "accessRangeLabel": "Access Range",
+  "activateImmediatelySub": "Form goes live right after saving",
+  "activateImmediatelyTitle": "Activate Immediately",
+  "addAtLeastOneQuestion": "Add at least one question",
+  "addOptionLabel": "Add Option",
+  "addQuestionLabel": "Add Question",
+  "assignPointsLabel": "Assign Points",
+  "closeLabel": "Close",
+  "closeMustBeAfterOpen": "Close time must be after open time",
+  "closeTimeBeforeOpenTime": "Close time cannot be before open time",
+  "codePlaceholder": "Write code here...",
+  "correctAnswerOptional": "Correct answer (optional)",
+  "createForm": "Create Form",
+  "customLinkHint": "e.g. math-quiz-10",
+  "customLinkLabel": "Custom Link",
+  "deleteOptionTooltip": "Delete option",
+  "deleteQuestionTooltip": "Delete question",
+  "editBlockedHasResponses": "Form cannot be edited because it already has responses",
+  "editForm": "Edit Form",
+  "enterLatexFormula": "Enter LaTeX formula",
+  "examDurationHintText": "Leave empty for no time limit",
+  "examDurationLabel": "Exam Duration",
+  "examModeSub": "With timer, scores, and correct answers",
+  "examModeTitle": "Exam Mode",
+  "failedToInsertImage": "Failed to insert image",
+  "finishingUp": "Finishing up...",
+  "formBehaviorLabel": "Form Behavior",
+  "formCreatedSuccess": "Form created successfully",
+  "formInformation": "Form Information",
+  "formLinkDesc": "Share this link so others can fill out the form",
+  "formLinkLabel": "Form Link",
+  "formSaveError": "Failed to save form",
+  "formTitleHint": "e.g. Chapter 1 Math Quiz",
+  "formTitleLabel": "Form Title",
+  "formTitleMinLength": "Title must be at least 3 characters",
+  "formTitleRequired": "Form title is required",
+  "formTypeSecurityMode": "Form Type & Security",
+  "formUpdatedSuccess": "Form updated successfully",
+  "hideResultsSub": "Participants won't see results",
+  "hideResultsTitle": "Hide Results",
+  "hoursLabel": "Hours",
+  "insertCodeTitle": "Insert Code",
+  "insertCodeTooltip": "Insert code",
+  "insertFormulaLabel": "Insert Formula",
+  "insertImageTooltip": "Insert image",
+  "insertLabel": "Insert",
+  "insertMathTooltip": "Insert math formula",
+  "invalidLatexFormula": "Invalid LaTeX formula",
+  "longTextHintNote": "Long text answer for essays",
+  "mathFormulaTitle": "Math Formula",
+  "mathHintNote": "Use LaTeX to write formulas",
+  "minutesLabel": "Minutes",
+  "moveDown": "Move down",
+  "moveUp": "Move up",
+  "mustBeLoggedInToCreateForm": "You must be logged in to create a form",
+  "noQuestionsYetSub": "Tap add to create your first question",
+  "noQuestionsYetTitle": "No questions yet",
+  "noTimeLimit": "No time limit",
+  "ok": "OK",
+  "oneTimeSubmitSub": "Participants can only submit once",
+  "oneTimeSubmitTitle": "One-Time Submit",
+  "openLabel": "Open",
+  "openUnlimited": "Open with no time limit",
+  "optionTextHint": "Option text...",
+  "pointsMax100": "Max 100 points",
+  "prepQuestionImages": "Preparing question images...",
+  "previewLabel": "Preview",
+  "previewPlaceholder": "Preview will appear here",
+  "privateLabel": "Private",
+  "privateSublabel": "Only with access token",
+  "publicLabel": "Public",
+  "publicSublabel": "Anyone with the link can fill it",
+  "qCodeInput": "Code Input",
+  "qCodeInputSub": "Answer as program code",
+  "qEssay": "Essay",
+  "qEssaySub": "Long text answer",
+  "qImageChoice": "Image Choice",
+  "qImageChoiceSub": "Pick one image",
+  "qMathFormula": "Math Formula",
+  "qMathFormulaSub": "Answer as LaTeX formula",
+  "qMultipleChoice": "Multiple Choice",
+  "qMultipleChoiceSub": "Select one or more answers",
+  "qRating": "Rating",
+  "qRatingSub": "Star rating",
+  "qShortAnswer": "Short Answer",
+  "qShortAnswerSub": "Short single-line text",
+  "qYesNo": "Yes / No",
+  "qYesNoSub": "Yes or no choice",
+  "qCheckbox": "Checkboxes",
+  "qCheckboxSub": "Select multiple answers",
+  "qMatching": "Matching",
+  "qMatchingSub": "Match left-right pairs",
+  "addPairLabel": "Add Pair",
+  "matchingLeftHint": "Left...",
+  "matchingRightHint": "Right...",
+  "matchingHintNote": "Add left-right pairs. Participants match each left item to the right answer.",
+  "deletePairTooltip": "Delete pair",
+  "randomizeLinkTooltip": "Randomize link",
+  "requiredLabel": "Required",
+  "resultVisibilityDesc": "Control what participants see after submitting",
+  "resultVisibilityLabel": "Result Visibility",
+  "scheduleDesc": "Set form open and close schedule",
+  "scheduleLabel": "Schedule",
+  "selectDate": "Select date",
+  "selectTime": "Select time",
+  "sharingVisibilityDesc": "Control who can access the form",
+  "sharingVisibilityLabel": "Sharing Visibility",
+  "shortTextHintNote": "Short single-line text answer",
+  "showResultAndScoreSub": "Participants see correct answers and score",
+  "showResultAndScoreTitle": "Show Result & Score",
+  "showResultOnlySub": "Participants only see correct answers",
+  "showResultOnlyTitle": "Show Result Only",
+  "shuffleOptionsSub": "Option order is randomized per participant",
+  "shuffleOptionsTitle": "Shuffle Options",
+  "shuffleQuestionsSub": "Question order is randomized per participant",
+  "shuffleQuestionsTitle": "Shuffle Questions",
+  "signOut": "Sign Out",
+  "starsLabel": "Stars",
+  "starterCodeHint": "Starter code for participants...",
+  "surveyModeSub": "No scoring, focus on responses",
+  "surveyModeTitle": "Survey Mode",
+  "tabInfo": "Info",
+  "tabQuestions": "Questions",
+  "tabSettings": "Settings",
+  "timeAtLabel": "at",
+  "writeQuestionHere": "Write your question here...",
+  "accessDurationDays": "{count} Days",
+  "@accessDurationDays": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "accessDurationDaysHours": "{days} Days {hours} Hours",
+  "@accessDurationDaysHours": {
+    "placeholders": {
+      "days": {},
+      "hours": {}
+    }
+  },
+  "accessDurationHours": "{count} Hours",
+  "@accessDurationHours": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "accessDurationHoursMins": "{hours} Hours {mins} Mins",
+  "@accessDurationHoursMins": {
+    "placeholders": {
+      "hours": {},
+      "mins": {}
+    }
+  },
+  "accessDurationMins": "{count} Mins",
+  "@accessDurationMins": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "convertingQuestionsToImages": "Converting {done} of {total} questions...",
+  "@convertingQuestionsToImages": {
+    "placeholders": {
+      "done": {},
+      "total": {}
+    }
+  },
+  "mcqNeedsCorrectAnswer": "Question {index} needs a correct answer",
+  "@mcqNeedsCorrectAnswer": {
+    "placeholders": {
+      "index": {}
+    }
+  },
+  "questionContentEmpty": "Question {index} content is empty",
+  "@questionContentEmpty": {
+    "placeholders": {
+      "index": {}
+    }
+  },
+  "modeUser": "User Mode",
+  "modeCreator": "Creator Mode",
+  "modeUserDesc": "Fill forms and view history",
+  "modeCreatorDesc": "Create and manage your forms",
+  "switchToMode": "Switch to",
+  "examTokenTitle": "Exam Token",
+  "examTokenDesc": "Announce this token in class. Students enter it to start the exam.",
+  "examTokenProtectedTitle": "Token Protection",
+  "examTokenProtectedSub": "Students must enter the token to start the exam",
+  "examTokenRegenerate": "Regenerate",
+  "examTokenCopied": "Exam token copied",
+  "modeExam": "EXAM",
+  "modeSurvey": "SURVEY",
+  "examBannerTitle": "Exam mode — note the limits",
+  "questionBank": "Question Bank",
+  "tabMyForms": "My Forms",
+  "tabTemplates": "Templates",
+  "takeFromBank": "Take from Question Bank",
+  "noFormsBank": "No forms yet",
+  "noTemplatesBank": "No templates available",
+  "noQuestionsInForm": "No questions in this form",
+  "categoryLabel": "Category",
+  "categoryHint": "e.g. Math, Science",
+  "addToFormCount": "Add to form ({count})",
+  "@addToFormCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "nOptions": "{count} options",
+  "@nOptions": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "filterAll": "All",
+  "categoryFilterHint": "Filter by category"
 }

@@ -1,5 +1,6 @@
 enum QuestionType {
   multipleChoice,
+  checkbox,
   shortText,
   longText,
   rating,
@@ -7,6 +8,7 @@ enum QuestionType {
   imageChoice,
   mathFormula,
   codeInput,
+  matching,
 }
 
 const String _codeStartMarker = '[CODE]';
@@ -50,10 +52,14 @@ String questionTypeToApi(QuestionType type) {
       return 'YES_NO';
     case QuestionType.imageChoice:
       return 'IMAGE';
+    case QuestionType.checkbox:
+      return 'CHECKBOXES';
     case QuestionType.mathFormula:
       return 'MATH';
     case QuestionType.codeInput:
       return 'CODE';
+    case QuestionType.matching:
+      return 'MATCHING';
   }
 }
 
@@ -64,9 +70,12 @@ QuestionType questionTypeFromApi(String value) {
     case 'LONG_TEXT':
       return QuestionType.longText;
     case 'MULTIPLE_CHOICE':
-    case 'CHECKBOXES':
     case 'DROPDOWN':
       return QuestionType.multipleChoice;
+    case 'CHECKBOXES':
+      return QuestionType.checkbox;
+    case 'MATCHING':
+      return QuestionType.matching;
     case 'RATING':
       return QuestionType.rating;
     case 'YES_NO':
@@ -87,15 +96,45 @@ enum ScoreVisibility {
   visible,
 }
 
+class MatchingPair {
+  final String id;
+  final String left;
+  final String right;
+
+  const MatchingPair({
+    required this.id,
+    required this.left,
+    required this.right,
+  });
+
+  factory MatchingPair.fromJson(Map<String, dynamic> json) {
+    return MatchingPair(
+      id: (json['id'] ?? '').toString(),
+      left: (json['option_text'] ?? '').toString(),
+      right: (json['match_text'] ?? '').toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson({int orderIndex = 1}) {
+    return {
+      'option_text': left,
+      'match_text': right,
+      'order_index': orderIndex,
+    };
+  }
+}
+
 class QuestionModel {
   final String id;
   final QuestionType type;
   String text;
   String? content;
   String? imageUrl;
+  String? audioUrl;
   String? mathFormula;
   String? codeSnippet;
   List<OptionModel> options;
+  List<MatchingPair> matchingPairs;
   bool isRequired;
   int? ratingMax;
   int? correctRating;
@@ -110,16 +149,19 @@ class QuestionModel {
     required this.text,
     this.content,
     this.imageUrl,
+    this.audioUrl,
     this.mathFormula,
     this.codeSnippet,
     List<OptionModel>? options,
+    List<MatchingPair>? matchingPairs,
     this.isRequired = true,
     this.ratingMax,
     this.correctRating,
     this.scoreVisibility = ScoreVisibility.hidden,
     this.hasScore = false,
     this.score = 0,
-  }) : options = options ?? [];
+  })  : options = options ?? [],
+        matchingPairs = matchingPairs ?? [];
 
   /// Whether this question type CAN participate in scoring at all.
   /// Rating is purely a survey/feedback type — it is NEVER counted towards
@@ -143,9 +185,11 @@ class QuestionModel {
     String? text,
     String? content,
     String? imageUrl,
+    String? audioUrl,
     String? mathFormula,
     String? codeSnippet,
     List<OptionModel>? options,
+    List<MatchingPair>? matchingPairs,
     bool? isRequired,
     int? ratingMax,
     int? correctRating,
@@ -159,9 +203,11 @@ class QuestionModel {
       text: text ?? this.text,
       content: content ?? this.content,
       imageUrl: imageUrl ?? this.imageUrl,
+      audioUrl: audioUrl ?? this.audioUrl,
       mathFormula: mathFormula ?? this.mathFormula,
       codeSnippet: codeSnippet ?? this.codeSnippet,
       options: options ?? this.options,
+      matchingPairs: matchingPairs ?? this.matchingPairs,
       isRequired: isRequired ?? this.isRequired,
       ratingMax: ratingMax ?? this.ratingMax,
       correctRating: correctRating ?? this.correctRating,
@@ -174,6 +220,7 @@ class QuestionModel {
   factory QuestionModel.fromJson(Map<String, dynamic> json) {
     final questionId = (json['id'] ?? '').toString();
     final imageUrl = (json['img_url'] ?? '').toString();
+    final audioUrl = (json['audio_url'] ?? '').toString();
     final codeLanguage = (json['code_language'] ?? '').toString();
 
     QuestionType mappedType =
@@ -203,12 +250,18 @@ class QuestionModel {
 
     rawText = rawText.trim();
 
-    List<OptionModel> options = [];
+    final List<OptionModel> options = [];
+    final List<MatchingPair> matchingPairs = [];
     if (json['options'] is List) {
-      options = (json['options'] as List)
-          .whereType<Map>()
-          .map((e) => OptionModel.fromJson({...e}))
-          .toList();
+      if (mappedType == QuestionType.matching) {
+        matchingPairs.addAll((json['options'] as List)
+            .whereType<Map>()
+            .map((e) => MatchingPair.fromJson({...e})));
+      } else {
+        options.addAll((json['options'] as List)
+            .whereType<Map>()
+            .map((e) => OptionModel.fromJson({...e})));
+      }
     }
 
     return QuestionModel(
@@ -216,6 +269,7 @@ class QuestionModel {
       type: mappedType,
       text: rawText,
       imageUrl: imageUrl.isEmpty ? null : imageUrl,
+      audioUrl: audioUrl.isEmpty ? null : audioUrl,
       codeSnippet: snippet,
       mathFormula:
           mappedType == QuestionType.mathFormula ? mathFormula : null,
@@ -224,6 +278,7 @@ class QuestionModel {
       hasScore: json['points'] is num && (json['points'] as num) > 0,
       score: (json['points'] is num) ? (json['points'] as num).toDouble() : 0,
       options: options,
+      matchingPairs: matchingPairs,
     );
   }
 
@@ -258,11 +313,17 @@ class QuestionModel {
       'points': hasScore ? score.round().clamp(0, 100) : 0,
       'order_index': orderIndex,
       'is_required': isRequired,
-      'options': options
-          .asMap()
-          .entries
-          .map((e) => e.value.toOptionJson(orderIndex: e.key + 1))
-          .toList(),
+      'options': type == QuestionType.matching
+          ? matchingPairs
+              .asMap()
+              .entries
+              .map((e) => e.value.toJson(orderIndex: e.key + 1))
+              .toList()
+          : options
+              .asMap()
+              .entries
+              .map((e) => e.value.toOptionJson(orderIndex: e.key + 1))
+              .toList(),
     };
   }
 }
@@ -320,8 +381,7 @@ class OptionModel {
       'option_text': text,
       'is_correct': isCorrect || score > 0,
       'order_index': orderIndex,
-    };
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
+    };    if (imageUrl != null && imageUrl!.isNotEmpty) {
       map['img_url'] = imageUrl;
       // fallback: encode image as dataUrl in text if backend doesn't persist img_url
       // keep option_text as is, backend may ignore img_url

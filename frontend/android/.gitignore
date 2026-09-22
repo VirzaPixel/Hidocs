@@ -12,6 +12,13 @@
 .swiftpm/
 migrate_working_dir/
 
+# Secrets — jangan commit (S-002)
+.env
+.env.*
+keystore.properties
+*.jks
+*.keystore
+
 # IntelliJ related
 *.iml
 *.ipr

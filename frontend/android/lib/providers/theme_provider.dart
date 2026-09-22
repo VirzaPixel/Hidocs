@@ -1,10 +1,7 @@
-﻿import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../app_theme.dart';
+import 'package:hi_docs/app_theme.dart';
 
 enum AppColorScheme {
   blue,
@@ -121,19 +118,11 @@ class ThemeProvider extends ChangeNotifier {
   Color? _customPrimaryLight;
   Color? _customPrimaryDark;
 
-  Uint8List? _themeImageBytes;
-
   ThemeMode get themeMode => _themeMode;
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
   AppColorScheme get colorScheme => _colorScheme;
-
-  Uint8List? get themeImageBytes => _themeImageBytes;
-
-  bool get hasThemeImage =>
-      _themeImageBytes != null &&
-      _themeImageBytes!.isNotEmpty;
 
   Color get primary {
     if (_colorScheme == AppColorScheme.custom &&
@@ -197,38 +186,12 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setThemeImageBytes(Uint8List bytes) async {
-    if (bytes.isEmpty) {
-      throw Exception('File gambar kosong atau rusak');
-    }
-
-    try {
-      _themeImageBytes = Uint8List.fromList(bytes);
-
-      await _savePrefs();
-
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Gagal menyimpan gambar: $e');
-    }
-  }
-
-  Future<void> removeThemeImage() async {
-    _themeImageBytes = null;
-
-    await _savePrefs();
-
-    notifyListeners();
-  }
-
   Future<void> resetTheme() async {
     _colorScheme = AppColorScheme.blue;
 
     _customPrimary = null;
     _customPrimaryLight = null;
     _customPrimaryDark = null;
-
-    _themeImageBytes = null;
 
     await _savePrefs();
 
@@ -257,6 +220,7 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeData buildLightTheme() {
     final p = primary;
+    final pl = primaryLight;
     final faint = primaryFaint;
 
     return AppTheme.lightTheme.copyWith(
@@ -265,11 +229,13 @@ class ThemeProvider extends ChangeNotifier {
       colorScheme: AppTheme.lightTheme.colorScheme.copyWith(
         primary: p,
         secondary: p,
+        primaryContainer: pl,
+        secondaryContainer: pl,
+        tertiary: p,
       ),
 
-      scaffoldBackgroundColor: hasThemeImage
-          ? Colors.transparent
-          : AppTheme.lightTheme.scaffoldBackgroundColor,
+      scaffoldBackgroundColor:
+          AppTheme.lightTheme.scaffoldBackgroundColor,
 
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -361,6 +327,7 @@ class ThemeProvider extends ChangeNotifier {
             : _colorScheme.primaryLightColor.withValues(
                 alpha: 0.9,
               );
+    final pl = primaryLight;
 
     return AppTheme.darkTheme.copyWith(
       primaryColor: p,
@@ -368,11 +335,13 @@ class ThemeProvider extends ChangeNotifier {
       colorScheme: AppTheme.darkTheme.colorScheme.copyWith(
         primary: p,
         secondary: p,
+        primaryContainer: pl,
+        secondaryContainer: pl,
+        tertiary: p,
       ),
 
-      scaffoldBackgroundColor: hasThemeImage
-          ? Colors.transparent
-          : AppTheme.darkTheme.scaffoldBackgroundColor,
+      scaffoldBackgroundColor:
+          AppTheme.darkTheme.scaffoldBackgroundColor,
 
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -464,21 +433,6 @@ class ThemeProvider extends ChangeNotifier {
           _darken(_customPrimary!, 0.20);
     }
 
-    final imageBase64 =
-        prefs.getString('themeImageBytes');
-
-    if (imageBase64 != null &&
-        imageBase64.isNotEmpty) {
-      try {
-        _themeImageBytes =
-            base64Decode(imageBase64);
-      } catch (_) {
-        _themeImageBytes = null;
-
-        await prefs.remove('themeImageBytes');
-      }
-    }
-
     notifyListeners();
   }
 
@@ -504,18 +458,6 @@ class ThemeProvider extends ChangeNotifier {
     } else {
       await prefs.remove(
         'customPrimaryColor',
-      );
-    }
-
-    if (_themeImageBytes != null &&
-        _themeImageBytes!.isNotEmpty) {
-      await prefs.setString(
-        'themeImageBytes',
-        base64Encode(_themeImageBytes!),
-      );
-    } else {
-      await prefs.remove(
-        'themeImageBytes',
       );
     }
   }

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../models/metrics_model.dart';
-import '../services/api_client.dart';
+import 'package:hi_docs/models/metrics_model.dart';
+import 'package:hi_docs/services/api/api_client.dart';
 
 class MetricsProvider with ChangeNotifier {
   RealtimeMetricsModel? _realtime;

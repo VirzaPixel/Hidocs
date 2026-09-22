@@ -188,12 +188,6 @@ abstract class AppLocalizations {
   /// **'Login now'**
   String get loginNow;
 
-  /// No description provided for @forgotPassword.
-  ///
-  /// In en, this message translates to:
-  /// **'Forgot password?'**
-  String get forgotPassword;
-
   /// No description provided for @otpVerification.
   ///
   /// In en, this message translates to:
@@ -1945,6 +1939,972 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dark Mode'**
   String get darkMode;
+
+  /// No description provided for @accessRangeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Access Range'**
+  String get accessRangeLabel;
+
+  /// No description provided for @activateImmediatelySub.
+  ///
+  /// In en, this message translates to:
+  /// **'Form goes live right after saving'**
+  String get activateImmediatelySub;
+
+  /// No description provided for @activateImmediatelyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate Immediately'**
+  String get activateImmediatelyTitle;
+
+  /// No description provided for @addAtLeastOneQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one question'**
+  String get addAtLeastOneQuestion;
+
+  /// No description provided for @addOptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Option'**
+  String get addOptionLabel;
+
+  /// No description provided for @addQuestionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Question'**
+  String get addQuestionLabel;
+
+  /// No description provided for @assignPointsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign Points'**
+  String get assignPointsLabel;
+
+  /// No description provided for @closeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get closeLabel;
+
+  /// No description provided for @closeMustBeAfterOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Close time must be after open time'**
+  String get closeMustBeAfterOpen;
+
+  /// No description provided for @closeTimeBeforeOpenTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Close time cannot be before open time'**
+  String get closeTimeBeforeOpenTime;
+
+  /// No description provided for @codePlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Write code here...'**
+  String get codePlaceholder;
+
+  /// No description provided for @correctAnswerOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Correct answer (optional)'**
+  String get correctAnswerOptional;
+
+  /// No description provided for @createForm.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Form'**
+  String get createForm;
+
+  /// No description provided for @customLinkHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. math-quiz-10'**
+  String get customLinkHint;
+
+  /// No description provided for @customLinkLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Link'**
+  String get customLinkLabel;
+
+  /// No description provided for @deleteOptionTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete option'**
+  String get deleteOptionTooltip;
+
+  /// No description provided for @deleteQuestionTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete question'**
+  String get deleteQuestionTooltip;
+
+  /// No description provided for @editBlockedHasResponses.
+  ///
+  /// In en, this message translates to:
+  /// **'Form cannot be edited because it already has responses'**
+  String get editBlockedHasResponses;
+
+  /// No description provided for @editForm.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Form'**
+  String get editForm;
+
+  /// No description provided for @enterLatexFormula.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter LaTeX formula'**
+  String get enterLatexFormula;
+
+  /// No description provided for @examDurationHintText.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty for no time limit'**
+  String get examDurationHintText;
+
+  /// No description provided for @examDurationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Exam Duration'**
+  String get examDurationLabel;
+
+  /// No description provided for @examModeSub.
+  ///
+  /// In en, this message translates to:
+  /// **'With timer, scores, and correct answers'**
+  String get examModeSub;
+
+  /// No description provided for @examModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exam Mode'**
+  String get examModeTitle;
+
+  /// No description provided for @failedToInsertImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to insert image'**
+  String get failedToInsertImage;
+
+  /// No description provided for @finishingUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing up...'**
+  String get finishingUp;
+
+  /// No description provided for @formBehaviorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Form Behavior'**
+  String get formBehaviorLabel;
+
+  /// No description provided for @formCreatedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Form created successfully'**
+  String get formCreatedSuccess;
+
+  /// No description provided for @formInformation.
+  ///
+  /// In en, this message translates to:
+  /// **'Form Information'**
+  String get formInformation;
+
+  /// No description provided for @formLinkDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Share this link so others can fill out the form'**
+  String get formLinkDesc;
+
+  /// No description provided for @formLinkLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Form Link'**
+  String get formLinkLabel;
+
+  /// No description provided for @formSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save form'**
+  String get formSaveError;
+
+  /// No description provided for @formTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Chapter 1 Math Quiz'**
+  String get formTitleHint;
+
+  /// No description provided for @formTitleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Form Title'**
+  String get formTitleLabel;
+
+  /// No description provided for @formTitleMinLength.
+  ///
+  /// In en, this message translates to:
+  /// **'Title must be at least 3 characters'**
+  String get formTitleMinLength;
+
+  /// No description provided for @formTitleRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Form title is required'**
+  String get formTitleRequired;
+
+  /// No description provided for @formTypeSecurityMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Form Type & Security'**
+  String get formTypeSecurityMode;
+
+  /// No description provided for @formUpdatedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Form updated successfully'**
+  String get formUpdatedSuccess;
+
+  /// No description provided for @hideResultsSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Participants won\'t see results'**
+  String get hideResultsSub;
+
+  /// No description provided for @hideResultsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide Results'**
+  String get hideResultsTitle;
+
+  /// No description provided for @hoursLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Hours'**
+  String get hoursLabel;
+
+  /// No description provided for @insertCodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert Code'**
+  String get insertCodeTitle;
+
+  /// No description provided for @insertCodeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert code'**
+  String get insertCodeTooltip;
+
+  /// No description provided for @insertFormulaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert Formula'**
+  String get insertFormulaLabel;
+
+  /// No description provided for @insertImageTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert image'**
+  String get insertImageTooltip;
+
+  /// No description provided for @insertLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert'**
+  String get insertLabel;
+
+  /// No description provided for @insertMathTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert math formula'**
+  String get insertMathTooltip;
+
+  /// No description provided for @invalidLatexFormula.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid LaTeX formula'**
+  String get invalidLatexFormula;
+
+  /// No description provided for @longTextHintNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Long text answer for essays'**
+  String get longTextHintNote;
+
+  /// No description provided for @mathFormulaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Math Formula'**
+  String get mathFormulaTitle;
+
+  /// No description provided for @mathHintNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Use LaTeX to write formulas'**
+  String get mathHintNote;
+
+  /// No description provided for @minutesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minutes'**
+  String get minutesLabel;
+
+  /// No description provided for @moveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get moveDown;
+
+  /// No description provided for @moveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get moveUp;
+
+  /// No description provided for @mustBeLoggedInToCreateForm.
+  ///
+  /// In en, this message translates to:
+  /// **'You must be logged in to create a form'**
+  String get mustBeLoggedInToCreateForm;
+
+  /// No description provided for @noQuestionsYetSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap add to create your first question'**
+  String get noQuestionsYetSub;
+
+  /// No description provided for @noQuestionsYetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No questions yet'**
+  String get noQuestionsYetTitle;
+
+  /// No description provided for @noTimeLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'No time limit'**
+  String get noTimeLimit;
+
+  /// No description provided for @ok.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get ok;
+
+  /// No description provided for @oneTimeSubmitSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Participants can only submit once'**
+  String get oneTimeSubmitSub;
+
+  /// No description provided for @oneTimeSubmitTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'One-Time Submit'**
+  String get oneTimeSubmitTitle;
+
+  /// No description provided for @openLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get openLabel;
+
+  /// No description provided for @openUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Open with no time limit'**
+  String get openUnlimited;
+
+  /// No description provided for @optionTextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Option text...'**
+  String get optionTextHint;
+
+  /// No description provided for @pointsMax100.
+  ///
+  /// In en, this message translates to:
+  /// **'Max 100 points'**
+  String get pointsMax100;
+
+  /// No description provided for @prepQuestionImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing question images...'**
+  String get prepQuestionImages;
+
+  /// No description provided for @previewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get previewLabel;
+
+  /// No description provided for @previewPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview will appear here'**
+  String get previewPlaceholder;
+
+  /// No description provided for @privateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Private'**
+  String get privateLabel;
+
+  /// No description provided for @privateSublabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Only with access token'**
+  String get privateSublabel;
+
+  /// No description provided for @publicLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Public'**
+  String get publicLabel;
+
+  /// No description provided for @publicSublabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone with the link can fill it'**
+  String get publicSublabel;
+
+  /// No description provided for @qCodeInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Input'**
+  String get qCodeInput;
+
+  /// No description provided for @qCodeInputSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer as program code'**
+  String get qCodeInputSub;
+
+  /// No description provided for @qEssay.
+  ///
+  /// In en, this message translates to:
+  /// **'Essay'**
+  String get qEssay;
+
+  /// No description provided for @qEssaySub.
+  ///
+  /// In en, this message translates to:
+  /// **'Long text answer'**
+  String get qEssaySub;
+
+  /// No description provided for @qImageChoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Choice'**
+  String get qImageChoice;
+
+  /// No description provided for @qImageChoiceSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick one image'**
+  String get qImageChoiceSub;
+
+  /// No description provided for @qMathFormula.
+  ///
+  /// In en, this message translates to:
+  /// **'Math Formula'**
+  String get qMathFormula;
+
+  /// No description provided for @qMathFormulaSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer as LaTeX formula'**
+  String get qMathFormulaSub;
+
+  /// No description provided for @qMultipleChoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Multiple Choice'**
+  String get qMultipleChoice;
+
+  /// No description provided for @qMultipleChoiceSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Select one or more answers'**
+  String get qMultipleChoiceSub;
+
+  /// No description provided for @qRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get qRating;
+
+  /// No description provided for @qRatingSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Star rating'**
+  String get qRatingSub;
+
+  /// No description provided for @qShortAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Short Answer'**
+  String get qShortAnswer;
+
+  /// No description provided for @qShortAnswerSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Short single-line text'**
+  String get qShortAnswerSub;
+
+  /// No description provided for @qYesNo.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes / No'**
+  String get qYesNo;
+
+  /// No description provided for @qYesNoSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes or no choice'**
+  String get qYesNoSub;
+
+  /// No description provided for @qCheckbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkboxes'**
+  String get qCheckbox;
+
+  /// No description provided for @qCheckboxSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Select multiple answers'**
+  String get qCheckboxSub;
+
+  /// No description provided for @qMatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Matching'**
+  String get qMatching;
+
+  /// No description provided for @qMatchingSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Match left-right pairs'**
+  String get qMatchingSub;
+
+  /// No description provided for @addPairLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Pair'**
+  String get addPairLabel;
+
+  /// No description provided for @matchingLeftHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Left...'**
+  String get matchingLeftHint;
+
+  /// No description provided for @matchingRightHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Right...'**
+  String get matchingRightHint;
+
+  /// No description provided for @matchingHintNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Add left-right pairs. Participants match each left item to the right answer.'**
+  String get matchingHintNote;
+
+  /// No description provided for @deletePairTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete pair'**
+  String get deletePairTooltip;
+
+  /// No description provided for @randomizeLinkTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Randomize link'**
+  String get randomizeLinkTooltip;
+
+  /// No description provided for @requiredLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get requiredLabel;
+
+  /// No description provided for @resultVisibilityDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Control what participants see after submitting'**
+  String get resultVisibilityDesc;
+
+  /// No description provided for @resultVisibilityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Result Visibility'**
+  String get resultVisibilityLabel;
+
+  /// No description provided for @scheduleDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Set form open and close schedule'**
+  String get scheduleDesc;
+
+  /// No description provided for @scheduleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule'**
+  String get scheduleLabel;
+
+  /// No description provided for @selectDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Select date'**
+  String get selectDate;
+
+  /// No description provided for @selectTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Select time'**
+  String get selectTime;
+
+  /// No description provided for @sharingVisibilityDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Control who can access the form'**
+  String get sharingVisibilityDesc;
+
+  /// No description provided for @sharingVisibilityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing Visibility'**
+  String get sharingVisibilityLabel;
+
+  /// No description provided for @shortTextHintNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Short single-line text answer'**
+  String get shortTextHintNote;
+
+  /// No description provided for @showResultAndScoreSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Participants see correct answers and score'**
+  String get showResultAndScoreSub;
+
+  /// No description provided for @showResultAndScoreTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Result & Score'**
+  String get showResultAndScoreTitle;
+
+  /// No description provided for @showResultOnlySub.
+  ///
+  /// In en, this message translates to:
+  /// **'Participants only see correct answers'**
+  String get showResultOnlySub;
+
+  /// No description provided for @showResultOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Result Only'**
+  String get showResultOnlyTitle;
+
+  /// No description provided for @shuffleOptionsSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Option order is randomized per participant'**
+  String get shuffleOptionsSub;
+
+  /// No description provided for @shuffleOptionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle Options'**
+  String get shuffleOptionsTitle;
+
+  /// No description provided for @shuffleQuestionsSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Question order is randomized per participant'**
+  String get shuffleQuestionsSub;
+
+  /// No description provided for @shuffleQuestionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle Questions'**
+  String get shuffleQuestionsTitle;
+
+  /// No description provided for @signOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign Out'**
+  String get signOut;
+
+  /// No description provided for @starsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stars'**
+  String get starsLabel;
+
+  /// No description provided for @starterCodeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Starter code for participants...'**
+  String get starterCodeHint;
+
+  /// No description provided for @surveyModeSub.
+  ///
+  /// In en, this message translates to:
+  /// **'No scoring, focus on responses'**
+  String get surveyModeSub;
+
+  /// No description provided for @surveyModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Survey Mode'**
+  String get surveyModeTitle;
+
+  /// No description provided for @tabInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Info'**
+  String get tabInfo;
+
+  /// No description provided for @tabQuestions.
+  ///
+  /// In en, this message translates to:
+  /// **'Questions'**
+  String get tabQuestions;
+
+  /// No description provided for @tabSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get tabSettings;
+
+  /// No description provided for @timeAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'at'**
+  String get timeAtLabel;
+
+  /// No description provided for @writeQuestionHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Write your question here...'**
+  String get writeQuestionHere;
+
+  /// No description provided for @accessDurationDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} Days'**
+  String accessDurationDays(Object count);
+
+  /// No description provided for @accessDurationDaysHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} Days {hours} Hours'**
+  String accessDurationDaysHours(Object days, Object hours);
+
+  /// No description provided for @accessDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} Hours'**
+  String accessDurationHours(Object count);
+
+  /// No description provided for @accessDurationHoursMins.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} Hours {mins} Mins'**
+  String accessDurationHoursMins(Object hours, Object mins);
+
+  /// No description provided for @accessDurationMins.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} Mins'**
+  String accessDurationMins(Object count);
+
+  /// No description provided for @convertingQuestionsToImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Converting {done} of {total} questions...'**
+  String convertingQuestionsToImages(Object done, Object total);
+
+  /// No description provided for @mcqNeedsCorrectAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Question {index} needs a correct answer'**
+  String mcqNeedsCorrectAnswer(Object index);
+
+  /// No description provided for @questionContentEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Question {index} content is empty'**
+  String questionContentEmpty(Object index);
+
+  /// No description provided for @modeUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User Mode'**
+  String get modeUser;
+
+  /// No description provided for @modeCreator.
+  ///
+  /// In en, this message translates to:
+  /// **'Creator Mode'**
+  String get modeCreator;
+
+  /// No description provided for @modeUserDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill forms and view history'**
+  String get modeUserDesc;
+
+  /// No description provided for @modeCreatorDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Create and manage your forms'**
+  String get modeCreatorDesc;
+
+  /// No description provided for @switchToMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to'**
+  String get switchToMode;
+
+  /// No description provided for @examTokenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exam Token'**
+  String get examTokenTitle;
+
+  /// No description provided for @examTokenDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Announce this token in class. Students enter it to start the exam.'**
+  String get examTokenDesc;
+
+  /// No description provided for @examTokenProtectedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Token Protection'**
+  String get examTokenProtectedTitle;
+
+  /// No description provided for @examTokenProtectedSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Students must enter the token to start the exam'**
+  String get examTokenProtectedSub;
+
+  /// No description provided for @examTokenRegenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate'**
+  String get examTokenRegenerate;
+
+  /// No description provided for @examTokenCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Exam token copied'**
+  String get examTokenCopied;
+
+  /// No description provided for @modeExam.
+  ///
+  /// In en, this message translates to:
+  /// **'EXAM'**
+  String get modeExam;
+
+  /// No description provided for @modeSurvey.
+  ///
+  /// In en, this message translates to:
+  /// **'SURVEY'**
+  String get modeSurvey;
+
+  /// No description provided for @examBannerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exam mode — note the limits'**
+  String get examBannerTitle;
+
+  /// No description provided for @questionBank.
+  ///
+  /// In en, this message translates to:
+  /// **'Question Bank'**
+  String get questionBank;
+
+  /// No description provided for @tabMyForms.
+  ///
+  /// In en, this message translates to:
+  /// **'My Forms'**
+  String get tabMyForms;
+
+  /// No description provided for @tabTemplates.
+  ///
+  /// In en, this message translates to:
+  /// **'Templates'**
+  String get tabTemplates;
+
+  /// No description provided for @takeFromBank.
+  ///
+  /// In en, this message translates to:
+  /// **'Take from Question Bank'**
+  String get takeFromBank;
+
+  /// No description provided for @noFormsBank.
+  ///
+  /// In en, this message translates to:
+  /// **'No forms yet'**
+  String get noFormsBank;
+
+  /// No description provided for @noTemplatesBank.
+  ///
+  /// In en, this message translates to:
+  /// **'No templates available'**
+  String get noTemplatesBank;
+
+  /// No description provided for @noQuestionsInForm.
+  ///
+  /// In en, this message translates to:
+  /// **'No questions in this form'**
+  String get noQuestionsInForm;
+
+  /// No description provided for @categoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get categoryLabel;
+
+  /// No description provided for @categoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Math, Science'**
+  String get categoryHint;
+
+  /// No description provided for @addToFormCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to form ({count})'**
+  String addToFormCount(Object count);
+
+  /// No description provided for @nOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} options'**
+  String nOptions(Object count);
+
+  /// No description provided for @filterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get filterAll;
+
+  /// No description provided for @categoryFilterHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by category'**
+  String get categoryFilterHint;
 }
 
 class _AppLocalizationsDelegate
