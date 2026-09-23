@@ -3,9 +3,6 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { Textarea } from './ui';
 
-// Simbol umum yang sering dipakai di soal matematika sekolah — klik untuk sisip ke
-// posisi kursor. Ini "keyboard matematika visual" yang dimaksud di rencana produk:
-// guru tidak perlu tahu sintaks LaTeX, cukup klik simbol.
 const SYMBOLS = [
   { label: '½', insert: '\\frac{}{}' },
   { label: 'x²', insert: '^{2}' },
@@ -24,9 +21,6 @@ const SYMBOLS = [
   { label: 'θ', insert: '\\theta' },
 ];
 
-// value disimpan sebagai teks yang berisi LaTeX diapit `$...$`, mis:
-// "Berapa hasil dari $\\frac{1}{2} + \\frac{1}{3}$?" — dirender apa adanya di
-// question_text (frontend cukup mem-parse & render bagian $...$ saat menampilkan).
 export default function MathField({ value, onChange, textareaId }) {
   const insertSymbol = (snippet) => {
     const el = document.getElementById(textareaId);
@@ -79,18 +73,54 @@ export default function MathField({ value, onChange, textareaId }) {
   );
 }
 
-// Render teks biasa apa adanya, dan bagian yang diapit $...$ dirender KaTeX.
+// Render teks biasa apa adanya, dan bagian yang berisi LaTeX (\(...\), \[...\], $$...$$, $...$, atau perintah LaTeX) dirender KaTeX.
 function renderMixedText(text) {
-  const parts = text.split(/(\$[^$]+\$)/g);
+  if (!text) return '';
+
+  const mathRegex = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\\\$[\s\S]+?\\\$|\$[^\$\n]+\$)/g;
+  const parts = text.split(mathRegex);
+
   return parts
     .map((part) => {
-      if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
+      if (!part) return '';
+
+      let expression = null;
+      let displayMode = false;
+
+      if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
+        expression = part.slice(2, -2);
+        displayMode = true;
+      } else if (part.startsWith('\\[') && part.endsWith('\\]') && part.length >= 4) {
+        expression = part.slice(2, -2);
+        displayMode = true;
+      } else if (part.startsWith('\\(') && part.endsWith('\\)') && part.length >= 4) {
+        expression = part.slice(2, -2);
+        displayMode = false;
+      } else if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+        expression = part.slice(1, -1);
+        displayMode = false;
+      }
+
+      if (expression !== null) {
         try {
-          return katex.renderToString(part.slice(1, -1), { throwOnError: false });
+          return katex.renderToString(expression, {
+            displayMode,
+            throwOnError: false,
+          });
         } catch {
           return escapeHtml(part);
         }
       }
+
+      // Fallback rendering jika ada perintah LaTeX seperti \frac, \sqrt, dll. langsung di teks
+      if (/\\(frac|sqrt|nthroot|sum|int|pi|pm|times|div|leq|geq|neq|alpha|beta|theta|infty)/.test(part)) {
+        try {
+          return katex.renderToString(part, { displayMode: false, throwOnError: false });
+        } catch {
+          return escapeHtml(part);
+        }
+      }
+
       return escapeHtml(part);
     })
     .join('');
