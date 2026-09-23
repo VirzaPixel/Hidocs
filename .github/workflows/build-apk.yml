@@ -7,6 +7,7 @@ on:
     # triggered from
     paths:
       - 'frontend/android/**'
+      - '.github/workflows/build-apk.yml'
 
 jobs:
   build:
@@ -29,6 +30,14 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+
+      # write env
+      - name: Create .env from secrets
+        working-directory: ./frontend/android
+        env:
+          ENV_SECRET: ${{ secrets.ANDROID_ENV }} 
+        run:
+          echo "$ENV_SECRET" > .env
 
       # go to /frontend & install dependencies
       - name: Install Dependencies
@@ -54,3 +63,10 @@ jobs:
         working-directory: ./frontend/android
         run : |
           flutter build apk --release
+
+      # Upload Artifact
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: frontend/android/build/app/outputs/flutter-apk/app-release.apk
