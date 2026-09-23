@@ -12,10 +12,14 @@ import 'package:hi_docs/utils/theme_context.dart';
 
 /// Gerbang wajib sebelum mengerjakan ujian.
 ///
-/// Memeriksa dua proses screening yang terpisah + DND:
-///  1. Daftar aplikasi floating yang terpasang (harus bersih).
+/// Memeriksa dua proses persiapan yang terpisah (Revisi Lanjutan 6):
+///  1. Aplikasi floating yang SEDANG AKTIF menampilkan bubble/jendela
+///     mengambang (harus bersih).
 ///  2. Izin "tampil di atas aplikasi lain" untuk HiDocs.
-///  3. Akses DND + DND aktif (sunyi total).
+///
+/// "Mode Sunyi Total" (DND) SUDAH DIHAPUS. Gantinya: saat tombol "Mulai Ujian"
+/// ditekan, volume media perangkat dibuat AUTO FULL; saat keluar/selesai
+/// ujian, volume dipulihkan ke nilai semula.
 ///
 /// Selama belum semua terpenuhi, tombol "Mulai Ujian" terkunci.
 class ExamLockdownGateScreen extends StatefulWidget {
@@ -135,8 +139,8 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
                         ? 'Proses 1 — Screening Aplikasi'
                         : 'Step 1 — App Screening',
                     subtitle: l10n.isIndonesian
-                        ? 'Semua aplikasi floating/bubble harus ditutup atau dihapus.'
-                        : 'All floating/bubble apps must be closed or removed.',
+                        ? 'Hanya aplikasi yang sedang menayangkan bubble/jendela mengambang yang harus ditutup. Aplikasi biasa yang terpasang (WhatsApp, YouTube, Gmail, dsb) tidak masalah.'
+                        : 'Only apps currently showing a bubble/floating window must be closed. Regular installed apps (WhatsApp, YouTube, Gmail, etc.) are fine.',
                   ),
                   const SizedBox(height: 10),
                   _FloatingAppsCard(
@@ -168,43 +172,19 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
                   ),
                   const SizedBox(height: 20),
 
+                  // Volume otomatis: saat "Mulai Ujian" ditekan, volume media
+                  // dibuat AUTO FULL; saat keluar/selesai ujian dipulihkan.
+                  // (Pengganti "Mode Sunyi Total"/DND yang DIHAPUS.)
                   _SectionTitle(
                     title: l10n.isIndonesian
-                        ? 'Proses 3 — Jangan Ganggu (DND)'
-                        : 'Step 3 — Do Not Disturb',
+                        ? 'Proses 3 — Volume Otomatis'
+                        : 'Step 3 — Automatic Volume',
                     subtitle: l10n.isIndonesian
-                        ? 'Notifikasi, telepon, dan distraksi lain diblokir selama ujian.'
-                        : 'Notifications, calls, and distractions are blocked during the exam.',
+                        ? 'Volume HP otomatis dibuat penuh saat ujian dimulai, lalu dipulihkan saat ujian selesai.'
+                        : 'Phone volume is set to full when the exam starts, then restored when it ends.',
                   ),
                   const SizedBox(height: 10),
-                  _RequirementCard(
-                    icon: Icons.do_not_disturb_on_rounded,
-                    title: l10n.isIndonesian
-                        ? 'Akses Kebijakan Notifikasi'
-                        : 'Notification Policy Access',
-                    description: l10n.isIndonesian
-                        ? 'Izinkan HiDocs mengaktifkan mode sunyi total.'
-                        : 'Allow HiDocs to enable total silence mode.',
-                    satisfied: ready?.dndAccessOk ?? false,
-                    dark: isDark,
-                    onAction: () => ExamSecurityService.openDndAccessSettings(),
-                  ),
-                  const SizedBox(height: 10),
-                  _RequirementCard(
-                    icon: Icons.volume_off_rounded,
-                    title: l10n.isIndonesian
-                        ? 'Mode Sunyi Total Aktif'
-                        : 'Total Silence Active',
-                    description: l10n.isIndonesian
-                        ? 'Harus aktif. Telepon & notifikasi akan diblokir sampai ujian selesai.'
-                        : 'Must be on. Calls & notifications blocked until the exam ends.',
-                    satisfied: ready?.dndActive ?? false,
-                    dark: isDark,
-                    onAction: () async {
-                      await ExamSecurityService.enableTotalSilence();
-                      await _refresh();
-                    },
-                  ),
+                  _VolumeCard(dark: isDark),
                   const SizedBox(height: 24),
 
                   _ChecklistSummary(
@@ -338,6 +318,130 @@ class _HeaderCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Kartu info "Volume Otomatis" (pengganti kartu DND yang dihapus).
+///
+/// Bukan syarat penguncian — hanya penjelasan + tombol "Tes Sekarang" yang
+/// menaikkan volume media ke penuh dan langsung memulihkannya kembali,
+/// supaya pengguna yakin fitur volumenya bekerja sebelum ujian dimulai.
+class _VolumeCard extends StatefulWidget {
+  final bool dark;
+
+  const _VolumeCard({required this.dark});
+
+  @override
+  State<_VolumeCard> createState() => _VolumeCardState();
+}
+
+class _VolumeCardState extends State<_VolumeCard> {
+  double? _level;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final v = await ExamSecurityService.currentMediaVolume();
+    if (!mounted) return;
+    setState(() => _level = v.clamp(0.0, 1.0));
+  }
+
+  Future<void> _test() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    await ExamSecurityService.maximizeExamVolume();
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    await ExamSecurityService.restoreExamVolume();
+    final v = await ExamSecurityService.currentMediaVolume();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _level = v.clamp(0.0, 1.0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final dark = widget.dark;
+    const color = AppTheme.info;
+    final pct = _level == null ? '…' : '${(_level! * 100).round()}%';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.volume_up_rounded,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.isIndonesian
+                      ? 'Volume otomatis penuh saat ujian ($pct)'
+                      : 'Auto full volume during exam ($pct)',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color:
+                        dark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  l10n.isIndonesian
+                      ? 'Volume dipulihkan otomatis setelah ujian selesai.'
+                      : 'Volume is restored automatically after the exam.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: _busy ? null : _test,
+            style: TextButton.styleFrom(
+              foregroundColor: context.primary,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            child: Text(
+              _busy
+                  ? '…'
+                  : (l10n.isIndonesian ? 'Tes Sekarang' : 'Test Now'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -682,12 +786,9 @@ class _ChecklistSummary extends StatelessWidget {
         r?.overlayPermissionOk ?? false,
       ),
       (
-        l10n.isIndonesian ? 'Akses DND' : 'DND access',
-        r?.dndAccessOk ?? false,
-      ),
-      (
-        l10n.isIndonesian ? 'Sunyi total aktif' : 'Total silence active',
-        r?.dndActive ?? false,
+        // Bukan syarat penguncian — sekadar info bahwa volume otomatis aktif.
+        l10n.isIndonesian ? 'Volume otomatis penuh' : 'Auto full volume',
+        true,
       ),
       (
         l10n.isIndonesian
@@ -787,20 +888,33 @@ class _BottomAction extends StatelessWidget {
       ),
       child: Row(
         children: [
-          OutlinedButton.icon(
-            onPressed: isEngaging ? null : onRefresh,
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: Text(l10n.isIndonesian ? 'Periksa Ulang' : 'Re-check'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: context.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+          Expanded(
+            flex: 4,
+            child: OutlinedButton.icon(
+              onPressed: isEngaging ? null : onRefresh,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                l10n.isIndonesian ? 'Periksa Ulang' : 'Re-check',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: context.primary,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
+            flex: 6,
             child: ElevatedButton.icon(
               onPressed: isReady && !isEngaging ? onStart : null,
               icon: isEngaging
@@ -819,8 +933,11 @@ class _BottomAction extends StatelessWidget {
                     : (l10n.isIndonesian
                         ? 'Syarat Belum Lengkap'
                         : 'Requirements Incomplete'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 14.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
               ),

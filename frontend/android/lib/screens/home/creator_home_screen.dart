@@ -682,6 +682,12 @@ class _FormsTabState extends State<_FormsTab> {
     super.dispose();
   }
 
+  /// Aturan kontras tegas (Revisi Lanjutan 3): teks tidak boleh memakai
+  /// `Colors.white` buta — label chip terpilih mengikuti luminansi nyata
+  /// warna primary (primary terang → teks gelap, primary gelap → teks terang).
+  Color _onPrimary(BuildContext context) =>
+      context.primary.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -784,7 +790,7 @@ class _FormsTabState extends State<_FormsTab> {
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: _selectedCategory.isEmpty
-                          ? Colors.white
+                          ? _onPrimary(context)
                           : (isDark
                               ? AppTheme.darkTextSecondary
                               : AppTheme.textSecondary),
@@ -812,7 +818,7 @@ class _FormsTabState extends State<_FormsTab> {
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: _selectedCategory == c
-                            ? Colors.white
+                            ? _onPrimary(context)
                             : (isDark
                                 ? AppTheme.darkTextSecondary
                                 : AppTheme.textSecondary),

@@ -58,30 +58,56 @@ class FloatingAppScreeningResult {
   );
 }
 
-/// Aplikasi terpasang ringkas dari native.
+/// Aplikasi aktif yang sedang tampil/menjalankan jendela mengambang (bubble,
+/// chat-head, float-window, picture-in-picture) menurut pemeriksaan native.
+///
+/// Ini adalah *fungsi aktual* aplikasi yang terdeteksi — bukan asumsi dari
+/// nama package. WhatsApp/YouTube/Gmail yang terpasang tetapi TIDAK menayangkan
+/// bubble/float TIDAK akan pernah muncul di sini.
 class InstalledAppInfo {
   final String packageName;
   final String appName;
+
+  /// `true` bila aplikasi ini BENAR-BENAR menayangkan jendela mengambang
+  /// saat ini (bubble sedang tampil / overlay aktif). Diambil dari
+  /// `NotificationManager.getActiveNotifications` flag bubble,
+  /// `AppOpsManager` overlay yang sedang dipakai, task PiP, dan katalog
+  /// floating yang dikonfirmasi berjalan.
+  final bool isFloatingActive;
+
+  /// Sistem / launcher bawaan tidak pernah dianggap mengganggu ujian.
   final bool isSystem;
-  final bool hasLaunchIntent;
+
+  /// Nama tampilan dari katalog bila package dikenal sebagai aplikasi
+  /// floating; `null` untuk aplikasi biasa.
+  final String? matchedFloatingLabel;
 
   const InstalledAppInfo({
     required this.packageName,
     required this.appName,
+    required this.isFloatingActive,
     required this.isSystem,
-    required this.hasLaunchIntent,
+    this.matchedFloatingLabel,
   });
 
   FloatingAppEntry? get catalogEntry => lookupCatalog(packageName);
 
   int get riskLevel => catalogEntry?.riskLevel ?? 2;
 
+  /// Nama yang ditampilkan ke pengguna: nama asli aplikasi, atau nama
+  /// katalog bila nama asli generik.
+  String get displayName =>
+      appName.isNotEmpty ? appName : (matchedFloatingLabel ?? packageName);
+
   factory InstalledAppInfo.fromMap(Map<dynamic, dynamic> map) {
     return InstalledAppInfo(
       packageName: (map['packageName'] ?? '').toString(),
       appName: (map['appName'] ?? '').toString(),
+      isFloatingActive: map['isFloatingActive'] == true,
       isSystem: map['isSystem'] == true,
-      hasLaunchIntent: map['hasLaunchIntent'] == true,
+      matchedFloatingLabel: (map['matchedFloatingLabel'] ?? '').toString().isEmpty
+          ? null
+          : (map['matchedFloatingLabel'] ?? '').toString(),
     );
   }
 }
@@ -134,10 +160,14 @@ class ExamSecurityService {
   // Proses 1 — screening daftar aplikasi floating
   // ---------------------------------------------------------------
 
-  /// Ambil aplikasi terpasang dari native, lalu saring yang berisiko.
+  /// Ambil aplikasi floating yang SEDANG AKTIF (menayangkan bubble /
+  /// jendela mengambang) dari native, bukan sekadar "terpasang".
   ///
-  /// Hasil HANYA berdasarkan katalog hardcode + pola nama — tidak ada
-  /// keputusan yang bergantung pada jaringan.
+  /// Hasil HANYA aplikasi yang menurut Android benar-benar memunculkan
+  /// bubble/chat-head/float-window/PiP saat ini. WhatsApp, YouTube, Gmail,
+  /// Truecaller, PUBG, Word, Maps yang HANYA terpasang tetapi tidak
+  /// menampilkan floating TIDAK akan pernah ditandai — persis sesuai
+  /// permintaan: screening berdasarkan *fungsi aktual* aplikasi, bukan nama.
   static Future<FloatingAppScreeningResult> screenFloatingApps() async {
     if (!_isAndroid) return FloatingAppScreeningResult.unsupported;
 
@@ -161,15 +191,13 @@ class ExamSecurityService {
       // Aplikasi kritikal sistem (telepon, SMS, settings, dsb) dikecualikan.
       if (isCriticalAllowed(info.packageName)) continue;
 
-      // Lewati aplikasi tanpa launcher (service/plugin) — tidak mengganggu.
-      if (!info.hasLaunchIntent) continue;
+      // HiDocs sendiri tidak pernah ditandai.
+      if (info.packageName == 'id.hidocs.app') continue;
 
-      if (isSuspiciousFloatingApp(
-        packageName: info.packageName,
-        appName: info.appName,
-      )) {
-        suspicious.add(info);
-      }
+      // HANYA aplikasi floating yang benar-benar aktif yang ditandai.
+      if (!info.isFloatingActive) continue;
+
+      suspicious.add(info);
     }
 
     suspicious.sort((a, b) => b.riskLevel.compareTo(a.riskLevel));
@@ -204,56 +232,76 @@ class ExamSecurityService {
   }
 
   // ---------------------------------------------------------------
-  // DND / notification policy
+  // Akses kebijakan notifikasi (DND) — DIHAPUS (Revisi Lanjutan 6).
+  // Method-channel native terkait sudah dicabut. Stub di bawah selalu
+  // mengembalikan nilai yang TIDAK mengunci kesiapan, agar kode lama
+  // yang masih memanggil tidak pecah.
   // ---------------------------------------------------------------
 
-  static Future<bool> isDndAccessGranted() async {
-    if (!_isAndroid) return true;
-    try {
-      return await _channel
-              .invokeMethod<bool>('isNotificationPolicyAccessGranted') ??
-          false;
-    } catch (_) {
-      return false;
-    }
-  }
+  static Future<bool> isDndAccessGranted() async => true;
 
-  static Future<void> openDndAccessSettings() async {
-    if (!_isAndroid) return;
-    try {
-      await _channel.invokeMethod<bool>('openNotificationPolicySettings');
-    } catch (_) {}
-  }
+  static Future<void> openDndAccessSettings() async {}
 
-  static Future<String> getInterruptionFilter() async {
-    if (!_isAndroid) return 'unknown';
-    try {
-      return await _channel.invokeMethod<String>('getInterruptionFilter') ??
-          'unknown';
-    } catch (_) {
-      return 'unknown';
-    }
-  }
+  static Future<String> getInterruptionFilter() async => 'all';
 
   static Future<bool> isTotalSilenceActive() async {
-    return (await getInterruptionFilter()) == 'none';
+    // Mode Sunyi Total DIHAPUS (Revisi Lanjutan 6) — sebelumnya memeriksa
+    // filter interupsi DND. Selalu false agar tidak pernah mengunci kesiapan.
+    return false;
   }
 
   /// mode: "none" (sunyi total) | "priority" | "alarms" | "all"
+  ///
+  /// DIHAPUS (Revisi Lanjutan 6): Mode Sunyi Total tidak boleh dipakai lagi.
+  /// Method ini dipertahankan agar kode lama tidak pecah, tetapi TIDAK
+  /// melakukan apa-apa dan selalu mengembalikan `false`.
   static Future<bool> setInterruptionFilter(String mode) async {
+    return false;
+  }
+
+  /// DIHAPUS (Revisi Lanjutan 6): tidak melakukan apa-apa.
+  static Future<bool> enableTotalSilence() => Future.value(false);
+
+  /// DIHAPUS (Revisi Lanjutan 6): tidak melakukan apa-apa. Pemulihan volume
+  /// ditangani oleh [restoreExamVolume].
+  static Future<bool> restoreInterruptions() => Future.value(false);
+
+  // ---------------------------------------------------------------
+  // Volume ujian: AUTO FULL saat masuk, pulihkan saat keluar
+  // (Revisi Lanjutan 6 — pengganti "Mode Sunyi Total"/DND yang dihapus)
+  // ---------------------------------------------------------------
+
+  /// Maksimalkan volume media perangkat (STREAM_MUSIC) saat persiapan/
+  /// mulai ujian. Nilai lama disimpan native supaya bisa dipulihkan
+  /// saat [restoreExamVolume].
+  static Future<bool> maximizeExamVolume() async {
     if (!_isAndroid) return false;
     try {
-      return await _channel
-              .invokeMethod<bool>('setInterruptionFilter', {'mode': mode}) ??
-          false;
+      return await _channel.invokeMethod<bool>('maximizeExamVolume') ?? false;
     } catch (_) {
       return false;
     }
   }
 
-  static Future<bool> enableTotalSilence() => setInterruptionFilter('none');
+  /// Kembalikan volume perangkat ke nilai semula (sebelum ujian).
+  static Future<bool> restoreExamVolume() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('restoreExamVolume') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 
-  static Future<bool> restoreInterruptions() => setInterruptionFilter('all');
+  /// Nilai volume media saat ini (0.0 – 1.0, relatif terhadap maksimum).
+  static Future<double> currentMediaVolume() async {
+    if (!_isAndroid) return 1.0;
+    try {
+      return await _channel.invokeMethod<double>('currentMediaVolume') ?? 1.0;
+    } catch (_) {
+      return 1.0;
+    }
+  }
 
   // ---------------------------------------------------------------
   // Foreground service

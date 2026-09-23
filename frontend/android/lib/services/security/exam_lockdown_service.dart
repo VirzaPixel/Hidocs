@@ -4,10 +4,23 @@ import 'package:flutter/foundation.dart';
 
 import 'exam_security_service.dart';
 
-/// Ringkasan kesiapan seluruh syarat penguncian ujian.
+/// Ringkasan kesiapan SELURUH syarat persiapan ujian (Revisi Lanjutan 6).
+///
+/// Syaratnya HANYA dua + pemeriksaan sesi:
+///  1. `overlayPermissionOk` — HiDocs punya izin "tampil di atas aplikasi".
+///  2. `floatingAppsClean` — TIDAK ada aplikasi floating yang sedang aktif
+///     (hanya bubble/chat-head/float-window yang benar-benar tampil).
+///
+/// "Mode Sunyi Total" DIHAPUS sesuai permintaan: tidak ada DND, tidak ada
+/// akses kebijakan notifikasi. Field `dndAccessOk`/`dndActive` dipertahankan
+/// sebagai konstanta kompatibilitas agar pemanggil lama tidak pecah — keduanya
+/// SELALU true dan tidak lagi mengunci kesiapan.
 class LockdownReadiness {
   final bool overlayPermissionOk;
   final bool floatingAppsClean;
+
+  /// Kompatibilitas: selalu true. Mode Sunyi Total (DND) dihapus —
+  /// lihat [ExamLockdownService].
   final bool dndAccessOk;
   final bool dndActive;
   final FloatingAppScreeningResult screening;
@@ -15,66 +28,65 @@ class LockdownReadiness {
   const LockdownReadiness({
     required this.overlayPermissionOk,
     required this.floatingAppsClean,
-    required this.dndAccessOk,
-    required this.dndActive,
+    @Deprecated('Mode Sunyi Total dihapus (Revisi Lanjutan 6). Selalu true.')
+    this.dndAccessOk = true,
+    @Deprecated('Mode Sunyi Total dihapus (Revisi Lanjutan 6). Selalu true.')
+    this.dndActive = true,
     required this.screening,
   });
 
-  /// Kedua proses screening + DND harus terpenuhi.
-  bool get isReady =>
-      overlayPermissionOk && floatingAppsClean && dndAccessOk && dndActive;
+  /// Hanya screening floating aktif + izin overlay.
+  bool get isReady => overlayPermissionOk && floatingAppsClean;
 
   /// Daftar id syarat yang belum terpenuhi.
   List<String> get unmetRequirements {
     final list = <String>[];
     if (!overlayPermissionOk) list.add('overlay');
     if (!floatingAppsClean) list.add('floating_apps');
-    if (!dndAccessOk) list.add('dnd_access');
-    if (!dndActive) list.add('dnd_active');
     return list;
   }
 }
 
-/// Orkestrator penguncian ujian.
+/// Orkestrator persiapan ujian (Revisi Lanjutan 6).
 ///
-/// Menggabungkan DUA proses screening yang tetap terpisah:
-///  1. `floatingAppsClean` — hasil screening katalog aplikasi floating.
+/// Syarat HANYA dua, tetap terpisah:
+///  1. `floatingAppsClean` — hasil screening aplikasi floating yang sedang aktif.
 ///  2. `overlayPermissionOk` — HiDocs mengantongi izin overlay.
 ///
-/// Ditambah syarat DND akses + DND aktif (sunyi total) selama ujian.
+/// "Mode Sunyi Total" (DND) SUDAH DIHAPUS. Sebagai gantinya, saat `engage()`
+/// dipanggil, volume media perangkat dimaksimalkan (AUTO FULL); saat
+/// `release()` dipanggil, volume dikembalikan ke nilai semula. Tidak ada lagi
+/// permintaan "Akses Kebijakan Notifikasi".
 class ExamLockdownService {
   ExamLockdownService._();
 
   /// Jalankan seluruh pemeriksaan dan kembalikan ringkasannya.
-  /// Read-only: TIDAK mengubah DND, hanya membaca status sunyi.
+  /// Read-only: TIDAK mengubah volume maupun izin apa pun.
   static Future<LockdownReadiness> evaluate() async {
     final screening = await ExamSecurityService.screenFloatingApps();
     final overlayOk = await ExamSecurityService.canDrawOverlays();
-    final dndAccess = await ExamSecurityService.isDndAccessGranted();
-    final dndActive =
-        dndAccess ? await ExamSecurityService.isTotalSilenceActive() : false;
 
     return LockdownReadiness(
       overlayPermissionOk: overlayOk,
       floatingAppsClean: screening.isClean,
-      dndAccessOk: dndAccess,
-      dndActive: dndActive,
       screening: screening,
     );
   }
 
-  /// Aktifkan seluruh penguncian: FLAG_SECURE, foreground service, DND sunyi.
+  /// Aktifkan persiapan/awal ujian: FLAG_SECURE, foreground service, dan
+  /// volume media AUTO FULL (nilai lama disimpan untuk dipulihkan).
   static Future<void> engage() async {
     await ExamSecurityService.enableSecureScreen();
     await ExamSecurityService.startLockService();
-    await ExamSecurityService.enableTotalSilence();
+    await ExamSecurityService.maximizeExamVolume();
   }
 
-  /// Lepaskan seluruh penguncian dan pulihkan notifikasi normal.
+  /// Lepaskan persiapan/penguncian: kembalikan FLAG_SECURE, hentikan service,
+  /// dan pulihkan volume perangkat ke nilai semula (sebelum ujian).
   static Future<void> release() async {
     await ExamSecurityService.disableSecureScreen();
     await ExamSecurityService.stopLockService();
-    await ExamSecurityService.restoreInterruptions();
+    await ExamSecurityService.restoreExamVolume();
   }
 
   /// Kirim event pelanggaran ke backend dan kembalikan status berhasil.

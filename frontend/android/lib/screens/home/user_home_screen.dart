@@ -263,7 +263,9 @@ class _HomeTabState extends State<_HomeTab> {
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: _selectedCategory.isEmpty
-                                        ? Colors.white
+                                        ? (cs.primary.computeLuminance() > 0.6
+                                            ? Colors.black87
+                                            : Colors.white)
                                         : (isDark
                                             ? AppTheme.darkTextSecondary
                                             : AppTheme.textSecondary),
@@ -292,7 +294,9 @@ class _HomeTabState extends State<_HomeTab> {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
                                       color: _selectedCategory == c
-                                          ? Colors.white
+                                          ? (cs.primary.computeLuminance() > 0.6
+                                              ? Colors.black87
+                                              : Colors.white)
                                           : (isDark
                                               ? AppTheme.darkTextSecondary
                                               : AppTheme.textSecondary),
