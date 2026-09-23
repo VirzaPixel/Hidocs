@@ -6,8 +6,10 @@ import { responseApi } from './api';
 // (localhost:5173), bukan backend (localhost:8080) — makanya preview selalu gambar rusak.
 // VITE_API_BASE_URL contohnya "http://localhost:8080/api/v1" -> origin backend-nya
 // "http://localhost:8080" (buang suffix /api/v1 atau /api/vN apa pun).
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
-const BACKEND_ORIGIN = API_BASE.replace(/\/api\/v\d+\/?$/, '');
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const BACKEND_ORIGIN = API_BASE.startsWith('/')
+  ? ''
+  : API_BASE.replace(/\/api\/v\d+\/?$/, '');
 
 export function resolveMediaUrl(url) {
   if (!url) return url;
