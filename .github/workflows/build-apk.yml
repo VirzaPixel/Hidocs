@@ -9,6 +9,10 @@ on:
       - 'frontend/android/**'
       - '.github/workflows/build-apk.yml'
 
+# Tambahkan bagian ini agar bot bisa membuat Release
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -70,3 +74,16 @@ jobs:
         with:
           name: release-apk
           path: frontend/android/build/app/outputs/flutter-apk/app-release.apk
+
+      # Create GitHub Release secara otomatis setiap push ke branch android
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release Build #${{ github.run_number }}
+          body: |
+            Otomatis dibuat dari commit: ${{ github.sha }}
+            Branch: ${{ github.ref_name }}
+          files: frontend/android/build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
