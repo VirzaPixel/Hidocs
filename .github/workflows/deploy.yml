@@ -38,11 +38,25 @@ jobs:
               git reset --hard origin/main
             fi
 
-            # Write .env file
+            # Write .env file (strip CR agar aman dari secrets yang ke-copy dari Windows/CRLF)
             cat << 'EOF' > .env
             ${{ secrets.ENV_FILE }}
             EOF
+            sed -i 's/\r$//' .env
+
+            # Validasi: pastikan VITE_API_BASE_URL ada (dibutuhkan build-arg web)
+            if ! grep -q '^VITE_API_BASE_URL=' .env; then
+              echo 'ERROR: secrets.ENV_FILE belum berisi VITE_API_BASE_URL=/api/v1'
+              exit 1
+            fi
 
             # Build and Run Docker Compose
             docker compose build --no-cache
+            # Validasi: pastikan nilai yang ke-bake ke web bener (bukan kosong)
+            if ! docker compose config | grep -q 'VITE_API_BASE_URL'; then
+              echo 'ERROR: VITE_API_BASE_URL tidak terbaca docker compose config'
+              docker compose config | head -n 60
+              exit 1
+            fi
+            docker compose config | grep 'VITE_API_BASE_URL'
             docker compose up -d --build
