@@ -1493,4 +1493,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get categoryFilterHint => 'Filter by category';
+
+  @override
+  String get authFooterTagline =>
+      'HiDocs • Dynamic Form & Smart Assessment Platform';
 }

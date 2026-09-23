@@ -385,7 +385,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 22),
 
                       Text(
-                        'HiDocs • Dynamic Form & Smart Assessment Platform',
+                        l10n.authFooterTagline,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,

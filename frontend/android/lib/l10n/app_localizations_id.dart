@@ -1488,4 +1488,8 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get categoryFilterHint => 'Filter kategori';
+
+  @override
+  String get authFooterTagline =>
+      'HiDocs • Formulir Dinamis & Platform Asesmen Cerdas';
 }

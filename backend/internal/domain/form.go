@@ -69,6 +69,7 @@ type FormSettings struct {
 	// Exam Gatekeeper Token
 	ExamToken          *string    `gorm:"type:varchar(50)" json:"exam_token,omitempty"`
 	IsTokenProtected   bool       `gorm:"type:boolean;default:false" json:"is_token_protected"`
+	ResultVisibility   string     `gorm:"type:varchar(30);default:'hidden'" json:"result_visibility"`
 }
 
 type FormWithCount struct {

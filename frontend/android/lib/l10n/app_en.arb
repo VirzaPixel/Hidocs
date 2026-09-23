@@ -520,5 +520,6 @@
     }
   },
   "filterAll": "All",
-  "categoryFilterHint": "Filter by category"
+  "categoryFilterHint": "Filter by category",
+  "authFooterTagline": "HiDocs \u2022 Dynamic Form & Smart Assessment Platform"
 }

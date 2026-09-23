@@ -268,8 +268,39 @@ class _QuestionsTabState extends State<QuestionsTab> {
       );
     }
 
+    final totalPoints = widget.questions.fold<double>(
+      0,
+      (sum, q) => sum + (q.isScorable && q.hasScore ? q.score : 0),
+    );
+
     return Column(
       children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: context.primaryWith(0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.primaryWith(0.20)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.stars_rounded, size: 20, color: context.primary),
+              const SizedBox(width: 10),
+              Text(
+                l10n.isIndonesian
+                    ? 'Total Poin Form: ${totalPoints.round()} Poin (${widget.questions.length} Soal)'
+                    : 'Total Form Points: ${totalPoints.round()} Pts (${widget.questions.length} Questions)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: context.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -279,7 +310,7 @@ class _QuestionsTabState extends State<QuestionsTab> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: _QuestionCard(
-                  key: ValueKey(question.id),
+                  key: ValueKey('${question.id}_${question.type.name}'),
                   question: question,
                   index: index,
                   total: widget.questions.length,
@@ -362,6 +393,7 @@ class _QuestionCardState extends State<_QuestionCard> {
   Timer? _syncTimer;
   bool _isUpdatingDocument = false;
   String? _lastSyncedContent;
+  bool _showFormatting = false;
 
   @override
   void initState() {
@@ -820,75 +852,65 @@ class _QuestionCardState extends State<_QuestionCard> {
     final l10n = AppLocalizations.of(context);
     final hasImage = q.imageUrl != null && q.imageUrl!.isNotEmpty;
     final isDataUrl = hasImage && q.imageUrl!.startsWith('data:');
+    Widget? thumb;
+    if (hasImage) {
+      try {
+        thumb = isDataUrl
+            ? Image.memory(base64Decode(q.imageUrl!.split(',').last),
+                width: 44, height: 44, fit: BoxFit.cover)
+            : Image.network(q.imageUrl!,
+                width: 44, height: 44, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.broken_image_outlined, size: 20));
+      } catch (_) {
+        thumb = const Icon(Icons.broken_image_outlined, size: 20);
+      }
+    }
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(Icons.image_outlined, size: 16, color: isDark ? AppTheme.darkTextMuted : AppTheme.textMuted),
-              const SizedBox(width: 6),
-              Text(
-                l10n.isIndonesian ? 'Gambar Soal (Analisis Gambar)' : 'Question Image (Image Analysis)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary),
+          Expanded(
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                side: BorderSide(
+                    color: isDark ? AppTheme.darkBorder : AppTheme.border),
               ),
-              const Spacer(),
-              if (hasImage)
-                TextButton(
-                  onPressed: _removeQuestionImage,
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: AppTheme.error),
-                  child: Text(l10n.isIndonesian ? 'Hapus' : 'Remove', style: const TextStyle(fontSize: 12)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          if (hasImage)
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: double.infinity,
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    color: isDark ? AppTheme.darkSurface : AppTheme.surfaceLight,
-                    child: isDataUrl
-                        ? Image.memory(base64Decode(q.imageUrl!.split(',').last), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 80, child: Center(child: Icon(Icons.broken_image_outlined)) ))
-                        : Image.network(q.imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) {
-                            // fallback try dataUrl
-                            if (q.imageUrl!.startsWith('data:')) {
-                              try { return Image.memory(base64Decode(q.imageUrl!.split(',').last), fit: BoxFit.cover); } catch (_) {}
-                            }
-                            return const SizedBox(height: 80, child: Center(child: Icon(Icons.broken_image_outlined)));
-                          }),
-                  ),
-                ),
-                Positioned(top: 6, right: 6, child: InkWell(onTap: _pickQuestionImage, child: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.edit_rounded, size: 14, color: Colors.white)))),
-              ],
-            )
-          else
-            InkWell(
-              onTap: _pickQuestionImage,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurface : AppTheme.surfaceLight,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.border, style: BorderStyle.solid),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.add_photo_alternate_outlined, size: 28, color: context.primaryWith(0.7)),
-                    const SizedBox(height: 6),
-                    Text(l10n.isIndonesian ? 'Upload Gambar Soal' : 'Upload Question Image', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.primary)),
-                    const SizedBox(height: 2),
-                    Text(l10n.isIndonesian ? 'Untuk soal analisis gambar (maks 1 MB)' : 'For image analysis question (max 1 MB)', style: TextStyle(fontSize: 12, color: isDark ? AppTheme.darkTextMuted : AppTheme.textMuted)),
-                  ],
-                ),
+              onPressed: _pickQuestionImage,
+              icon: hasImage
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(6), child: thumb)
+                  : Icon(Icons.add_photo_alternate_outlined,
+                      size: 18, color: context.primary),
+              label: Text(
+                hasImage
+                    ? (l10n.isIndonesian ? 'Ganti gambar' : 'Change image')
+                    : (l10n.isIndonesian
+                        ? 'Tambah gambar (opsional)'
+                        : 'Add image (optional)'),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.textSecondary),
               ),
             ),
+          ),
+          if (hasImage) ...[
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: l10n.isIndonesian ? 'Hapus' : 'Remove',
+              onPressed: _removeQuestionImage,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              color: AppTheme.error,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ],
       ),
     );
@@ -907,69 +929,106 @@ class _QuestionCardState extends State<_QuestionCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          QuillSimpleToolbar(
-            controller: _controller,
-            config: QuillSimpleToolbarConfig(
-              multiRowsDisplay: false,
-              showHeaderStyle: false,
-              showFontFamily: false,
-              showFontSize: false,
-              showColorButton: false,
-              showBackgroundColorButton: false,
-              showClearFormat: false,
-              showSubscript: false,
-              showSuperscript: false,
-              showDirection: false,
-              showSearchButton: false,
-              showQuote: false,
-              showIndent: false,
-              showListCheck: false,
-              showListBullets: true,
-              showListNumbers: true,
-              showAlignmentButtons: true,
-              showLink: true,
-              showCodeBlock: false,
-              showBoldButton: true,
-              showItalicButton: true,
-              showUnderLineButton: true,
-              showStrikeThrough: true,
-              showInlineCode: true,
-              showUndo: true,
-              showRedo: true,
-              customButtons: [
-                QuillToolbarCustomButtonOptions(
-                  icon: const Icon(Icons.image_outlined, size: 18),
-                  tooltip: l10n.insertImageTooltip,
-                  onPressed: _insertImage,
+          Row(
+            children: [
+              const SizedBox(width: 12),
+              Text(
+                l10n.isIndonesian ? 'Pertanyaan / Teks Soal' : 'Question Text',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppTheme.darkTextMuted : AppTheme.textMuted,
                 ),
-                QuillToolbarCustomButtonOptions(
-                  icon: const Icon(Icons.functions_rounded, size: 18),
-                  tooltip: l10n.insertMathTooltip,
-                  onPressed: _insertMath,
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => setState(() => _showFormatting = !_showFormatting),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: _showFormatting
+                      ? context.primary
+                      : (isDark ? AppTheme.darkTextMuted : AppTheme.textMuted),
                 ),
-                QuillToolbarCustomButtonOptions(
-                  icon: const Icon(Icons.code_rounded, size: 18),
-                  tooltip: l10n.insertCodeTooltip,
-                  onPressed: _insertCode,
+                icon: Icon(
+                  _showFormatting
+                      ? Icons.text_format_rounded
+                      : Icons.format_color_text_rounded,
+                  size: 16,
                 ),
-              ],
+                label: Text(
+                  _showFormatting
+                      ? (l10n.isIndonesian ? 'Tutup Format' : 'Hide Format')
+                      : (l10n.isIndonesian ? 'Format Teks' : 'Formatting'),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          if (_showFormatting) ...[
+            QuillSimpleToolbar(
+              controller: _controller,
+              config: QuillSimpleToolbarConfig(
+                multiRowsDisplay: false,
+                showHeaderStyle: false,
+                showFontFamily: false,
+                showFontSize: false,
+                showColorButton: false,
+                showBackgroundColorButton: false,
+                showClearFormat: false,
+                showSubscript: false,
+                showSuperscript: false,
+                showDirection: false,
+                showSearchButton: false,
+                showQuote: false,
+                showIndent: false,
+                showListCheck: false,
+                showListBullets: true,
+                showListNumbers: true,
+                showAlignmentButtons: true,
+                showLink: true,
+                showCodeBlock: false,
+                showBoldButton: true,
+                showItalicButton: true,
+                showUnderLineButton: true,
+                showStrikeThrough: true,
+                showInlineCode: true,
+                showUndo: true,
+                showRedo: true,
+                customButtons: [
+                  QuillToolbarCustomButtonOptions(
+                    icon: const Icon(Icons.image_outlined, size: 18),
+                    tooltip: l10n.insertImageTooltip,
+                    onPressed: _insertImage,
+                  ),
+                  QuillToolbarCustomButtonOptions(
+                    icon: const Icon(Icons.functions_rounded, size: 18),
+                    tooltip: l10n.insertMathTooltip,
+                    onPressed: _insertMath,
+                  ),
+                  QuillToolbarCustomButtonOptions(
+                    icon: const Icon(Icons.code_rounded, size: 18),
+                    tooltip: l10n.insertCodeTooltip,
+                    onPressed: _insertCode,
+                  ),
+                ],
+              ),
             ),
-          ),
-          Container(
-            height: 1,
-            color: isDark ? AppTheme.darkBorder : AppTheme.border,
-          ),
+            Container(
+              height: 1,
+              color: isDark ? AppTheme.darkBorder : AppTheme.border,
+            ),
+          ],
           QuillEditor(
             controller: _controller,
             focusNode: _focusNode,
             scrollController: _scrollController,
             config: QuillEditorConfig(
               placeholder: l10n.writeQuestionHere,
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               autoFocus: false,
               expands: false,
               scrollable: true,
-              minHeight: 80,
+              minHeight: 70,
               maxHeight: 180,
               embedBuilders: buildQuillEmbedBuilders(),
             ),

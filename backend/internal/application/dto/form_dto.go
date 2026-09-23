@@ -49,6 +49,7 @@ type UpdateFormSettingsRequest struct {
 	// Exam Token / Passcode
 	ExamToken          *string    `json:"exam_token"`
 	IsTokenProtected   *bool      `json:"is_token_protected"`
+	ResultVisibility   *string    `json:"result_visibility"`
 }
 
 type FormResponseDTO struct {

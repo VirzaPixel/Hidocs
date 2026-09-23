@@ -182,6 +182,14 @@ class FormModel {
         ? ((settings['duration_minutes'] as num).toInt()).clamp(0, 100000)
         : 0;
 
+    final rawResultVisibility =
+        (settings['result_visibility'] ?? 'hidden').toString();
+    final parsedResultVisibility = rawResultVisibility == 'result_and_score'
+        ? ResultVisibility.resultAndScore
+        : rawResultVisibility == 'result_only'
+            ? ResultVisibility.resultOnly
+            : ResultVisibility.hidden;
+
     final parsedFormType = (rawType == 'EXAM' || parsedDuration > 0)
         ? FormType.exam
         : FormType.survey;
@@ -215,6 +223,7 @@ class FormModel {
       themeColor: parsedThemeColor.isEmpty ? '#4F46E5' : parsedThemeColor,
       coverGradient: parsedCoverGradient,
       isActive: parsedIsActive,
+      resultVisibility: parsedResultVisibility,
       questions: json['questions'] is List
           ? (json['questions'] as List)
                 .whereType<Map>()
@@ -305,6 +314,11 @@ class FormModel {
       'cover_gradient': coverGradient,
       'exam_token': examToken.trim().isEmpty ? null : examToken.trim(),
       'is_token_protected': isTokenProtected,
+      'result_visibility': resultVisibility == ResultVisibility.resultAndScore
+          ? 'result_and_score'
+          : resultVisibility == ResultVisibility.resultOnly
+              ? 'result_only'
+              : 'hidden',
     };
   }
 }

@@ -264,6 +264,9 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 	if req.IsTokenProtected != nil {
 		settings.IsTokenProtected = *req.IsTokenProtected
 	}
+	if req.ResultVisibility != nil {
+		settings.ResultVisibility = *req.ResultVisibility
+	}
 	if req.MaxAttempts != nil {
 		settings.MaxAttempts = *req.MaxAttempts
 	} else if existingSettings != nil {

@@ -377,8 +377,9 @@ class OptionModel {
   }
 
   Map<String, dynamic> toOptionJson({int orderIndex = 1}) {
+    final cleanText = text.trim();
     final map = <String, dynamic>{
-      'option_text': text,
+      'option_text': cleanText.isEmpty ? 'Opsi $orderIndex' : cleanText,
       'is_correct': isCorrect || score > 0,
       'order_index': orderIndex,
     };    if (imageUrl != null && imageUrl!.isNotEmpty) {

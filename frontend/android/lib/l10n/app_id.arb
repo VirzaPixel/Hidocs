@@ -520,5 +520,6 @@
     }
   },
   "filterAll": "Semua",
-  "categoryFilterHint": "Filter kategori"
+  "categoryFilterHint": "Filter kategori",
+  "authFooterTagline": "HiDocs • Formulir Dinamis & Platform Asesmen Cerdas"
 }

@@ -2905,6 +2905,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Filter by category'**
   String get categoryFilterHint;
+
+  /// No description provided for @authFooterTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'HiDocs • Dynamic Form & Smart Assessment Platform'**
+  String get authFooterTagline;
 }
 
 class _AppLocalizationsDelegate

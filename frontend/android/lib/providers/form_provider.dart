@@ -465,6 +465,14 @@ class FormProvider extends ChangeNotifier {
           body: form.toSettingsJson(),
         );
       } catch (_) {}
+      for (var i = 0; i < form.questions.length; i++) {
+        try {
+          await ApiClient.post(
+            '/forms/${created.id}/questions',
+            body: form.questions[i].toQuestionJson(orderIndex: i + 1),
+          );
+        } catch (_) {}
+      }
       _isLoading = false;
       notifyListeners();
       return true;
@@ -493,6 +501,22 @@ class FormProvider extends ChangeNotifier {
           body: form.toSettingsJson(),
         );
       } catch (_) {}
+      for (var i = 0; i < form.questions.length; i++) {
+        try {
+          final q = form.questions[i];
+          if (q.id.startsWith('q') && q.id.length > 10) {
+            await ApiClient.post(
+              '/forms/${form.id}/questions',
+              body: q.toQuestionJson(orderIndex: i + 1),
+            );
+          } else {
+            await ApiClient.put(
+              '/questions/${q.id}',
+              body: q.toQuestionJson(orderIndex: i + 1),
+            );
+          }
+        } catch (_) {}
+      }
       final updated =
           data is Map ? FormModel.fromJson({...data}) : form;
       final index = _forms.indexWhere((f) => f.id == form.id);

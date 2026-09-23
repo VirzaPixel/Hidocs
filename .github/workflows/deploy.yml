@@ -1,4 +1,4 @@
-name: Deploy Backend & Database Hidocs to VPS
+name: Deploy Hidocs (Backend, Frontend & Database) to VPS
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'frontend/web/**'
       - 'docker-compose.yml'
       - '.github/workflows/**'
 

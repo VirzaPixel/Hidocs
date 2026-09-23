@@ -454,9 +454,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment:
-              MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
           children: [
             Text('Belum menerima kode?',
               style: TextStyle(
@@ -464,78 +465,60 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 color: mutedColor,
               ),
             ),
-            Row(
-              mainAxisSize:
-                  MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onTap: isExpired
-                      ? _handleResendOtp
-                      : null,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration:
-                        BoxDecoration(
-                      color: isExpired
-                          ? primaryColor
-                              .withValues(
-                              alpha: 0.09,
-                            )
-                          : mutedColor
-                              .withValues(
-                              alpha: 0.07,
-                            ),
-                      borderRadius:
-                          BorderRadius.circular(
-                        20,
-                      ),
-                      border: Border.all(
-                        color: isExpired
-                            ? primaryColor
-                                .withValues(
-                                alpha: 0.30,
-                              )
-                            : mutedColor
-                                .withValues(
-                                alpha: 0.18,
-                              ),
-                      ),
-                    ),
-                    child: Text(
-                      l10n.resendOtp,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight:
-                            FontWeight.w700,
-                        color: isExpired
-                            ? primaryColor
-                            : mutedColor
-                                .withValues(
-                                alpha: 0.4,
-                              ),
-                      ),
-                    ),
+            GestureDetector(
+              onTap: isExpired
+                  ? _handleResendOtp
+                  : null,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration:
+                    BoxDecoration(
+                  color: isExpired
+                      ? primaryColor
+                          .withValues(
+                          alpha: 0.09,
+                        )
+                      : mutedColor
+                          .withValues(
+                          alpha: 0.07,
+                        ),
+                  borderRadius:
+                      BorderRadius.circular(
+                    20,
+                  ),
+                  border: Border.all(
+                    color: isExpired
+                        ? primaryColor
+                            .withValues(
+                            alpha: 0.30,
+                          )
+                        : mutedColor
+                            .withValues(
+                            alpha: 0.18,
+                          ),
                   ),
                 ),
-                if (!isExpired) ...[
-                  const SizedBox(width: 10),
-                  Text(
-                    _formatCooldown(
-                      _resendCooldown,
-                    ),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight:
-                          FontWeight.w700,
-                      color: mutedColor,
-                    ),
+                child: Text(
+                  isExpired
+                      ? l10n.resendOtp
+                      : '${l10n.resendOtp} (${_formatCooldown(_resendCooldown)})',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        FontWeight.w700,
+                    color: isExpired
+                        ? primaryColor
+                        : mutedColor
+                            .withValues(
+                            alpha: 0.4,
+                          ),
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
           ],
         ),
@@ -804,6 +787,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final size =
         MediaQuery.of(context).size;
 
+    final l10n = AppLocalizations.of(context);
+
     final bottom =
         MediaQuery.of(context)
             .viewInsets
@@ -994,7 +979,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         height: 22,
                       ),
                       Text(
-                        'HiDocs • Dynamic Form & Smart Assessment Platform',
+                        l10n.authFooterTagline,
                         textAlign:
                             TextAlign.center,
                         style: TextStyle(
