@@ -47,7 +47,7 @@ export default function LoginPage() {
   return (
     <AuthLayout title="Masuk" subtitle="Kelola form dan soal ujianmu">
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-        <Input label="Email" type="email" placeholder="guru@sekolah.sch.id" error={errors.email?.message} {...register('email')} />
+        <Input label="Email" type="email" placeholder="email@example.com" error={errors.email?.message} {...register('email')} />
         <Input label="Password" type="password" placeholder="••••••••" error={errors.password?.message} {...register('password')} />
         <div className="flex justify-end">
           <Link to="/forgot-password" className="text-sm text-primary hover:underline">

@@ -1,13 +1,11 @@
-import { FileText } from 'lucide-react';
+import hidocsLogo from '../../assets/images/logo.png';
 
 export default function AuthLayout({ title, subtitle, children }) {
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-bg-secondary px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white">
-            <FileText size={22} />
-          </div>
+          <img src={hidocsLogo} alt="HiDocs Logo" className="h-12 w-12 rounded-xl object-contain" />
           <h1 className="text-xl font-bold text-text">HiDocs</h1>
         </div>
         <div className="rounded-xl border border-border bg-surface p-6 shadow-sm sm:p-8">
