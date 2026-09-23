@@ -1,15 +1,27 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Library, UserCircle, Sun, Moon, LogOut, Menu } from 'lucide-react';
-import hidocsLogo from '../../assets/hidocs-logo.png';
+import { LayoutDashboard, Library, UserCircle, Sun, Moon, LogOut, Menu, Users, FileText, Activity, ShieldCheck, Shield } from 'lucide-react';
+import hidocsLogo from '../../assets/images/logo.png';
 import { useAuthStore } from '../../store/authStore';
 import { useTheme } from '../../lib/useTheme';
 import { cn, resolveMediaUrl } from '../../lib/utils';
+import { Badge } from '../ui';
 
-const NAV_ITEMS = [
+const USER_NAV_ITEMS = [
   { to: '/dashboard', label: 'Form Saya', icon: LayoutDashboard },
   { to: '/question-bank', label: 'Bank Soal', icon: Library },
   { to: '/profile', label: 'Profil', icon: UserCircle },
+];
+
+const ADMIN_NAV_ITEMS = [
+  { to: '/admin/dashboard', label: 'Ringkasan Admin', icon: ShieldCheck },
+  { to: '/admin/creators', label: 'Kelola Creator', icon: Users },
+  { to: '/admin/forms', label: 'Semua Form', icon: FileText },
+  { to: '/admin/metrics', label: 'Telemetri & Metrik', icon: Activity },
+];
+
+const SUPERADMIN_NAV_ITEMS = [
+  { to: '/superadmin/admins', label: 'Kelola Admin', icon: Shield },
 ];
 
 export default function AppLayout() {
@@ -27,7 +39,7 @@ export default function AppLayout() {
     <div className="flex h-screen w-full overflow-hidden bg-bg">
       {/* Sidebar - desktop */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
-        <SidebarContent onNavigate={() => {}} />
+        <SidebarContent user={user} onNavigate={() => {}} />
       </aside>
 
       {/* Sidebar - mobile drawer */}
@@ -35,7 +47,7 @@ export default function AppLayout() {
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="relative z-10 flex h-full w-64 flex-col border-r border-border bg-surface">
-            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent user={user} onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
@@ -63,7 +75,12 @@ export default function AppLayout() {
               <button onClick={() => navigate('/profile')} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-semibold text-primary" title="Buka profil">
                 {user?.avatar_url ? <img src={resolveMediaUrl(user.avatar_url)} alt="Foto profil" className="h-full w-full object-cover" /> : user?.name?.[0]?.toUpperCase() || 'G'}
               </button>
-              <span className="hidden text-sm font-medium text-text sm:block">{user?.name}</span>
+              <div className="hidden flex-col sm:flex">
+                <span className="text-sm font-medium text-text leading-tight">{user?.name}</span>
+                {user?.role && user.role !== 'user' && (
+                  <span className="text-[10px] font-semibold text-primary uppercase">{user.role}</span>
+                )}
+              </div>
             </div>
             <button
               onClick={handleLogout}
@@ -85,36 +102,114 @@ export default function AppLayout() {
   );
 }
 
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ user, onNavigate }) {
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperAdmin = user?.role === 'superadmin';
+
   return (
     <>
-      <div className="flex h-16 shrink-0 items-center gap-2 border-b border-border px-5">
-        <img src={hidocsLogo} alt="HiDocs" className="h-8 w-8 rounded-lg object-contain" />
-        <span className="text-lg font-bold text-text">HiDocs</span>
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
+        <div className="flex items-center gap-2">
+          <img src={hidocsLogo} alt="HiDocs" className="h-8 w-8 rounded-lg object-contain" />
+          <span className="text-lg font-bold text-text">HiDocs</span>
+        </div>
+        {user?.role && user.role !== 'user' && (
+          <Badge className="bg-primary/15 text-primary capitalize font-medium text-[11px]">
+            {user.role}
+          </Badge>
+        )}
       </div>
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-text-secondary hover:bg-bg-secondary hover:text-text'
-              )
-            }
-          >
-            <item.icon size={18} />
-            {item.label}
-          </NavLink>
-        ))}
+
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+        {isAdmin && (
+          <div>
+            <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+              Admin Panel
+            </div>
+            <div className="space-y-1">
+              {ADMIN_NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-text-secondary hover:bg-bg-secondary hover:text-text'
+                    )
+                  }
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isSuperAdmin && (
+          <div>
+            <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+              SuperAdmin
+            </div>
+            <div className="space-y-1">
+              {SUPERADMIN_NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-text-secondary hover:bg-bg-secondary hover:text-text'
+                    )
+                  }
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          {isAdmin && (
+            <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+              Creator Space
+            </div>
+          )}
+          <div className="space-y-1">
+            {USER_NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-text-secondary hover:bg-bg-secondary hover:text-text'
+                  )
+                }
+              >
+                <item.icon size={18} />
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
       </nav>
+
       <div className="border-t border-border px-5 py-4 text-xs text-text-secondary">
         HiDocs Form Maker
       </div>
     </>
   );
 }
+

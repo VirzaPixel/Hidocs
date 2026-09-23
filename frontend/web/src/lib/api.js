@@ -118,3 +118,30 @@ export const aiApi = {
       timeout: AI_TIMEOUT_MS,
     }),
 };
+
+/* ============================= ADMIN ============================= */
+export const adminApi = {
+  getDashboardStats: () => apiClient.get('/admin/dashboard/stats'),
+  listCreators: () => apiClient.get('/admin/creators'),
+  createCreator: (payload) => apiClient.post('/admin/creators', payload),
+  updateCreatorStatus: (creatorId, isActive) =>
+    apiClient.put(`/admin/creators/${creatorId}/status`, { is_active: isActive }),
+  listAllForms: () => apiClient.get('/admin/forms'),
+  deleteForm: (formId) => apiClient.delete(`/admin/forms/${formId}`),
+};
+
+/* ============================= METRICS ============================= */
+export const metricsApi = {
+  getRealtimeMetrics: () => apiClient.get('/admin/metrics/realtime'),
+  getSystemMetrics: () => apiClient.get('/admin/metrics/system'),
+  getLiveExams: () => apiClient.get('/admin/metrics/live-exams'),
+  getTrafficHistory: (duration = '1h') => apiClient.get('/admin/metrics/traffic-history', { params: { duration } }),
+  getFormMetrics: (formId) => apiClient.get(`/admin/metrics/forms/${formId}`),
+};
+
+/* ============================= SUPERADMIN ============================= */
+export const superadminApi = {
+  createAdmin: (payload) => apiClient.post('/superadmin/create-admin', payload),
+  listAdmins: () => apiClient.get('/superadmin/list-admin'),
+};
+
