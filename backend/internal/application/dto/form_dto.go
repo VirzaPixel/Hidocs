@@ -98,6 +98,9 @@ type PublicFormSettings struct {
 	ShowQuestionNumber  bool       `json:"show_question_number"`
 	FullscreenMode      bool       `json:"fullscreen_mode"`
 	IsTokenProtected    bool       `json:"is_token_protected"`
+	// Hasil penilaian: "hidden" | "result_only" | "result_and_score".
+	// Tanpa field ini responden tidak pernah tahu hasil/form disembunyikan.
+	ResultVisibility    string     `json:"result_visibility"`
 }
 
 type PublicQuestionDTO struct {

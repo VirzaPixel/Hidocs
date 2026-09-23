@@ -358,6 +358,7 @@ func (s *formService) GetPublicForm(ctx context.Context, identifier string) (*dt
 			ShowQuestionNumber:  form.FormSettings.ShowQuestionNumber,
 			FullscreenMode:      form.FormSettings.FullscreenMode,
 			IsTokenProtected:    isProtected,
+			ResultVisibility:    form.FormSettings.ResultVisibility,
 		}
 	}
 

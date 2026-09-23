@@ -111,6 +111,24 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		questionsMap[q.ID] = q
 	}
 
+	// Kumpulkan seluruh jawaban terpilih per soal lebih dulu. Soal CHECKBOXES
+	// (kotak centang) dikirim oleh klien sebagai SATU BARIS jawaban per opsi
+	// yang dipilih, jadi penilaiannya harus memakai seluruh pilihan sekaligus —
+	// sama seperti Google Forms (all-or-nothing: semua kunci benar & tanpa
+	// pilihan salah baru dapat penuh).
+	selectedByQuestion := make(map[uuid.UUID]map[uuid.UUID]bool)
+	for _, ansReq := range req.Answers {
+		if ansReq.SelectedOptionID == nil {
+			continue
+		}
+		if selectedByQuestion[ansReq.QuestionID] == nil {
+			selectedByQuestion[ansReq.QuestionID] = make(map[uuid.UUID]bool)
+		}
+		selectedByQuestion[ansReq.QuestionID][*ansReq.SelectedOptionID] = true
+	}
+	// Mencegah poin soal yang sama dihitung lebih dari sekali.
+	gradedQuestions := make(map[uuid.UUID]bool)
+
 	for _, ansReq := range req.Answers {
 		q, exists := questionsMap[ansReq.QuestionID]
 		if !exists {
@@ -143,6 +161,35 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 					scoreGiven = float64(q.Points)
 					totalScore += scoreGiven
 					break
+				}
+			}
+		}
+
+		// 1b. Auto-Grading for CHECKBOXES (multi jawaban, all-or-nothing ala
+		// Google Forms). Hanya baris PERTAMA dari soal tersebut yang membawa
+		// poin supaya jawaban multi-baris tidak dihitung berkali-kali.
+		if q.IsAutoScored && q.QuestionType == domain.TypeCheckboxes && !gradedQuestions[q.ID] {
+			gradedQuestions[q.ID] = true
+
+			selected := selectedByQuestion[q.ID]
+			correctIDs := make(map[uuid.UUID]bool, len(q.Options))
+			for _, opt := range q.Options {
+				if opt.IsCorrect {
+					correctIDs[opt.ID] = true
+				}
+			}
+
+			if len(correctIDs) > 0 && len(selected) == len(correctIDs) {
+				exactMatch := true
+				for id := range selected {
+					if !correctIDs[id] {
+						exactMatch = false
+						break
+					}
+				}
+				if exactMatch {
+					scoreGiven = float64(q.Points)
+					totalScore += scoreGiven
 				}
 			}
 		}
