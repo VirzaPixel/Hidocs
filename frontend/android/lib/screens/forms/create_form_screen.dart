@@ -5,6 +5,7 @@ import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/providers/form_provider.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/models/question_model.dart';
 import 'package:hi_docs/utils/constants.dart';
@@ -393,6 +394,32 @@ class _CreateFormScreenState extends State<CreateFormScreen>
     }
   }
 
+  /// Aksi cepat "nilai semua soal" / "hapus nilai" (ala Google Forms).
+  void _setScoringForAll(bool enabled) {
+    setState(() {
+      for (final q in _questions) {
+        if (!q.isScorable) continue;
+        q.hasScore = enabled;
+        if (enabled) {
+          if (q.score <= 0) q.score = 10;
+        } else {
+          q.score = 0;
+        }
+      }
+    });
+  }
+
+  /// Terapkan nilai poin yang sama ke seluruh soal yang sedang dinilai.
+  void _applyPointsToAll(int points) {
+    final clamped = points.clamp(0, 100).toDouble();
+    setState(() {
+      for (final q in _questions) {
+        if (!q.isScorable || !q.hasScore) continue;
+        q.score = clamped;
+      }
+    });
+  }
+
   Future<void> _saveForm() async {
     if (_isSaving) return;
 
@@ -424,10 +451,14 @@ class _CreateFormScreenState extends State<CreateFormScreen>
         return;
       }
       final q = _questions[i];
+      // Pilihan ganda, kotak centang, pilihan gambar & ya/tidak wajib punya
+      // minimal satu kunci jawaban BENAR hanya jika soal ikut dinilai
+      // (seperti Google Forms: soal survei boleh tanpa kunci).
       final isChoice = q.type == QuestionType.multipleChoice ||
+          q.type == QuestionType.checkbox ||
           q.type == QuestionType.imageChoice ||
           q.type == QuestionType.yesNo;
-      if (isChoice) {
+      if (isChoice && q.hasScore) {
         final hasCorrect = q.options.any((o) => o.isCorrect);
         if (!hasCorrect) {
           _showMessage(
@@ -437,6 +468,17 @@ class _CreateFormScreenState extends State<CreateFormScreen>
           _tabCtrl.animateTo(2);
           return;
         }
+      }
+      if (q.type == QuestionType.matching &&
+          !q.matchingPairs.any((p) => p.isComplete)) {
+        _showMessage(
+          l10n.isIndonesian
+              ? 'Soal ${i + 1}: pasangan yang dicocokkan masih kosong.'
+              : 'Question ${i + 1}: matching pairs are still empty.',
+          backgroundColor: AppTheme.warning,
+        );
+        _tabCtrl.animateTo(2);
+        return;
       }
     }
 
@@ -552,14 +594,20 @@ class _CreateFormScreenState extends State<CreateFormScreen>
 
     Navigator.pop(context);
 
+    final warning = formProvider.saveWarning;
+    formProvider.clearSaveWarning();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          editing != null
-              ? l10n.formUpdatedSuccess
-              : l10n.formCreatedSuccess,
+          warning ??
+              (editing != null
+                  ? l10n.formUpdatedSuccess
+                  : l10n.formCreatedSuccess),
         ),
+        backgroundColor: warning == null ? null : AppTheme.warning,
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: warning == null ? 3 : 6),
       ),
     );
   }
@@ -674,6 +722,9 @@ class _CreateFormScreenState extends State<CreateFormScreen>
                   _isTokenProtected = value;
                 });
               },
+              questions: _questions,
+              onSetScoringForAll: _setScoringForAll,
+              onApplyPointsToAll: _applyPointsToAll,
               shuffleQuestion: _shuffleQ,
               shuffleOption: _shuffleO,
               oneTime: _oneTime,

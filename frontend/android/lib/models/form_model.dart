@@ -126,13 +126,16 @@ class FormModel {
   bool get hasTimer =>
       timerMinutes > 0;
 
-  bool get isExam => formType == FormType.exam || hasTimer || typeForApi == 'EXAM';
+  bool get isExam => formType == FormType.exam;
   bool get isSurvey => !isExam;
 
   Duration get scheduleDuration =>
       scheduledClose.difference(scheduledOpen);
 
-  String get typeForApi => (formType == FormType.exam || hasTimer) ? 'EXAM' : 'SURVEY';
+  /// Form type sent to the API. IMPORTANT: this used to return EXAM whenever a
+  /// duration limit was set, so picking "Mode Survei" + a timer silently saved
+  /// the form as an exam and the survey/exam toggle appeared broken.
+  String get typeForApi => formType == FormType.exam ? 'EXAM' : 'SURVEY';
 
   factory FormModel.fromJson(Map<String, dynamic> json) {
     Map<String, dynamic> settings =
@@ -190,9 +193,8 @@ class FormModel {
             ? ResultVisibility.resultOnly
             : ResultVisibility.hidden;
 
-    final parsedFormType = (rawType == 'EXAM' || parsedDuration > 0)
-        ? FormType.exam
-        : FormType.survey;
+    final parsedFormType =
+        rawType == 'EXAM' ? FormType.exam : FormType.survey;
 
     final parsedThemeColor =
         (settings['theme_color'] ?? json['theme_color'] ?? '#4F46E5')
@@ -304,7 +306,9 @@ class FormModel {
       'type': typeForApi,
       'duration_minutes': hasTimer ? timerMinutes : null,
       'auto_active_days': 30,
-      'is_active_immediately': true,
+      // Sebelumnya selalu `true` sehingga toggle "Aktif Langsung" di halaman
+      // pengaturan form tidak berpengaruh sama sekali.
+      'is_active_immediately': isActive,
       'is_one_time_submission': oneTimeOnly,
       'randomize_questions': shuffleQuestions,
       'randomize_options': shuffleOptions,
@@ -312,8 +316,12 @@ class FormModel {
       'end_time': hasSchedule ? scheduledClose.toUtc().toIso8601String() : null,
       'theme_color': themeColor,
       'cover_gradient': coverGradient,
-      'exam_token': examToken.trim().isEmpty ? null : examToken.trim(),
-      'is_token_protected': isTokenProtected,
+      // Token proteksi hanya relevan untuk mode ujian. Mengirim nilai kosong
+      // saat mode survei membuat token lama tidak "nyangkut" di server.
+      'exam_token': isExam && examToken.trim().isNotEmpty
+          ? examToken.trim()
+          : '',
+      'is_token_protected': isExam && isTokenProtected,
       'result_visibility': resultVisibility == ResultVisibility.resultAndScore
           ? 'result_and_score'
           : resultVisibility == ResultVisibility.resultOnly

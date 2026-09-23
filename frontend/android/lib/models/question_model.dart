@@ -116,12 +116,24 @@ class MatchingPair {
   }
 
   Map<String, dynamic> toJson({int orderIndex = 1}) {
+    final cleanLeft = left.trim();
+    final cleanRight = right.trim();
     return {
-      'option_text': left,
-      'match_text': right,
+      // The backend requires `option_text` (binding:required), so never send an
+      // empty string — otherwise POST /forms/{id}/questions answers with
+      // "Invalid request payload".
+      'option_text': cleanLeft.isEmpty ? 'Pasangan $orderIndex' : cleanLeft,
+      // The backend stores the pair as match_key + match_target_text
+      // (see domain.QuestionOption). Sending `match_text` was silently dropped
+      // so matching questions could never be auto-graded.
+      'match_key': cleanLeft,
+      'match_target_text': cleanRight,
       'order_index': orderIndex,
     };
   }
+
+  /// A pair only makes sense when both sides are filled.
+  bool get isComplete => left.trim().isNotEmpty && right.trim().isNotEmpty;
 }
 
 class QuestionModel {
@@ -282,6 +294,27 @@ class QuestionModel {
     );
   }
 
+  /// Checkbox questions accept more than one correct option (Google-Forms
+  /// like); every other choice type is single-answer.
+  bool get allowsMultipleCorrectAnswers => type == QuestionType.checkbox;
+
+  /// Number of options flagged as the correct answer.
+  int get correctOptionCount => options.where((o) => o.isCorrect).length;
+
+  /// Choice based questions must have at least one correct option before they
+  /// can be auto-scored (and before the form may be saved).
+  bool get requiresCorrectOption {
+    switch (type) {
+      case QuestionType.multipleChoice:
+      case QuestionType.checkbox:
+      case QuestionType.yesNo:
+      case QuestionType.imageChoice:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   Map<String, dynamic> toQuestionJson({int orderIndex = 1}) {
     String questionText;
     switch (type) {
@@ -315,6 +348,8 @@ class QuestionModel {
       'is_required': isRequired,
       'options': type == QuestionType.matching
           ? matchingPairs
+              .where((p) => p.isComplete)
+              .toList()
               .asMap()
               .entries
               .map((e) => e.value.toJson(orderIndex: e.key + 1))

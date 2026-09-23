@@ -69,9 +69,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _startCooldownTimer() {
+    void _startCooldownTimer() {
     _timer?.cancel();
 
+    // 180 detik (3 menit) adalah jeda aman agar user tidak kebakkaan
+    // resend OTP. `setState` dipanggil tiap detik untuk memperbarui tampilan
+    // "Resend (x:xx)" — timer *harus* berhenti tepat pada 0 dan dibatalkan
+    // sebelum halaman di-pop agar tidak ada `setState` pada widget
+    // yang sudah tidak terpasang lagi.
     setState(() => _resendCooldown = 180);
 
     _timer = Timer.periodic(
@@ -172,7 +177,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    if (success) {
+            if (success) {
+      // Hentikan timer cooldown agar tidak ada `setState` yang menyala
+      // setelah halaman ini terganti (menghindari setState-after-pop).
+      _timer?.cancel();
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/',

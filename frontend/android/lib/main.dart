@@ -13,10 +13,9 @@ import 'package:hi_docs/providers/response_provider.dart';
 import 'package:hi_docs/screens/auth/login_screen.dart';
 import 'package:hi_docs/screens/auth/register_screen.dart';
 import 'package:hi_docs/screens/auth/role_selection_screen.dart';
+import 'package:hi_docs/screens/auth/admin_blocked_screen.dart';
 import 'package:hi_docs/screens/home/user_home_screen.dart';
 import 'package:hi_docs/screens/home/creator_home_screen.dart';
-import 'package:hi_docs/screens/admin/admin_dashboard_screen.dart';
-import 'package:hi_docs/screens/admin/admin_traffic_screen.dart';
 import 'package:hi_docs/screens/exam/scan_form_screen.dart';
 import 'package:hi_docs/screens/exam/link_input_screen.dart';
 import 'package:hi_docs/screens/exam/deep_link_form_screen.dart';
@@ -112,18 +111,11 @@ class FormMakerApp extends StatelessWidget {
                   break;
                 case '/admin-home':
                 case '/super-admin-home':
-                  page = const _GuardedRoute(
-                    allow: RoleGate.canAccessAdmin,
-                    fallback: NotFoundScreen(),
-                    child: AdminDashboardScreen(),
-                  );
-                  break;
                 case '/admin-traffic':
-                  page = const _GuardedRoute(
-                    allow: RoleGate.canAccessAdmin,
-                    fallback: NotFoundScreen(),
-                    child: AdminTrafficScreen(),
-                  );
+                  // Dashboard admin TIDAK didukung di aplikasi Android
+                  // (sebelumnya mem-blank-kan layar) → arahkan ke layar
+                  // penjelasan.
+                  page = const AdminBlockedScreen();
                   break;
                 case '/scan-form':
                   page = const ScanFormScreen();
@@ -184,8 +176,10 @@ class _RoleGateState extends State<RoleGate> {
     if (!auth.isLoggedIn) {
       return const LoginScreen();
     }
-    if (auth.isSuperAdmin || auth.isAdmin) {
-      return const AdminDashboardScreen();
+    if (auth.isAdminRole) {
+      // Dashboard admin tidak didukung di Android — layar penjelasan ini
+      // menggantikan AdminDashboardScreen yang sebelumnya blank putih.
+      return const AdminBlockedScreen();
     }
     if (auth.isCreatorMode) {
       return const CreatorHomeScreen();

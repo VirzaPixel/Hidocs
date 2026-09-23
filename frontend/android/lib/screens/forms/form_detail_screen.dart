@@ -100,7 +100,7 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
           SliverAppBar(
             expandedHeight: 180,
             pinned: true,
-            backgroundColor: FormTheme.primaryOf(_form.themeColor),
+            backgroundColor: FormTheme.resolvePrimary(context, _form.themeColor),
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
@@ -239,8 +239,8 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
-                  gradient: FormTheme.headerGradient(
-                      _form.themeColor, _form.coverGradient),
+                  gradient: FormTheme.resolveHeaderGradient(
+                      context, _form.themeColor, _form.coverGradient),
                 ),
                 child: SafeArea(
                   child: Padding(
@@ -297,7 +297,7 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
                           icon: Icons.group_outlined,
                           value: '${_form.totalResponses}',
                           label: 'Responses',
-                          iconColor: const Color(0xFF0D1B2A),
+                          iconColor: context.primary,
                         ),
                         Container(width: 1, height: 44, color: borderClr),
                         _StatColumn(
@@ -317,7 +317,7 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
                     decoration: BoxDecoration(
                       color: isDark
                           ? AppTheme.darkCard
-                          : const Color(0xFFEFF4FA),
+                          : context.primaryLightWith(0.35),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isDark

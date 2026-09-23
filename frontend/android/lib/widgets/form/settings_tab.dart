@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
+import 'package:hi_docs/models/question_model.dart';
 import 'package:hi_docs/utils/constants.dart';
 
 class SettingsTab extends StatelessWidget {
@@ -16,6 +18,12 @@ class SettingsTab extends StatelessWidget {
   final int timerMinutes;
   final String examToken;
   final bool isTokenProtected;
+
+  /// Daftar soal live dari layar create/edit form — dipakai kartu "Penilaian
+  /// Poin" untuk menghitung total poin form dan menerapkan poin massal.
+  final List<QuestionModel> questions;
+  final ValueChanged<bool> onSetScoringForAll;
+  final ValueChanged<int> onApplyPointsToAll;
 
   final ValueChanged<FormType>? onFormTypeChanged;
   final ValueChanged<bool> onShuffleQuestion;
@@ -38,6 +46,9 @@ class SettingsTab extends StatelessWidget {
     required this.timerMinutes,
     this.examToken = '',
     this.isTokenProtected = false,
+    this.questions = const [],
+    required this.onSetScoringForAll,
+    required this.onApplyPointsToAll,
     required this.onShuffleQuestion,
     required this.onShuffleOption,
     required this.onOneTime,
@@ -107,8 +118,8 @@ class SettingsTab extends StatelessWidget {
         _SwitchCard(
           key: const ValueKey('shuffle_option'),
           icon: Icons.swap_vert_rounded,
-          iconColor: const Color(0xFF7B2FBE),
-          iconBg: const Color(0xFF7B2FBE).withValues(alpha: 0.10),
+          iconColor: context.primary,
+          iconBg: context.primaryFaint,
           title: l10n.shuffleOptionsTitle,
           subtitle: l10n.shuffleOptionsSub,
           value: shuffleOption,
@@ -178,6 +189,36 @@ class SettingsTab extends StatelessWidget {
           value: ResultVisibility.resultAndScore,
           groupValue: visibility,
           onChanged: onVisibility,
+          isDark: isDark,
+        ),
+        const SizedBox(height: 28),
+
+        // ----------------------------------------------------------------
+        // PENILAIAN POIN — logika sederhana ala Google Forms:
+        //   * setiap soal punya poinnya sendiri (0 = tidak dinilai)
+        //   * total poin form = jumlah seluruh poin soal yang dinilai
+        //   * guru cukup memakai aksi cepat tanpa membuka tiap soal
+        // ----------------------------------------------------------------
+        _SectionLabel(
+          l10n.isIndonesian ? 'Penilaian Poin' : 'Points & Scoring',
+          Icons.grade_rounded,
+          isDark,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          l10n.isIndonesian
+              ? 'Setiap soal punya poin sendiri. Total poin form adalah jumlah seluruh poin soal yang dinilai.'
+              : 'Each question has its own points. The form total is the sum of all scored questions.',
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _ScoringCard(
+          questions: questions,
+          onSetScoringForAll: onSetScoringForAll,
+          onApplyPointsToAll: onApplyPointsToAll,
           isDark: isDark,
         ),
       ],
@@ -489,6 +530,241 @@ class _RadioCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kartu ringkas penilaian poin ala Google Forms: total poin form + aksi cepat
+/// untuk mengaktifkan/menonaktifkan poin seluruh soal sekaligus.
+class _ScoringCard extends StatelessWidget {
+  final List<QuestionModel> questions;
+  final ValueChanged<bool> onSetScoringForAll;
+  final ValueChanged<int> onApplyPointsToAll;
+  final bool isDark;
+
+  const _ScoringCard({
+    required this.questions,
+    required this.onSetScoringForAll,
+    required this.onApplyPointsToAll,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final muted = isDark ? AppTheme.darkTextMuted : AppTheme.textMuted;
+    final scorable = questions.where((q) => q.isScorable).length;
+    final scored = questions.where((q) => q.isScorable && q.hasScore).length;
+    final total = questions.fold<double>(
+      0,
+      (sum, q) => sum + (q.isScorable && q.hasScore ? q.score : 0),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppTheme.darkBorder : AppTheme.border,
+        ),
+      ),
+      child: scorable == 0
+          ? Text(
+              l10n.isIndonesian
+                  ? 'Belum ada soal. Tambahkan soal terlebih dahulu di tab Soal.'
+                  : 'No questions yet. Add questions in the Questions tab first.',
+              style: TextStyle(fontSize: 12.5, color: muted),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: context.primaryFaint,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(Icons.grade_rounded,
+                          size: 20, color: context.primary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.isIndonesian
+                                ? 'Total Poin Form'
+                                : 'Form Total Points',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppTheme.darkTextPrimary
+                                  : AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.isIndonesian
+                                ? '$scored dari $scorable soal dinilai'
+                                : '$scored of $scorable questions scored',
+                            style: TextStyle(fontSize: 12, color: muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${total.round()}',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: context.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ScoringAction(
+                        label: l10n.isIndonesian
+                            ? 'Nilai semua soal'
+                            : 'Score all',
+                        icon: Icons.check_circle_outline_rounded,
+                        color: AppTheme.success,
+                        enabled: scored != scorable,
+                        isDark: isDark,
+                        onTap: () => onSetScoringForAll(true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ScoringAction(
+                        label: l10n.isIndonesian ? 'Hapus nilai' : 'Clear',
+                        icon: Icons.remove_circle_outline_rounded,
+                        color: AppTheme.error,
+                        enabled: scored != 0,
+                        isDark: isDark,
+                        onTap: () => onSetScoringForAll(false),
+                      ),
+                    ),
+                  ],
+                ),
+                if (scored > 0) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.isIndonesian
+                              ? 'Poin tiap soal dinilai:'
+                              : 'Points per scored question:',
+                          style: TextStyle(fontSize: 12, color: muted),
+                        ),
+                      ),
+                      _PointsChips(onApplyPointsToAll: onApplyPointsToAll),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+/// Tombol poin cepat (1 / 5 / 10) — mengingatkan cara kerja Google Forms yang
+/// tidak ribet: satu angka dipakai untuk seluruh soal yang dinilai.
+class _PointsChips extends StatelessWidget {
+  final ValueChanged<int> onApplyPointsToAll;
+  const _PointsChips({required this.onApplyPointsToAll});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final p in const [1, 5, 10]) ...[
+          const SizedBox(width: 6),
+          ActionChip(
+            label: Text('$p'),
+            onPressed: () => onApplyPointsToAll(p),
+            visualDensity: VisualDensity.compact,
+            labelStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: context.primary,
+            ),
+            side: BorderSide(color: context.primary.withValues(alpha: 0.45)),
+            backgroundColor: context.primary.withValues(alpha: 0.06),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScoringAction extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool enabled;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _ScoringAction({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.enabled,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = !enabled;
+    final fg = disabled
+        ? (isDark ? AppTheme.darkTextMuted : AppTheme.textMuted)
+        : color;
+    return InkWell(
+      onTap: disabled ? null : onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        decoration: BoxDecoration(
+          color: disabled
+              ? (isDark ? AppTheme.darkSurface : AppTheme.surfaceLight)
+              : color.withValues(alpha: isDark ? 0.16 : 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: disabled
+                ? (isDark ? AppTheme.darkBorder : AppTheme.border)
+                : color.withValues(alpha: 0.30),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: fg),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: fg),
+              ),
+            ),
+          ],
         ),
       ),
     );

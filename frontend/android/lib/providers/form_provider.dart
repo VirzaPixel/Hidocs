@@ -8,6 +8,7 @@ import 'package:hi_docs/services/api/api_client.dart';
 class FormProvider extends ChangeNotifier {
   final List<FormModel> _forms = [];
   final Set<String> _submittedForms = {};
+  final List<String> _saveWarnings = [];
   bool _isLoading = false;
   String? _error;
 
@@ -449,30 +450,85 @@ class FormProvider extends ChangeNotifier {
     return <int>[];
   }
 
+  /// Pesan peringatan setelah penyimpanan yang *sebagian* gagal
+  /// (mis. form tersimpan tetapi beberapa soal ditolak server).
+  String? get saveWarning =>
+      _saveWarnings.isEmpty ? null : _saveWarnings.join(' ');
+
+  void clearSaveWarning() {
+    if (_saveWarnings.isEmpty) return;
+    _saveWarnings.clear();
+    notifyListeners();
+  }
+
+  static final RegExp _uuidPattern = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
+    r'[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  /// Soal yang sudah punya ID dari server harus di-PUT, bukan di-POST ulang.
+  bool _isServerQuestionId(String id) => _uuidPattern.hasMatch(id.trim());
+
+  /// Simpan settings + soal satu per satu. Kegagalan tidak lagi dibuang
+  /// diam-diam (sebelumnya `catch (_) {}`) supaya guru tahu ada yang tidak
+  /// tersimpan, tapi juga tidak membatalkan form yang sudah berhasil dibuat.
+  Future<void> _persistRelations(String formId, FormModel form) async {
+    try {
+      await ApiClient.put('/forms/$formId/settings',
+          body: form.toSettingsJson());
+    } on ApiException catch (e) {
+      _saveWarnings.add('Pengaturan form gagal disimpan (${e.message}).');
+    } catch (_) {
+      _saveWarnings.add('Pengaturan form gagal disimpan.');
+    }
+
+    for (var i = 0; i < form.questions.length; i++) {
+      final q = form.questions[i];
+      try {
+        if (_isServerQuestionId(q.id)) {
+          await ApiClient.put(
+            '/questions/${q.id}',
+            body: q.toQuestionJson(orderIndex: i + 1),
+          );
+        } else {
+          await ApiClient.post(
+            '/forms/$formId/questions',
+            body: q.toQuestionJson(orderIndex: i + 1),
+          );
+        }
+      } on ApiException catch (e) {
+        _saveWarnings.add('Soal ${i + 1} gagal disimpan (${e.message}).');
+      } catch (_) {
+        _saveWarnings.add('Soal ${i + 1} gagal disimpan.');
+      }
+    }
+  }
+
   Future<bool> createForm(FormModel form) async {
     _isLoading = true;
     _error = null;
+    _saveWarnings.clear();
     notifyListeners();
 
     try {
       final data = await ApiClient.post('/forms', body: form.toCreateJson());
       final created =
           data is Map ? FormModel.fromJson({...data}) : form;
-      _forms.add(created);
+
+      // Form baru dibuat dengan status DRAFT oleh server. Status asli pilihan
+      // guru (Aktif / Ditutup) dikirim ulang di sini supaya toggle
+      // "Aktif Langsung" benar-benar bekerja.
       try {
-        await ApiClient.put(
-          '/forms/${created.id}/settings',
-          body: form.toSettingsJson(),
-        );
-      } catch (_) {}
-      for (var i = 0; i < form.questions.length; i++) {
-        try {
-          await ApiClient.post(
-            '/forms/${created.id}/questions',
-            body: form.questions[i].toQuestionJson(orderIndex: i + 1),
-          );
-        } catch (_) {}
+        await ApiClient.put('/forms/${created.id}', body: form.toUpdateJson());
+      } on ApiException catch (e) {
+        _saveWarnings.add('Status form gagal disimpan (${e.message}).');
+      } catch (_) {
+        _saveWarnings.add('Status form gagal disimpan.');
       }
+
+      await _persistRelations(created.id, form);
+
+      _forms.add(created);
       _isLoading = false;
       notifyListeners();
       return true;
@@ -490,33 +546,15 @@ class FormProvider extends ChangeNotifier {
   Future<bool> updateForm(FormModel form) async {
     _isLoading = true;
     _error = null;
+    _saveWarnings.clear();
     notifyListeners();
 
     try {
       final data =
           await ApiClient.put('/forms/${form.id}', body: form.toUpdateJson());
-      try {
-        await ApiClient.put(
-          '/forms/${form.id}/settings',
-          body: form.toSettingsJson(),
-        );
-      } catch (_) {}
-      for (var i = 0; i < form.questions.length; i++) {
-        try {
-          final q = form.questions[i];
-          if (q.id.startsWith('q') && q.id.length > 10) {
-            await ApiClient.post(
-              '/forms/${form.id}/questions',
-              body: q.toQuestionJson(orderIndex: i + 1),
-            );
-          } else {
-            await ApiClient.put(
-              '/questions/${q.id}',
-              body: q.toQuestionJson(orderIndex: i + 1),
-            );
-          }
-        } catch (_) {}
-      }
+
+      await _persistRelations(form.id, form);
+
       final updated =
           data is Map ? FormModel.fromJson({...data}) : form;
       final index = _forms.indexWhere((f) => f.id == form.id);

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/models/question_model.dart';
 import 'package:hi_docs/models/response_model.dart';
@@ -455,6 +456,13 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
     final hasScore =
         displayScore > 0 || _response.answers.isNotEmpty;
 
+    // Visibilitas hasil sesuai pengaturan form ("Sembunyikan hasil" /
+    // "Tampilkan hasil saja" / "Tampilkan hasil & nilai") — sebelumnya
+    // riwayat selalu menampilkan nilai padahal form disetel disembunyikan.
+    final visibility = _form.resultVisibility;
+    final showScore = visibility == ResultVisibility.resultAndScore;
+    final showReview = visibility != ResultVisibility.hidden;
+
     final hasUngradedEssay = _form.questions.any((question) {
       if (!manualTypes.contains(question.type)) {
         return false;
@@ -496,7 +504,7 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
                 _SummaryCard(
                   form: _form,
                   response: _response,
-                  hasScore: hasScore,
+                  hasScore: hasScore && showScore,
                   hasUngradedEssay: hasUngradedEssay,
                   displayScore: displayScore,
                   maxScore: maxScore,
@@ -507,6 +515,38 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
                   isDark: isDark,
                   l10n: l10n,
                 ),
+                if (!showScore) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    margin: const EdgeInsets.only(top: 12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppTheme.darkSurface
+                          : AppTheme.infoLight,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.info.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.visibility_off_outlined,
+                            size: 18, color: AppTheme.info),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            l10n.isIndonesian
+                                ? 'Pembuat form menyembunyikan nilai. Anda tetap dapat melihat jawaban yang Anda kirim.'
+                                : 'The form owner has hidden scores. You can still review your submitted answers.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.4,
+                              color: secondaryTextColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Row(
                   children: [
@@ -592,13 +632,16 @@ class _HistoryDetailScreenState extends State<HistoryDetailScreen> {
                       answer,
                       l10n,
                     ),
-                    grade: essayGrade != null &&
+                    grade: showReview &&
+                            essayGrade != null &&
                             essayGrade != 0
                         ? essayGrade
                         : null,
-                    qMaxScore: questionMaxScore,
-                    isCorrect: isCorrect,
-                    earnedScore: earnedScore,
+                    // Saat form menyembunyikan hasil, penanda benar/salah dan
+                    // poin per soal tidak ditampilkan sama sekali.
+                    qMaxScore: showReview ? questionMaxScore : null,
+                    isCorrect: showReview ? isCorrect : null,
+                    earnedScore: showReview ? earnedScore : null,
                     isDark: isDark,
                   );
                 }),

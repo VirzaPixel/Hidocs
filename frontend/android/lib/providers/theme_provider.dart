@@ -270,10 +270,24 @@ class ThemeProvider extends ChangeNotifier {
 
       chipTheme: AppTheme.lightTheme.chipTheme.copyWith(
         backgroundColor: faint,
-        selectedColor: p,
+        // Chip terpilih memakai versi transparan dari warna tema supaya teks
+        // (warna `p`) tetap kontras — dulu `selectedColor: p` + label `p`
+        // membuat teks "Semua" tidak kelihatan sama sekali.
+        color: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? p.withValues(alpha: 0.18)
+              : faint,
+        ),
+        selectedColor: p.withValues(alpha: 0.18),
+        side: BorderSide(color: p.withValues(alpha: 0.30)),
         labelStyle: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
+          color: p,
+        ),
+        secondaryLabelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
           color: p,
         ),
       ),

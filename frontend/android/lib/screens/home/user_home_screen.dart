@@ -248,6 +248,26 @@ class _HomeTabState extends State<_HomeTab> {
                                 ChoiceChip(
                                   label: Text(l10n.filterAll),
                                   selected: _selectedCategory.isEmpty,
+                                  showCheckmark: false,
+                                  selectedColor: cs.primary,
+                                  backgroundColor:
+                                      isDark ? AppTheme.darkSurface : Colors.white,
+                                  side: BorderSide(
+                                    color: _selectedCategory.isEmpty
+                                        ? cs.primary
+                                        : (isDark
+                                            ? AppTheme.darkBorder
+                                            : AppTheme.border),
+                                  ),
+                                  labelStyle: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _selectedCategory.isEmpty
+                                        ? Colors.white
+                                        : (isDark
+                                            ? AppTheme.darkTextSecondary
+                                            : AppTheme.textSecondary),
+                                  ),
                                   onSelected: (_) => setState(
                                       () => _selectedCategory = ''),
                                 ),
@@ -256,6 +276,27 @@ class _HomeTabState extends State<_HomeTab> {
                                   ChoiceChip(
                                     label: Text(c),
                                     selected: _selectedCategory == c,
+                                    showCheckmark: false,
+                                    selectedColor: cs.primary,
+                                    backgroundColor: isDark
+                                        ? AppTheme.darkSurface
+                                        : Colors.white,
+                                    side: BorderSide(
+                                      color: _selectedCategory == c
+                                          ? cs.primary
+                                          : (isDark
+                                              ? AppTheme.darkBorder
+                                              : AppTheme.border),
+                                    ),
+                                    labelStyle: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _selectedCategory == c
+                                          ? Colors.white
+                                          : (isDark
+                                              ? AppTheme.darkTextSecondary
+                                              : AppTheme.textSecondary),
+                                    ),
                                     onSelected: (_) => setState(() =>
                                         _selectedCategory =
                                             _selectedCategory == c ? '' : c),
@@ -288,15 +329,15 @@ class _HomeTabState extends State<_HomeTab> {
     AuthProvider auth,
   ) {
     final l10n = AppLocalizations.of(context);
-    final top =
-        MediaQuery.of(context).padding.top;
 
+    // Padding tanpa inset status bar: SafeArea sudah ditangani DynamicHeader
+    // sehingga tinggi top bar sama dengan halaman Riwayat/Profile/Forms.
     return DynamicHeader(
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         20,
-        top + 16,
+        14,
         20,
-        28,
+        24,
       ),
       child: Row(
         crossAxisAlignment:
@@ -551,7 +592,7 @@ class _RecentHistoryRow extends StatelessWidget {
                     const EdgeInsets.only(right: 12),
                 decoration:
                     BoxDecoration(
-                  color: FormTheme.primaryOf(form.themeColor),
+                  color: FormTheme.resolvePrimary(context, form.themeColor),
                   shape: BoxShape.circle,
                 ),
               ),

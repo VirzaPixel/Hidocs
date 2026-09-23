@@ -238,28 +238,61 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                               ),
                               const SizedBox(height: 10),
 
-                              _RoleCard(
-                                icon: Icons.admin_panel_settings_rounded,
-                                title: 'Dashboard Admin',
-                                subtitle:
-                                    'Kelola pengguna serta melihat dan menghapus seluruh form.',
-                                color: AppTheme.warning,
-                                onTap: () => _goTo('/admin-home'),
-                                recommended: isAdminAccount,
-                              ),
-                            ],
-
-                            if (isSuperAccount) ...[
-                              const SizedBox(height: 14),
-
-                              _RoleCard(
-                                icon: Icons.shield_rounded,
-                                title: 'Dashboard Super Admin',
-                                subtitle:
-                                    'Akses penuh manajemen sistem, pengguna, dan form.',
-                                color: const Color(0xFF7B3FE4),
-                                onTap: () => _goTo('/super-admin-home'),
-                                recommended: true,
+                              // Dashboard admin TIDAK dapat dibuka dari
+                              // aplikasi Android (dulu mem-blank-kan layar) —
+                              // arahkan pengguna ke versi web.
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: AppTheme.warning.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(
+                                      Icons.admin_panel_settings_rounded,
+                                      size: 22,
+                                      color: AppTheme.warning,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            auth.isSuperAdmin
+                                                ? 'Dashboard Super Admin hanya di web'
+                                                : 'Dashboard Admin hanya di web',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w800,
+                                              color: isDark
+                                                  ? AppTheme.darkTextPrimary
+                                                  : AppTheme.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Dashboard admin tidak didukung di aplikasi Android. Silakan buka hidocs.my.id lewat browser lalu login dengan akun '
+                                            '${auth.isSuperAdmin ? 'Super Admin' : 'Admin'} Anda.',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              height: 1.45,
+                                              color: isDark
+                                                  ? AppTheme.darkTextSecondary
+                                                  : AppTheme.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
 
@@ -333,7 +366,6 @@ class _RoleCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
-  final bool recommended;
 
   const _RoleCard({
     required this.icon,
@@ -341,17 +373,13 @@ class _RoleCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
-    this.recommended = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final bgColor = recommended ? color.withValues(alpha: 0.08) : null;
-    final bdColor = recommended
-        ? color.withValues(alpha: 0.55)
-        : (isDark ? AppTheme.darkBorder : AppTheme.border);
+    final bdColor = isDark ? AppTheme.darkBorder : AppTheme.border;
 
     return Material(
       color: Colors.transparent,
@@ -364,9 +392,9 @@ class _RoleCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: bgColor ?? (isDark ? AppTheme.darkCard : Colors.white),
+            color: isDark ? AppTheme.darkCard : Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: bdColor, width: recommended ? 1.5 : 1),
+                        border: Border.all(color: bdColor, width: 1),
             boxShadow: !isDark
                 ? [
                     BoxShadow(
@@ -407,25 +435,23 @@ class _RoleCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (recommended) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Akun Anda',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: color,
-                              ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'Mode',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: color,
                             ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 5),

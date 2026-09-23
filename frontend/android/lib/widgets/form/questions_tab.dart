@@ -395,12 +395,29 @@ class _QuestionCardState extends State<_QuestionCard> {
   String? _lastSyncedContent;
   bool _showFormatting = false;
 
+  /// Panel "Pengaturan lanjutan" (wajib dijawab, poin, gambar) tertutup
+  /// secara default supaya kartu soal tetap ringkas dan tidak menumpuk.
+  bool _showAdvanced = false;
+
+  /// Toolbar WYSIWYG hanya tampil saat guru benar-benar mengisi teks soal
+  /// (atau saat tombol "Format Teks" ditekan manual).
+  bool _editorFocused = false;
+
   @override
   void initState() {
     super.initState();
     _controller = QuillController.basic();
     _controller.addListener(_onDocumentChanged);
+    _focusNode.addListener(_onFocusChanged);
     _loadFromQuestion();
+  }
+
+  void _onFocusChanged() {
+    if (_focusNode.hasFocus == _editorFocused) return;
+    setState(() {
+      _editorFocused = _focusNode.hasFocus;
+      if (!_focusNode.hasFocus) _showFormatting = false;
+    });
   }
 
   @override
@@ -416,6 +433,7 @@ class _QuestionCardState extends State<_QuestionCard> {
     _syncTimer?.cancel();
     _controller.removeListener(_onDocumentChanged);
     _controller.dispose();
+    _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -617,18 +635,35 @@ class _QuestionCardState extends State<_QuestionCard> {
       case QuestionType.checkbox:
       case QuestionType.imageChoice:
         final ts = DateTime.now().microsecondsSinceEpoch;
-        final options = q.options.isEmpty
+        var options = q.options.isEmpty
             ? [
                 OptionModel(
                   id: 'o${ts}1',
-                  text: 'Option 1',
+                  text: 'Opsi 1',
                 ),
                 OptionModel(
                   id: 'o${ts}2',
-                  text: 'Option 2',
+                  text: 'Opsi 2',
                 ),
               ]
-            : q.options.map((o) => o.copyWith(isCorrect: false)).toList();
+            : q.options;
+        if (options.length < 2) {
+          options = [
+            ...options,
+            OptionModel(id: 'o${ts}x', text: 'Opsi ${options.length + 1}'),
+          ];
+        }
+        // Pertahankan jawaban benar saat berpindah antar tipe pilihan
+        // (pilihan ganda <-> kotak centang <-> pilihan gambar) supaya guru
+        // tidak perlu menandai ulang tiap kali berganti tipe.
+        if (type != QuestionType.checkbox) {
+          var kept = false;
+          options = options.map((o) {
+            final keep = o.isCorrect && !kept;
+            if (keep) kept = true;
+            return o.copyWith(isCorrect: keep, score: keep ? 1 : 0);
+          }).toList();
+        }
         updated = _copy(q, type: type, options: options);
       case QuestionType.yesNo:
         final ts = DateTime.now().microsecondsSinceEpoch;
@@ -684,10 +719,16 @@ class _QuestionCardState extends State<_QuestionCard> {
   }
 
   void _setCorrectOption(int i) {
+    final multi = widget.question.allowsMultipleCorrectAnswers;
     final opts = widget.question.options.asMap().entries.map((e) {
-      return e.key == i
-          ? e.value.copyWith(isCorrect: true, score: 1)
-          : e.value.copyWith(isCorrect: false, score: 0);
+      if (e.key == i) {
+        // Kotak centang (checkbox) = boleh lebih dari satu jawaban benar,
+        // jadi klik berarti toggle. Pilihan ganda hanya boleh satu.
+        final next = multi ? !e.value.isCorrect : true;
+        return e.value.copyWith(isCorrect: next, score: next ? 1 : 0);
+      }
+      if (multi) return e.value;
+      return e.value.copyWith(isCorrect: false, score: 0);
     }).toList();
     _setOptions(opts);
   }
@@ -776,17 +817,93 @@ class _QuestionCardState extends State<_QuestionCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildQuestionImage(isDark),
                 _buildEditor(isDark),
                 const SizedBox(height: 12),
                 ..._buildBody(isDark),
-                const SizedBox(height: 4),
-                _buildRequiredRow(isDark),
+                const SizedBox(height: 6),
+                _buildAdvancedToggle(isDark),
+                if (_showAdvanced) ...[
+                  const SizedBox(height: 4),
+                  _buildQuestionImage(isDark),
+                  _buildRequiredRow(isDark),
+                ],
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Baris ringkas "Pengaturan lanjutan". Semua opsi yang jarang dipakai
+  /// (wajib dijawab, poin, gambar soal) disembunyikan di balik baris ini agar
+  /// halaman tidak terlihat penuh — ramah untuk guru yang belum terbiasa.
+  Widget _buildAdvancedToggle(bool isDark) {
+    final q = widget.question;
+    final l10n = AppLocalizations.of(context);
+    final muted = isDark ? AppTheme.darkTextMuted : AppTheme.textMuted;
+    final label = l10n.isIndonesian ? 'Pengaturan lanjutan' : 'More options';
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 16, color: muted),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (q.hasScore && q.score > 0)
+                  _MiniBadge(
+                    icon: Icons.stars_rounded,
+                    text: '${q.score.round()}',
+                    color: context.primary,
+                    isDark: isDark,
+                  ),
+                if (q.isRequired)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: _MiniBadge(
+                      icon: Icons.verified_user_outlined,
+                      text: l10n.isIndonesian ? 'Wajib' : 'Required',
+                      color: AppTheme.success,
+                      isDark: isDark,
+                    ),
+                  ),
+                if (q.imageUrl != null && q.imageUrl!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: _MiniBadge(
+                      icon: Icons.image_outlined,
+                      text: l10n.isIndonesian ? 'Ada gambar' : 'Image',
+                      color: AppTheme.info,
+                      isDark: isDark,
+                    ),
+                  ),
+                const Spacer(),
+                Icon(
+                  _showAdvanced
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: muted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -866,15 +983,20 @@ class _QuestionCardState extends State<_QuestionCard> {
         thumb = const Icon(Icons.broken_image_outlined, size: 20);
       }
     }
+    // Button kompak (tidak melebar penuh) supaya halaman tetap rapi.
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
                 side: BorderSide(
@@ -883,15 +1005,13 @@ class _QuestionCardState extends State<_QuestionCard> {
               onPressed: _pickQuestionImage,
               icon: hasImage
                   ? ClipRRect(
-                      borderRadius: BorderRadius.circular(6), child: thumb)
+                      borderRadius: BorderRadius.circular(6), child: thumb!)
                   : Icon(Icons.add_photo_alternate_outlined,
-                      size: 18, color: context.primary),
+                      size: 16, color: context.primary),
               label: Text(
                 hasImage
                     ? (l10n.isIndonesian ? 'Ganti gambar' : 'Change image')
-                    : (l10n.isIndonesian
-                        ? 'Tambah gambar (opsional)'
-                        : 'Add image (optional)'),
+                    : (l10n.isIndonesian ? 'Gambar soal' : 'Question image'),
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -900,30 +1020,33 @@ class _QuestionCardState extends State<_QuestionCard> {
                         : AppTheme.textSecondary),
               ),
             ),
-          ),
-          if (hasImage) ...[
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: l10n.isIndonesian ? 'Hapus' : 'Remove',
-              onPressed: _removeQuestionImage,
-              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-              color: AppTheme.error,
-              visualDensity: VisualDensity.compact,
-            ),
+            if (hasImage) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: l10n.isIndonesian ? 'Hapus' : 'Remove',
+                onPressed: _removeQuestionImage,
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                color: AppTheme.error,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildEditor(bool isDark) {
     final l10n = AppLocalizations.of(context);
+    final showToolbar = _showFormatting || _editorFocused;
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkSurface : AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? AppTheme.darkBorder : AppTheme.border,
+          color: _editorFocused
+              ? context.primaryWith(0.45)
+              : (isDark ? AppTheme.darkBorder : AppTheme.border),
         ),
       ),
       child: Column(
@@ -941,22 +1064,25 @@ class _QuestionCardState extends State<_QuestionCard> {
                 ),
               ),
               const Spacer(),
+              // Toolbar formatting disembunyikan saat tidak menulis soal.
+              // Guru cukup mengetuk kotak soal untuk memunculkannya.
               TextButton.icon(
-                onPressed: () => setState(() => _showFormatting = !_showFormatting),
+                onPressed: () =>
+                    setState(() => _showFormatting = !showToolbar),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  foregroundColor: _showFormatting
+                  foregroundColor: showToolbar
                       ? context.primary
                       : (isDark ? AppTheme.darkTextMuted : AppTheme.textMuted),
                 ),
                 icon: Icon(
-                  _showFormatting
+                  showToolbar
                       ? Icons.text_format_rounded
                       : Icons.format_color_text_rounded,
                   size: 16,
                 ),
                 label: Text(
-                  _showFormatting
+                  showToolbar
                       ? (l10n.isIndonesian ? 'Tutup Format' : 'Hide Format')
                       : (l10n.isIndonesian ? 'Format Teks' : 'Formatting'),
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
@@ -964,11 +1090,12 @@ class _QuestionCardState extends State<_QuestionCard> {
               ),
             ],
           ),
-          if (_showFormatting) ...[
+          if (showToolbar) ...[
             QuillSimpleToolbar(
               controller: _controller,
               config: QuillSimpleToolbarConfig(
                 multiRowsDisplay: false,
+                toolbarSize: 22,
                 showHeaderStyle: false,
                 showFontFamily: false,
                 showFontSize: false,
@@ -1045,11 +1172,24 @@ class _QuestionCardState extends State<_QuestionCard> {
       case QuestionType.multipleChoice:
       case QuestionType.checkbox:
         return [
+          if (q.type == QuestionType.checkbox)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _MiniBadge(
+                icon: Icons.check_box_outlined,
+                text: l10n.isIndonesian
+                    ? 'Boleh lebih dari satu jawaban benar'
+                    : 'Multiple correct answers allowed',
+                color: context.primary,
+                isDark: isDark,
+              ),
+            ),
           for (var i = 0; i < q.options.length; i++) ...[
             _OptionEditor(
-              key: ValueKey(q.options[i].id),
+              key: ValueKey('${q.type.name}_${q.options[i].id}'),
               option: q.options[i],
               isCorrect: q.options[i].isCorrect,
+              multiSelect: q.type == QuestionType.checkbox,
               isDark: isDark,
               onTextChanged: (text) => _updateOptionText(i, text),
               onCorrectTap: () => _setCorrectOption(i),
@@ -1748,6 +1888,10 @@ class _TypeDropdown extends StatelessWidget {
 class _OptionEditor extends StatefulWidget {
   final OptionModel option;
   final bool isCorrect;
+
+  /// `true` untuk soal kotak centang (boleh banyak jawaban benar) sehingga
+  /// indikatornya berbentuk kotak centang, bukan bulatan pilihan tunggal.
+  final bool multiSelect;
   final bool isDark;
   final void Function(String) onTextChanged;
   final VoidCallback onCorrectTap;
@@ -1757,6 +1901,7 @@ class _OptionEditor extends StatefulWidget {
     super.key,
     required this.option,
     required this.isCorrect,
+    this.multiSelect = false,
     required this.isDark,
     required this.onTextChanged,
     required this.onCorrectTap,
@@ -1798,13 +1943,15 @@ class _OptionEditorState extends State<_OptionEditor> {
       children: [
         InkWell(
           onTap: widget.onCorrectTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(8),
           child: Container(
             width: 24,
             height: 24,
             margin: const EdgeInsets.only(right: 10),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              shape: widget.multiSelect ? BoxShape.rectangle : BoxShape.circle,
+              borderRadius:
+                  widget.multiSelect ? BorderRadius.circular(6) : null,
               color: widget.isCorrect
                   ? AppTheme.success
                   : Colors.transparent,
@@ -2207,6 +2354,48 @@ class _HintNote extends StatelessWidget {
   }
 }
 
+/// Badge kecil (ikon + teks) untuk meringkas info penting pada kartu soal.
+class _MiniBadge extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+  final bool isDark;
+
+  const _MiniBadge({
+    required this.icon,
+    required this.text,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CodeField extends StatefulWidget {
   final String initial;
   final bool isDark;
@@ -2218,7 +2407,6 @@ class _CodeField extends StatefulWidget {
     required this.isDark,
     required this.onChanged,
   });
-
   @override
   State<_CodeField> createState() => _CodeFieldState();
 }

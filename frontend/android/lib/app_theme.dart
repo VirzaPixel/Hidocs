@@ -193,10 +193,20 @@ class AppTheme {
     dividerTheme: const DividerThemeData(color: border, thickness: 1, space: 1),
     chipTheme: ChipThemeData(
       backgroundColor: primaryFaint,
-      selectedColor: primary,
+      // Stateful background: pilihan yang aktif tetap memakai warna muda
+      // sehingga teks (warna primary) selalu terbaca — sebelumnya background
+      // terpilih = primary sama persis dengan warna teks (hilang konten).
+      color: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? primary.withValues(alpha: 0.18)
+            : primaryFaint,
+      ),
+      selectedColor: primary.withValues(alpha: 0.18),
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primary),
+      secondaryLabelStyle: const TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w700, color: primary),
+      side: BorderSide(color: primary.withValues(alpha: 0.30)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      side: BorderSide.none,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     ),
     checkboxTheme: CheckboxThemeData(
@@ -387,10 +397,21 @@ class AppTheme {
     dividerTheme: const DividerThemeData(color: darkBorder, thickness: 1, space: 1),
     chipTheme: ChipThemeData(
       backgroundColor: darkSurface,
-      selectedColor: _darkPrimary,
-      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _darkPrimary),
+      // Teks pakai warna terang supaya selalu terbaca di atas background chip
+      // (terpilih maupun tidak) pada tema gelap — dulu label & background sama
+      // persis warna primary sehingga teks hilang.
+      color: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? _darkPrimary.withValues(alpha: 0.30)
+            : darkSurface,
+      ),
+      selectedColor: _darkPrimary.withValues(alpha: 0.30),
+      labelStyle: const TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w600, color: darkTextPrimary),
+      secondaryLabelStyle: const TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w700, color: _darkPrimary),
+      side: BorderSide(color: _darkPrimary.withValues(alpha: 0.45)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      side: BorderSide.none,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     ),
     checkboxTheme: CheckboxThemeData(

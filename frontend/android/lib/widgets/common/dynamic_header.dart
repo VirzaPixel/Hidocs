@@ -26,12 +26,14 @@ class DynamicHeader extends StatelessWidget {
       ),
       child: Container(
         clipBehavior: Clip.antiAlias,
-        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
         decoration: const BoxDecoration(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
         ),
         child: Stack(
           children: [
+            // Gradient harus menutupi area status bar (icon baterai/jam tetap
+            // terbaca di atasnya) — persis seperti PageTopBar pada halaman
+            // Riwayat / Profile / Forms.
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -55,9 +57,14 @@ class DynamicHeader extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(
-              padding: padding,
-              child: child,
+            // Konten digeser oleh SafeArea (bukan oleh padding container)
+            // supaya tinggi header konsisten dengan PageTopBar.
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: padding,
+                child: child,
+              ),
             ),
           ],
         ),

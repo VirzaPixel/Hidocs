@@ -25,6 +25,16 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoggedIn => _currentUser != null;
   bool get isAdmin => _currentUser?.role == 'admin';
   bool get isSuperAdmin => _currentUser?.role == 'superadmin';
+
+  /// Akun admin / superadmin TIDAK didukung oleh aplikasi Android
+  /// (dashboard admin hanya tersedia di web) — layar [AdminBlockedScreen]
+  /// memakai getter ini untuk menampilkan penjelasan, dan login/OTP akan
+  /// ditolak sebelum layar utama sempat mem-blank-kan layar.
+  bool get isAdminRole => isAdmin || isSuperAdmin;
+
+  static const String adminBlockedMessage =
+      'Akun admin/superadmin tidak dapat masuk lewat aplikasi Android. '
+      'Silakan gunakan HiDocs versi web di hidocs.my.id.';
   String _activeMode = 'user';
   String get activeMode => _activeMode;
   bool get isCreatorMode => _activeMode == 'creator';
@@ -136,6 +146,13 @@ class AuthProvider extends ChangeNotifier {
       if (data is Map) {
         await _persistSession(Map<String, dynamic>.from(data));
       }
+
+      // Tolak admin/superadmin: kalau dibiarkan, RoleGate langsung memuat
+      // dashboard admin sehingga layar menjadi blank putih.
+      if (isAdminRole) {
+        await _clearLocalSession();
+        _error = adminBlockedMessage;
+      }
     } on ApiException catch (e) {
       _error = e.message;
     } catch (_) {
@@ -203,6 +220,15 @@ class AuthProvider extends ChangeNotifier {
 
       _otpSent = false;
       _pendingEmail = '';
+
+      if (isAdminRole) {
+        await _clearLocalSession();
+        _error = adminBlockedMessage;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       _isLoading = false;
       notifyListeners();
 
@@ -280,10 +306,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> logout() async {
-    try {
-      await ApiClient.post('/auth/logout');
-    } catch (_) {}
+  /// Hapus sesi dari memori + secure storage TANPA memanggil API logout
+  /// (dipakai saat admin diblokir, ketika sesi baru saja dibuat/dipulihkan).
+  Future<void> _clearLocalSession() async {
     _currentUser = null;
     ApiClient.token = null;
     ApiClient.examSessionToken = null;
@@ -299,6 +324,13 @@ class AuthProvider extends ChangeNotifier {
       await prefs.remove('auth_user');
       await prefs.setString('active_mode', 'user');
     } catch (_) {}
+  }
+
+  Future<void> logout() async {
+    try {
+      await ApiClient.post('/auth/logout');
+    } catch (_) {}
+    await _clearLocalSession();
 
     notifyListeners();
   }

@@ -990,7 +990,7 @@ class _FillFormScreenState extends State<FillFormScreen>
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor:
-            FormTheme.primaryOf(widget.form.themeColor),
+            FormTheme.resolvePrimary(context, widget.form.themeColor),
         title: Text(
           widget.form.title,
           style: const TextStyle(

@@ -579,10 +579,11 @@ class CreatorHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final user = auth.currentUser;
-    final top = MediaQuery.of(context).padding.top;
 
+    // Padding tanpa inset status bar: SafeArea sudah ditangani DynamicHeader,
+    // jadi top bar dashboard sama persis dengan halaman lain.
     return DynamicHeader(
-      padding: EdgeInsets.fromLTRB(20, top + 16, 20, 28),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -768,6 +769,26 @@ class _FormsTabState extends State<_FormsTab> {
                   ChoiceChip(
                     label: Text(l10n.filterAll),
                     selected: _selectedCategory.isEmpty,
+                    showCheckmark: false,
+                    selectedColor: context.primary,
+                    backgroundColor:
+                        isDark ? AppTheme.darkSurface : Colors.white,
+                    side: BorderSide(
+                      color: _selectedCategory.isEmpty
+                          ? context.primary
+                          : (isDark
+                              ? AppTheme.darkBorder
+                              : AppTheme.border),
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _selectedCategory.isEmpty
+                          ? Colors.white
+                          : (isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.textSecondary),
+                    ),
                     onSelected: (_) =>
                         setState(() => _selectedCategory = ''),
                   ),
@@ -776,6 +797,26 @@ class _FormsTabState extends State<_FormsTab> {
                     ChoiceChip(
                       label: Text(c),
                       selected: _selectedCategory == c,
+                      showCheckmark: false,
+                      selectedColor: context.primary,
+                      backgroundColor:
+                          isDark ? AppTheme.darkSurface : Colors.white,
+                      side: BorderSide(
+                        color: _selectedCategory == c
+                            ? context.primary
+                            : (isDark
+                                ? AppTheme.darkBorder
+                                : AppTheme.border),
+                      ),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: _selectedCategory == c
+                            ? Colors.white
+                            : (isDark
+                                ? AppTheme.darkTextSecondary
+                                : AppTheme.textSecondary),
+                      ),
                       onSelected: (_) => setState(() =>
                           _selectedCategory =
                               _selectedCategory == c ? '' : c),
@@ -922,7 +963,7 @@ class _FormCard extends StatelessWidget {
     final primaryTextColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : AppTheme.textMuted;
 
-    final formColor = FormTheme.primaryOf(form.themeColor);
+    final formColor = FormTheme.resolvePrimary(context, form.themeColor);
 
     return CustomCard(
       onTap: onTap,
@@ -932,8 +973,8 @@ class _FormCard extends StatelessWidget {
         Container(
           height: 6,
           decoration: BoxDecoration(
-            gradient: FormTheme.headerGradient(
-                form.themeColor, form.coverGradient),
+            gradient: FormTheme.resolveHeaderGradient(
+                context, form.themeColor, form.coverGradient),
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(16),
             ),
