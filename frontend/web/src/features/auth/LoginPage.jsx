@@ -32,7 +32,11 @@ export default function LoginPage() {
       const res = await authApi.login(values);
       login(res.token, res.user);
       toast.success('Berhasil masuk');
-      navigate('/dashboard');
+      if (res.user?.role === 'admin' || res.user?.role === 'superadmin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       toast.error(err.message);
     } finally {

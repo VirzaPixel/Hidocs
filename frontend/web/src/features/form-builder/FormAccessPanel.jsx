@@ -1,62 +1,64 @@
-import { useQuery } from '@tanstack/react-query';
-import { Copy, Download, QrCode } from 'lucide-react';
-import { formApi } from '../../lib/api';
-import { Button } from '../../shared/ui';
+import { useState } from 'react';
+import { Copy, Check, QrCode } from 'lucide-react';
+import { Button, Input } from '../../shared/ui';
 import { useToast } from '../../shared/Toast';
 
 export default function FormAccessPanel({ form }) {
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const toast = useToast();
-  const shortCode = form.custom_url || form.id;
-  const mobileUrl = `${window.location.origin}/f/${shortCode}`;
-  const { data: qrUrl, isLoading, isError } = useQuery({
-    queryKey: ['form-qr', shortCode],
-    queryFn: async () => {
-      const result = await formApi.getQrCode(shortCode);
-      return result.qr_code_url;
-    },
-    enabled: Boolean(shortCode),
-    staleTime: 5 * 60 * 1000,
-  });
 
-  async function copyUrl() {
-    try {
-      await navigator.clipboard.writeText(mobileUrl);
-      toast.success('Tautan form disalin');
-    } catch {
-      toast.error('Tautan tidak dapat disalin. Salin manual dari kolom URL.');
-    }
-  }
+  const publicUrl = form?.short_code
+    ? `${window.location.origin}/exam/${form.short_code}`
+    : `${window.location.origin}/exam/${form?.id}`;
 
-  async function downloadQr() {
-    if (!qrUrl) return;
-    try {
-      const response = await fetch(qrUrl);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${shortCode}-qr.png`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error('QR code tidak dapat diunduh.');
-    }
-  }
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(publicUrl);
+    setCopiedLink(true);
+    toast.success('Tautan berhasil disalin');
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyCode = () => {
+    if (!form?.short_code) return;
+    navigator.clipboard.writeText(form.short_code);
+    setCopiedCode(true);
+    toast.success('Kode ujian berhasil disalin');
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="flex items-center gap-2 text-base font-semibold text-text"><QrCode size={18} /> Akses aplikasi siswa</h2>
-        <p className="mt-1 text-sm text-text-secondary">Bagikan tautan atau QR ini untuk membuka form di aplikasi Android.</p>
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-text">Tautan Ujian Siswa</label>
+        <div className="flex gap-2">
+          <Input value={publicUrl} readOnly className="font-mono text-xs" />
+          <Button variant="outline" onClick={handleCopyLink} className="shrink-0">
+            {copiedLink ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+            {copiedLink ? 'Tersalin' : 'Salin'}
+          </Button>
+        </div>
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input readOnly value={mobileUrl} className="min-w-0 flex-1 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-sm text-text" />
-        <Button variant="outline" onClick={copyUrl}><Copy size={15} /> Salin tautan</Button>
-      </div>
-      <div className="flex flex-wrap items-center gap-4">
-        {isLoading ? <span className="text-sm text-text-secondary">Menyiapkan QR code...</span> : qrUrl ? <img src={qrUrl} alt="QR code form" className="h-36 w-36 rounded-lg border border-border bg-white p-2" /> : <span className="text-sm text-text-secondary">{isError ? 'QR code gagal dibuat.' : 'QR code belum tersedia.'}</span>}
-        <Button variant="outline" disabled={!qrUrl} onClick={downloadQr}><Download size={15} /> Unduh QR</Button>
-      </div>
+
+      {form?.short_code && (
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-text">Kode Akses Ujian (Short Code)</label>
+          <div className="flex gap-2">
+            <Input value={form.short_code} readOnly className="font-mono font-bold tracking-widest text-primary" />
+            <Button variant="outline" onClick={handleCopyCode} className="shrink-0">
+              {copiedCode ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+              {copiedCode ? 'Tersalin' : 'Salin'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {form?.form_settings?.is_token_protected && form?.form_settings?.exam_token && (
+        <div className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-600 border border-amber-500/20">
+          <p className="font-semibold">Token Proteksi Ujian:</p>
+          <p className="mt-0.5 font-mono text-sm font-bold tracking-wider">{form.form_settings.exam_token}</p>
+        </div>
+      )}
     </div>
   );
 }
