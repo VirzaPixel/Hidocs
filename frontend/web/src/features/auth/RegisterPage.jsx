@@ -42,7 +42,7 @@ export default function RegisterPage() {
     <AuthLayout title="Buat Akun Guru" subtitle="Mulai buat form dan soal ujian dalam hitungan menit">
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         <Input label="Nama Lengkap" placeholder="Nama kamu" error={errors.name?.message} {...register('name')} />
-        <Input label="Email" type="email" placeholder="guru@sekolah.sch.id" error={errors.email?.message} {...register('email')} />
+        <Input label="Email" type="email" placeholder="email@example.com" error={errors.email?.message} {...register('email')} />
         <Input label="Password" type="password" placeholder="Minimal 6 karakter" error={errors.password?.message} {...register('password')} />
         <Button type="submit" loading={loading} className="w-full">
           Daftar
