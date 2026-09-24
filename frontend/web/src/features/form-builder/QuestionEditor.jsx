@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, X, Trash2, Library, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, X, Trash2, Library, ChevronDown, ChevronUp, KeyRound, Sparkles } from 'lucide-react';
 import { questionApi } from '../../lib/api';
 import { Input, Textarea, Select, Checkbox, Toggle, Button, Badge } from '../../shared/ui';
 import { ConfirmDialog } from '../../shared/Modal';
@@ -57,6 +57,8 @@ function initFromQuestion(question) {
       img_url: null,
       audio_url: null,
       video_url: null,
+      answer_key: '',
+      rubric: '',
       points: 10,
       is_required: true,
       is_auto_scored: questionTypeMeta('MULTIPLE_CHOICE').autoScored,
@@ -85,6 +87,8 @@ function initFromQuestion(question) {
     img_url: question.img_url || null,
     audio_url: question.audio_url || null,
     video_url: question.video_url || null,
+    answer_key: question.answer_key || '',
+    rubric: question.rubric || '',
     points: question.points ?? 10,
     is_required: question.is_required ?? true,
     is_auto_scored: question.is_auto_scored ?? questionTypeMeta(qType).autoScored,
@@ -171,6 +175,8 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         img_url: form.img_url || '',
         audio_url: form.audio_url || null,
         video_url: form.video_url || null,
+        answer_key: form.answer_key?.trim() ? form.answer_key.trim() : null,
+        rubric: form.rubric?.trim() ? form.rubric.trim() : null,
         is_auto_scored: form.is_auto_scored,
         points: Number(form.points) || 0,
         order_index: question?.order_index ?? index + 1,
@@ -343,18 +349,44 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
           />
         ))}
 
-      {form.question_type === 'LONG_TEXT' && (
-        <div className="rounded-lg border border-border bg-bg-secondary p-3">
-          <Toggle
-            checked={form.is_auto_scored}
-            onChange={(v) => patch({ is_auto_scored: v })}
-            label="Nilai otomatis dengan AI"
-          />
-          <p className="mt-1.5 pl-[52px] text-xs text-text-secondary">
-            {form.is_auto_scored
-              ? 'AI akan menilai jawaban siswa otomatis (bandingkan makna dengan kunci jawaban), guru tetap bisa timpa manual.'
-              : 'Jawaban harus dinilai manual satu-satu oleh guru di halaman Monitoring.'}
+      {!meta.hasOptions && (
+        <div className="flex flex-col gap-3.5 rounded-xl border border-primary/25 bg-primary/5 p-4">
+          <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+            <KeyRound size={17} />
+            <span>Kunci Jawaban & Acuan Penilaian AI</span>
+          </div>
+          <p className="text-xs text-text-secondary">
+            Tuliskan contoh jawaban ideal, poin-poin penting, atau kata kunci. Gemini AI akan membandingkan kesamaan makna (semantik) jawaban murid dengan teks acuan ini.
           </p>
+
+          <Textarea
+            label="Kunci Jawaban / Contoh Jawaban Ideal (Acuan AI)"
+            value={form.answer_key}
+            onChange={(e) => patch({ answer_key: e.target.value })}
+            placeholder="Contoh: Fotosintesis adalah proses pembentukan zat makanan oleh tumbuhan hijau dengan bantuan cahaya matahari, menyerap air dan CO2 menghasilkan glukosa dan oksigen."
+            rows={3}
+            className="bg-surface font-sans"
+          />
+
+          <Textarea
+            label="Rubrik / Kriteria Penilaian Tambahan (Opsional)"
+            value={form.rubric}
+            onChange={(e) => patch({ rubric: e.target.value })}
+            placeholder="Contoh: Berikan poin penuh jika menyebutkan 3 bahan utama dan 2 hasil reaksi. Kurangi poin jika ada konsep penting yang terlewat."
+            rows={2}
+            className="bg-surface text-xs"
+          />
+
+          <div className="flex items-center justify-between pt-2 border-t border-primary/10">
+            <Toggle
+              checked={form.is_auto_scored}
+              onChange={(v) => patch({ is_auto_scored: v })}
+              label="Aktifkan Penilaian Otomatis dengan AI"
+            />
+            <span className="text-[11px] text-text-secondary font-medium">
+              {form.is_auto_scored ? '✨ AI Otomatis Aktif' : 'Dinilai Manual'}
+            </span>
+          </div>
         </div>
       )}
 

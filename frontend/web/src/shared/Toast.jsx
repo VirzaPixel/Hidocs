@@ -33,23 +33,24 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={toast}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2">
+      {/* Centered symmetrically at the top on both mobile and desktop */}
+      <div className="pointer-events-none fixed top-5 left-1/2 -translate-x-1/2 z-[100] flex w-[calc(100%-2rem)] max-w-md flex-col items-center gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}
             className={cn(
-              'flex items-start gap-2 rounded-lg border px-4 py-3 shadow-lg text-sm bg-surface',
-              t.type === 'success' && 'border-success/30 text-success',
-              t.type === 'error' && 'border-danger/30 text-danger',
-              t.type === 'info' && 'border-primary/30 text-primary'
+              'pointer-events-auto flex w-full items-start gap-3 rounded-xl border px-4 py-3 shadow-xl backdrop-blur-md text-sm transition-all animate-in fade-in slide-in-from-top-3 duration-200',
+              t.type === 'success' && 'border-success/30 bg-surface/95 text-success shadow-success/5',
+              t.type === 'error' && 'border-danger/30 bg-surface/95 text-danger shadow-danger/5',
+              t.type === 'info' && 'border-primary/30 bg-surface/95 text-primary shadow-primary/5'
             )}
           >
-            {t.type === 'success' && <CheckCircle2 size={18} className="mt-0.5 shrink-0" />}
-            {t.type === 'error' && <XCircle size={18} className="mt-0.5 shrink-0" />}
-            {t.type === 'info' && <Info size={18} className="mt-0.5 shrink-0" />}
-            <span className="flex-1 text-text">{t.message}</span>
-            <button onClick={() => remove(t.id)} className="text-text-secondary hover:text-text">
-              <X size={14} />
+            {t.type === 'success' && <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" />}
+            {t.type === 'error' && <XCircle size={18} className="mt-0.5 shrink-0 text-danger" />}
+            {t.type === 'info' && <Info size={18} className="mt-0.5 shrink-0 text-primary" />}
+            <span className="flex-1 text-text leading-snug">{t.message}</span>
+            <button onClick={() => remove(t.id)} className="text-text-secondary hover:text-text shrink-0 p-0.5 rounded-md hover:bg-bg-secondary">
+              <X size={15} />
             </button>
           </div>
         ))}

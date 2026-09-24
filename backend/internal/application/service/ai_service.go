@@ -236,10 +236,16 @@ func (s *aiService) CreateFormFromAI(ctx context.Context, userID uuid.UUID, req 
 	var questions []domain.Question
 	for i, q := range preview.Questions {
 		qID := uuid.New()
+		var answerKey *string
+		if strings.TrimSpace(q.AnswerKeyText) != "" {
+			ak := strings.TrimSpace(q.AnswerKeyText)
+			answerKey = &ak
+		}
 		dq := domain.Question{
 			ID: qID, FormID: form.ID, QuestionText: q.QuestionText,
 			QuestionType: q.QuestionType, CodeLanguage: q.CodeLanguage,
 			ImgURL: q.ImgURL, AudioURL: strPtr(q.AudioURL), VideoURL: strPtr(q.VideoURL),
+			AnswerKey:    answerKey,
 			IsAutoScored: q.QuestionType != domain.TypeLongText && q.QuestionType != domain.TypeShortText &&
 				q.QuestionType != domain.TypeCode && q.QuestionType != domain.TypeMath,
 			Points: q.Points, OrderIndex: i + 1, IsRequired: true,
@@ -347,8 +353,14 @@ func (s *aiService) GradeResponseEssays(ctx context.Context, userID uuid.UUID, r
 			continue
 		}
 		key := ""
-		if req.AnswerKeys != nil {
-			key = req.AnswerKeys[ans.QuestionID]
+		if req.AnswerKeys != nil && strings.TrimSpace(req.AnswerKeys[ans.QuestionID]) != "" {
+			key = strings.TrimSpace(req.AnswerKeys[ans.QuestionID])
+		} else if q.AnswerKey != nil && strings.TrimSpace(*q.AnswerKey) != "" {
+			key = strings.TrimSpace(*q.AnswerKey)
+		}
+		rubric := ""
+		if q.Rubric != nil && strings.TrimSpace(*q.Rubric) != "" {
+			rubric = strings.TrimSpace(*q.Rubric)
 		}
 		if strings.TrimSpace(ans.AnswerText) == "" {
 			continue
@@ -359,7 +371,7 @@ func (s *aiService) GradeResponseEssays(ctx context.Context, userID uuid.UUID, r
 		if s.gemini.IsEnabled() && strings.TrimSpace(key) != "" {
 			g, err := s.GradeEssay(ctx, dto.AIGradeEssayRequest{
 				QuestionID: ans.QuestionID, AnswerText: ans.AnswerText,
-				AnswerKey: key, MaxPoints: max,
+				AnswerKey: key, Rubric: rubric, MaxPoints: max,
 			})
 			if err == nil {
 				score, feedback = g.Score, g.Feedback

@@ -56,6 +56,13 @@ export const formApi = {
     apiClient.delete(`/forms/${formId}/collaborators/${userId}`),
 };
 
+/* ============================= PUBLIC EXAM ============================= */
+export const publicApi = {
+  getForm: (codeOrSlug) => apiClient.get(`/public/forms/${codeOrSlug}`),
+  verifyToken: (formId, token) => apiClient.post(`/public/forms/${formId}/verify-token`, { token }),
+  submit: (formId, payload) => apiClient.post(`/forms/${formId}/submit`, payload),
+};
+
 /* ============================= QUESTIONS ============================= */
 export const questionApi = {
   listByForm: (formId) => apiClient.get(`/forms/${formId}/questions`),

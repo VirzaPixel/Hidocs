@@ -50,6 +50,7 @@ type UpdateFormSettingsRequest struct {
 	ExamToken          *string    `json:"exam_token"`
 	IsTokenProtected   *bool      `json:"is_token_protected"`
 	ResultVisibility   *string    `json:"result_visibility"`
+	IdentityFieldsJSON *string    `json:"identity_fields_json"`
 }
 
 type FormResponseDTO struct {
@@ -101,6 +102,7 @@ type PublicFormSettings struct {
 	// Hasil penilaian: "hidden" | "result_only" | "result_and_score".
 	// Tanpa field ini responden tidak pernah tahu hasil/form disembunyikan.
 	ResultVisibility    string     `json:"result_visibility"`
+	IdentityFieldsJSON  *string    `json:"identity_fields_json,omitempty"`
 }
 
 type PublicQuestionDTO struct {

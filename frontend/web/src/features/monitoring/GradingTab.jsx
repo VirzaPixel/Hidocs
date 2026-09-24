@@ -90,13 +90,36 @@ function ResponseGradeCard({ response, onGraded }) {
 
       {expanded && (
         <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
-          {essayAnswers.map((a) => (
-            <div key={a.id} className="rounded-lg bg-bg-secondary p-3">
-              <p className="text-sm font-medium text-text">{a.question_text}</p>
-              <p className="mt-1 text-sm text-text-secondary">{a.answer_text || '(tidak dijawab)'}</p>
-              {a.score_given != null && <p className="mt-1 text-xs text-primary">Skor AI: {a.score_given}</p>}
-            </div>
-          ))}
+          {essayAnswers.map((a) => {
+            const answerKey = a.question?.answer_key || a.answer_key;
+            return (
+              <div key={a.id} className="rounded-xl bg-bg-secondary p-3.5 border border-border flex flex-col gap-2">
+                <div>
+                  <span className="text-[11px] font-semibold text-primary uppercase tracking-wider">Soal Esai:</span>
+                  <p className="text-sm font-medium text-text mt-0.5">{a.question_text || a.question?.question_text}</p>
+                </div>
+
+                {answerKey && (
+                  <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs text-emerald-700 dark:text-emerald-400">
+                    <span className="font-semibold block">Kunci Jawaban Acuan:</span>
+                    <span className="mt-0.5 block whitespace-pre-wrap">{answerKey}</span>
+                  </div>
+                )}
+
+                <div className="rounded-lg bg-surface border border-border p-2.5 text-xs">
+                  <span className="font-semibold text-text-secondary block">Jawaban Murid:</span>
+                  <span className="mt-0.5 block text-text whitespace-pre-wrap">{a.answer_text || '(tidak dijawab)'}</span>
+                </div>
+
+                {a.score_given != null && (
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-text-secondary">Skor yang Diberikan:</span>
+                    <strong className="text-primary font-bold">{a.score_given} Poin</strong>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {aiResult && (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">

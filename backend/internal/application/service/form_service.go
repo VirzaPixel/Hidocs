@@ -267,6 +267,11 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 	if req.ResultVisibility != nil {
 		settings.ResultVisibility = *req.ResultVisibility
 	}
+	if req.IdentityFieldsJSON != nil {
+		settings.IdentityFieldsJSON = req.IdentityFieldsJSON
+	} else if existingSettings != nil {
+		settings.IdentityFieldsJSON = existingSettings.IdentityFieldsJSON
+	}
 	if req.MaxAttempts != nil {
 		settings.MaxAttempts = *req.MaxAttempts
 	} else if existingSettings != nil {
@@ -359,6 +364,7 @@ func (s *formService) GetPublicForm(ctx context.Context, identifier string) (*dt
 			FullscreenMode:      form.FormSettings.FullscreenMode,
 			IsTokenProtected:    isProtected,
 			ResultVisibility:    form.FormSettings.ResultVisibility,
+			IdentityFieldsJSON:  form.FormSettings.IdentityFieldsJSON,
 		}
 	}
 
@@ -626,6 +632,8 @@ func (s *formService) mapFormToDTOWithCount(ctx context.Context, form *domain.Fo
 			ImgURL:       q.ImgURL,
 			AudioURL:     q.AudioURL,
 			VideoURL:     q.VideoURL,
+			AnswerKey:    q.AnswerKey,
+			Rubric:       q.Rubric,
 			IsAutoScored: q.IsAutoScored,
 			Points:       q.Points,
 			OrderIndex:   q.OrderIndex,

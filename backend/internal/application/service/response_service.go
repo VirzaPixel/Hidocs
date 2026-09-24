@@ -220,16 +220,12 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		answers = append(answers, ans)
 	}
 
-	// Bulk upsert all answers in a single high-performance query
-	if len(answers) > 0 {
-		_ = s.responseRepo.UpsertAnswersBatch(ctx, answers)
-	}
-
 	platform := req.DevicePlatform
 	if platform == "" {
 		platform = "WEB"
 	}
 
+	now := time.Now()
 	// Update existing session or create fresh response
 	formResponse := &domain.FormResponse{
 		ID:              responseID,
@@ -239,8 +235,9 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		DevicePlatform:  platform,
 		TotalScore:      &totalScore,
 		IsAutoSubmitted: req.IsAutoSubmitted,
-		SubmittedAt:     time.Now(),
-		LastHeartbeat:   time.Now(),
+		StartedAt:       now,
+		LastHeartbeat:   now,
+		SubmittedAt:     now,
 	}
 
 	if req.ResponseID != nil && *req.ResponseID != uuid.Nil {
@@ -250,6 +247,11 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		if err := s.responseRepo.CreateResponse(ctx, formResponse); err != nil {
 			return nil, err
 		}
+	}
+
+	// Bulk upsert all answers in a single high-performance query AFTER formResponse exists
+	if len(answers) > 0 {
+		_ = s.responseRepo.UpsertAnswersBatch(ctx, answers)
 	}
 
 	return &dto.SubmitResponseResult{

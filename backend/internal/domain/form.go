@@ -70,6 +70,9 @@ type FormSettings struct {
 	ExamToken          *string    `gorm:"type:varchar(50)" json:"exam_token,omitempty"`
 	IsTokenProtected   bool       `gorm:"type:boolean;default:false" json:"is_token_protected"`
 	ResultVisibility   string     `gorm:"type:varchar(30);default:'hidden'" json:"result_visibility"`
+
+	// Entry Stage / Custom Identity Data Collection Fields
+	IdentityFieldsJSON *string    `gorm:"type:text" json:"identity_fields_json,omitempty"`
 }
 
 type FormWithCount struct {

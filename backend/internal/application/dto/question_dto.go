@@ -12,6 +12,8 @@ type CreateQuestionRequest struct {
 	ImgURL       string                `json:"img_url"`
 	AudioURL     *string               `json:"audio_url"`
 	VideoURL     *string               `json:"video_url"`
+	AnswerKey    *string               `json:"answer_key"`
+	Rubric       *string               `json:"rubric"`
 	IsAutoScored bool                  `json:"is_auto_scored"`
 	Points       int                   `json:"points" binding:"gte=0"`
 	OrderIndex   int                   `json:"order_index"`
@@ -26,6 +28,8 @@ type UpdateQuestionRequest struct {
 	ImgURL       string                `json:"img_url"`
 	AudioURL     *string               `json:"audio_url"`
 	VideoURL     *string               `json:"video_url"`
+	AnswerKey    *string               `json:"answer_key"`
+	Rubric       *string               `json:"rubric"`
 	IsAutoScored bool                  `json:"is_auto_scored"`
 	Points       int                   `json:"points" binding:"gte=0"`
 	OrderIndex   int                   `json:"order_index"`
@@ -53,6 +57,8 @@ type QuestionDTO struct {
 	ImgURL       string              `json:"img_url,omitempty"`
 	AudioURL     *string             `json:"audio_url,omitempty"`
 	VideoURL     *string             `json:"video_url,omitempty"`
+	AnswerKey    *string             `json:"answer_key,omitempty"`
+	Rubric       *string             `json:"rubric,omitempty"`
 	IsAutoScored bool                `json:"is_auto_scored"`
 	Points       int                 `json:"points"`
 	OrderIndex   int                 `json:"order_index"`

@@ -66,7 +66,11 @@ func (r *formRepository) GetByCustomURL(ctx context.Context, customURL string) (
 
 func (r *formRepository) GetByUserID(ctx context.Context, userID uuid.UUID, status domain.FormStatus, category string) ([]domain.Form, error) {
 	var forms []domain.Form
-	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	query := r.db.WithContext(ctx).
+		Preload("FormSettings").
+		Preload("Questions").
+		Where("user_id = ? OR id IN (SELECT form_id FROM form_collaborators WHERE user_id = ?)", userID, userID)
+
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -79,33 +83,64 @@ func (r *formRepository) GetByUserID(ctx context.Context, userID uuid.UUID, stat
 }
 
 func (r *formRepository) GetByUserIDWithCounts(ctx context.Context, userID uuid.UUID, status domain.FormStatus, category string) ([]domain.FormWithCount, error) {
-	var formsWithCount []domain.FormWithCount
+	var forms []domain.Form
 	query := r.db.WithContext(ctx).
-		Table("forms").
-		Select("forms.*, COALESCE(COUNT(form_responses.id), 0) AS response_count").
-		Joins("LEFT JOIN form_responses ON form_responses.form_id = forms.id").
-		// FIX: sebelumnya tidak ada Preload sama sekali, jadi form_settings selalu
-		// null di daftar form dashboard — banner (cover_image_url) & pengaturan lain
-		// tidak pernah ikut ke frontend padahal sudah disimpan.
 		Preload("FormSettings").
-		Where("forms.user_id = ?", userID).
-		Group("forms.id")
+		Preload("Questions").
+		Where("user_id = ? OR id IN (SELECT form_id FROM form_collaborators WHERE user_id = ?)", userID, userID)
 
 	if status != "" {
-		query = query.Where("forms.status = ?", status)
+		query = query.Where("status = ?", status)
 	}
 	if category != "" {
-		query = query.Where("forms.category = ?", category)
+		query = query.Where("category = ?", category)
 	}
 
-	err := query.Order("forms.created_at desc").Find(&formsWithCount).Error
-	return formsWithCount, err
+	if err := query.Order("created_at desc").Find(&forms).Error; err != nil {
+		return nil, err
+	}
+
+	if len(forms) == 0 {
+		return []domain.FormWithCount{}, nil
+	}
+
+	var formIDs []uuid.UUID
+	for _, f := range forms {
+		formIDs = append(formIDs, f.ID)
+	}
+
+	type countResult struct {
+		FormID uuid.UUID `gorm:"column:form_id"`
+		Count  int64     `gorm:"column:count"`
+	}
+	var counts []countResult
+	_ = r.db.WithContext(ctx).
+		Table("form_responses").
+		Select("form_id, count(*) as count").
+		Where("form_id IN ?", formIDs).
+		Group("form_id").
+		Scan(&counts).Error
+
+	countMap := make(map[uuid.UUID]int64)
+	for _, c := range counts {
+		countMap[c.FormID] = c.Count
+	}
+
+	var result []domain.FormWithCount
+	for _, f := range forms {
+		result = append(result, domain.FormWithCount{
+			Form:          f,
+			ResponseCount: countMap[f.ID],
+		})
+	}
+
+	return result, nil
 }
 
 func (r *formRepository) GetCategoriesByUserID(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	var categories []string
 	err := r.db.WithContext(ctx).Model(&domain.Form{}).
-		Where("user_id = ?", userID).
+		Where("user_id = ? OR id IN (SELECT form_id FROM form_collaborators WHERE user_id = ?)", userID, userID).
 		Distinct("category").
 		Pluck("category", &categories).Error
 	return categories, err
@@ -127,7 +162,7 @@ func (r *formRepository) UpsertFormSettings(ctx context.Context, settings *domai
 			"is_one_time_submission", "randomize_questions", "randomize_options",
 			"start_time", "end_time", "theme_color", "cover_image_url", "logo_url",
 			"font_family", "allow_backtrack", "show_question_number", "fullscreen_mode",
-			"exam_token", "is_token_protected",
+			"exam_token", "is_token_protected", "result_visibility", "identity_fields_json",
 		}),
 	}).Create(settings).Error
 }

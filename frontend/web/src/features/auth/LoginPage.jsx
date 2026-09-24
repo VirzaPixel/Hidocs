@@ -34,9 +34,9 @@ export default function LoginPage() {
       login(res.token, res.user, res.refresh_token);
       toast.success('Berhasil masuk');
       if (res.user?.role === 'admin' || res.user?.role === 'superadmin') {
-        navigate('/admin/dashboard');
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (err) {
       toast.error(err.message);
