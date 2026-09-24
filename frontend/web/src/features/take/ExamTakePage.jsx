@@ -18,6 +18,12 @@ import {
   HelpCircle,
   X,
   RotateCcw,
+  ShieldAlert,
+  AlertTriangle,
+  Maximize2,
+  Lock,
+  RefreshCw,
+  ArrowRight,
 } from 'lucide-react';
 import { publicApi } from '../../lib/api';
 import { Button, FullPageSpinner, Badge, Card } from '../../shared/ui';
@@ -105,10 +111,93 @@ export default function ExamTakePage() {
   const isTokenProtected = Boolean(settings?.is_token_protected);
   const isOneTimeSubmission = Boolean(settings?.is_one_time_submission);
 
+  const isAlreadySubmittedLocally = useMemo(() => {
+    if (!form?.id || !isOneTimeSubmission) return false;
+    const submittedKey = `hidocs_submitted_${form.id}`;
+    return localStorage.getItem(submittedKey) === 'true';
+  }, [form?.id, isOneTimeSubmission]);
+
+  const durationMinutes = settings?.duration_minutes || 0;
+  const durationSeconds = durationMinutes * 60;
+  const [timeLeft, setTimeLeft] = useState(durationSeconds);
+
+  useEffect(() => {
+    if (settings?.duration_minutes) {
+      setTimeLeft(settings.duration_minutes * 60);
+    }
+  }, [settings?.duration_minutes]);
+
   // Stages: 'IDENTITY' | 'TOKEN' | 'EXAM' | 'COMPLETED'
   const [currentStage, setCurrentStage] = useState('EXAM');
   const [stageInitialized, setStageInitialized] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
+  const [sessionId, setSessionId] = useState(
+    () => localStorage.getItem(`hidocs_session_${identifier}`) || null
+  );
+
+  const restoreAnswersFromQuestions = (questionItems) => {
+    if (!Array.isArray(questionItems) || questionItems.length === 0) return;
+    const restoredAnswers = {};
+    const restoredFlagged = {};
+    questionItems.forEach((sq) => {
+      if (sq.is_flagged) restoredFlagged[sq.question_id] = true;
+      if (sq.selected_option_id) {
+        restoredAnswers[sq.question_id] = sq.selected_option_id;
+      } else if (sq.match_pairs && sq.match_pairs.length > 0) {
+        restoredAnswers[sq.question_id] = sq.match_pairs;
+      } else if (sq.answer_text) {
+        restoredAnswers[sq.question_id] = sq.answer_text;
+      }
+    });
+    setAnswers((prev) => ({ ...restoredAnswers, ...prev }));
+    setFlagged((prev) => ({ ...restoredFlagged, ...prev }));
+  };
+
+  const ensureSessionActive = async (tokenVal, identityVals) => {
+    try {
+      const respondentEmail = getRespondentIdentifier(identityVals, currentUser, form?.id);
+      const res = await publicApi.verifyToken(form?.id || identifier, tokenVal, respondentEmail);
+      const resId = res?.response_id || res?.response?.id || res?.data?.response?.id || res?.session_state?.response_id;
+      if (resId) {
+        setSessionId(resId);
+        try {
+          localStorage.setItem(`hidocs_session_${form?.id || identifier}`, resId);
+        } catch {}
+      }
+      const returnedForm = res?.form || res?.data?.form;
+      if (returnedForm) {
+        setVerifiedForm(returnedForm);
+      }
+
+      // Restore previously saved answers & flagged marks from database
+      const sessionQuestions = res?.session_state?.questions || res?.data?.session_state?.questions;
+      restoreAnswersFromQuestions(sessionQuestions);
+      return { success: true };
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Gagal memulai sesi ujian';
+      if (msg.includes('BLOCKED') || msg.includes('dicabut') || msg.includes('kecurangan')) {
+        setIsBlocked(true);
+        setStrikes(3);
+      }
+      return { success: false, error: msg };
+    }
+  };
+
+  useEffect(() => {
+    if (form && !stageInitialized) {
+      const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
+      const isProt = Boolean(form.form_settings?.is_token_protected);
+
+      if (fields.length > 0) {
+        setCurrentStage('IDENTITY');
+      } else if (isProt) {
+        setCurrentStage('TOKEN');
+      } else {
+        setCurrentStage('EXAM');
+        ensureSessionActive('', {});
+      }
+      setStageInitialized(true);
+    }
+  }, [form, stageInitialized]);
 
   // Identity Form State
   const [identityData, setIdentityData] = useState({});
@@ -129,89 +218,264 @@ export default function ExamTakePage() {
 
   const autosaveTimeoutRef = useRef(null);
 
-  // Timer State (if duration_minutes > 0)
-  const durationSeconds = (settings?.duration_minutes || 0) * 60;
-  const [timeLeft, setTimeLeft] = useState(durationSeconds);
+  // Anti-cheat Fullscreen & 3-Strike System State
+  const [isFullscreenActive, setIsFullscreenActive] = useState(false);
+  const [strikes, setStrikes] = useState(0); // 0, 1, 2, 3
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [showGuardOverlay, setShowGuardOverlay] = useState(false);
+  const [guardCountdown, setGuardCountdown] = useState(5);
+  const [guardReason, setGuardReason] = useState('');
+  const [recheckingAccess, setRecheckingAccess] = useState(false);
 
-  const isAlreadySubmittedLocally = Boolean(
-    form?.id && isOneTimeSubmission && localStorage.getItem(`hidocs_submitted_${form.id}`) === 'true'
-  );
+  const strikesRef = useRef(0);
+  strikesRef.current = strikes;
+  const isBlockedRef = useRef(false);
+  isBlockedRef.current = isBlocked;
+  const guardActiveRef = useRef(false);
+  guardActiveRef.current = showGuardOverlay;
 
-  const ensureSessionActive = async (enteredTok = '', customIdentity = null) => {
-    const currentIdent = customIdentity || identityData;
-    const respondentEmail = getRespondentIdentifier(currentIdent, currentUser, form?.id);
-
+  const enterFullscreen = () => {
     try {
-      const res = await publicApi.verifyToken(form?.id || identifier, enteredTok, respondentEmail);
-      const returnedForm = res?.form || res?.data?.form;
-      if (returnedForm) {
-        setVerifiedForm(returnedForm);
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch(() => {});
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen().catch(() => {});
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen().catch(() => {});
       }
-      const respId = res?.response_id || res?.data?.response_id;
-      if (respId) {
-        setSessionId(respId);
-      }
-      return { success: true, returnedForm, respId };
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || 'Gagal memulai sesi ujian';
-      return { success: false, error: msg };
+      setIsFullscreenActive(true);
+    } catch {}
+  };
+
+  const triggerViolation = (reason) => {
+    if (currentStage !== 'EXAM' || isBlockedRef.current || showSubmitModal) return;
+    if (guardActiveRef.current) return;
+
+    const currentStrikes = strikesRef.current;
+    const nextStrikes = currentStrikes + 1;
+    setStrikes(nextStrikes);
+
+    let eventType = 'FULLSCREEN_EXIT';
+    let message = `Peringatan 1: User mencoba keluar dari tab / fullscreen (${reason})`;
+
+    if (nextStrikes === 1) {
+      eventType = 'TAB_SWITCH';
+      message = `Peringatan 1: User mencoba keluar dari tab / fullscreen (${reason})`;
+      setGuardReason('Kamu terdeteksi keluar dari layar penuh / jendela ujian!');
+      setShowGuardOverlay(true);
+      setGuardCountdown(5);
+    } else if (nextStrikes === 2) {
+      eventType = 'CHEATING_SUSPECTED';
+      message = `Peringatan 2: Terindikasi melakukan kecurangan (${reason})`;
+      setGuardReason('Peringatan ke-2: Kamu terindikasi melakukan kecurangan! 1 kali lagi izin ujian akan dicabut.');
+      setShowGuardOverlay(true);
+      setGuardCountdown(5);
+    } else {
+      eventType = 'SESSION_BLOCKED';
+      message = `Peringatan 3: Izin pengerjaan dicabut (BLOCKED) karena pelanggaran ke-3 (${reason})`;
+      setIsBlocked(true);
+      setShowGuardOverlay(false);
+    }
+
+    if (sessionId) {
+      publicApi
+        .telemetry(sessionId, {
+          event_type: eventType,
+          event_message: message,
+          current_question_index: currentIndex,
+        })
+        .catch((e) => console.error('Telemetry error:', e));
     }
   };
 
-  useEffect(() => {
-    if (form && !stageInitialized) {
-      const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
-      const isProt = Boolean(form.form_settings?.is_token_protected);
+  const handleDismissGuard = () => {
+    enterFullscreen();
+    setShowGuardOverlay(false);
+    toast.info('Kembali ke mode ujian layar penuh');
+  };
 
-      if (fields.length > 0) {
-        setCurrentStage('IDENTITY');
-      } else if (isProt) {
-        setCurrentStage('TOKEN');
-      } else {
-        setCurrentStage('EXAM');
-        ensureSessionActive('', {});
-      }
-      if (form.form_settings?.duration_minutes) {
-        setTimeLeft(form.form_settings.duration_minutes * 60);
-      }
-      setStageInitialized(true);
-    }
-  }, [form, stageInitialized]);
-
-  // Anti-cheat Telemetry Listeners (Tab Switch / Window Blur)
+  // Countdown timer in guard overlay (Strike 1 -> Strike 2 -> Strike 3 Blocked)
   useEffect(() => {
-    if (currentStage !== 'EXAM' || !sessionId) return;
+    if (!showGuardOverlay || isBlocked) return;
+
+    const timer = setInterval(() => {
+      setGuardCountdown((prev) => {
+        if (prev <= 1) {
+          const currentStrikes = strikesRef.current;
+          if (currentStrikes >= 2) {
+            // Second 5-second countdown expired without returning -> Strike 3: Blocked!
+            setIsBlocked(true);
+            setShowGuardOverlay(false);
+            setStrikes(3);
+            if (sessionId) {
+              publicApi
+                .telemetry(sessionId, {
+                  event_type: 'SESSION_BLOCKED',
+                  event_message:
+                    'Peringatan 3: Izin pengerjaan dicabut (BLOCKED) - Mengabaikan countdown layar penuh',
+                  current_question_index: currentIndex,
+                })
+                .catch(() => {});
+            }
+            return 0;
+          } else {
+            // First 5-second countdown expired without returning -> Escalate to Strike 2!
+            setStrikes(2);
+            setGuardReason(
+              'Peringatan ke-2: Kamu terindikasi melakukan kecurangan! 1 kali lagi izin pengerjaan akan dicabut.'
+            );
+            if (sessionId) {
+              publicApi
+                .telemetry(sessionId, {
+                  event_type: 'CHEATING_SUSPECTED',
+                  event_message: 'Peringatan 2: Siswa mengabaikan hitungan mundur pertama (5s)',
+                  current_question_index: currentIndex,
+                })
+                .catch(() => {});
+            }
+            return 5; // Reset countdown for second 5s window
+          }
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showGuardOverlay, isBlocked, sessionId, currentIndex]);
+
+  // Anti-cheat Listeners: Fullscreen, Tab Switch, and Floating App / Blur
+  useEffect(() => {
+    if (currentStage !== 'EXAM') return;
+
+    const handleFullscreenChange = () => {
+      const isFS = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      setIsFullscreenActive(isFS);
+      if (!isFS && !isBlockedRef.current && currentStage === 'EXAM') {
+        triggerViolation('Keluar dari Layar Penuh');
+      }
+    };
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        publicApi
-          .telemetry(sessionId, {
-            event_type: 'TAB_SWITCH',
-            event_message: 'Siswa berpindah tab / membuka aplikasi lain di luar browser',
-            current_question_index: currentIndex,
-          })
-          .catch((e) => console.error('Telemetry error:', e));
+      if (document.hidden && !isBlockedRef.current && currentStage === 'EXAM') {
+        triggerViolation('Berpindah Tab / Aplikasi di Luar Browser');
       }
     };
 
     const handleBlur = () => {
-      publicApi
-        .telemetry(sessionId, {
-          event_type: 'BLUR',
-          event_message: 'Jendela ujian kehilangan fokus (klik di luar jendela browser)',
-          current_question_index: currentIndex,
-        })
-        .catch((e) => console.error('Telemetry error:', e));
+      if (!isBlockedRef.current && currentStage === 'EXAM') {
+        triggerViolation('Jendela Ujian Kehilangan Fokus (Floating App / Split Screen / Klik di Luar)');
+      }
     };
 
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
 
     return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [currentStage, sessionId, currentIndex]);
+  }, [currentStage]);
+
+  // Periodic polling & operator unlock check when student is blocked
+  const handleCheckOperatorUnlock = async () => {
+    setRecheckingAccess(true);
+    try {
+      if (sessionId) {
+        try {
+          const res = await publicApi.getSessionState(sessionId);
+          const sessionData = res?.data || res;
+          if (sessionData && sessionData.status && sessionData.status !== 'BLOCKED') {
+            if (sessionData.status === 'RESTARTED') {
+              await publicApi.acknowledgeWarning(sessionId).catch(() => {});
+            }
+            if (sessionData.questions) {
+              restoreAnswersFromQuestions(sessionData.questions);
+            }
+            setIsBlocked(false);
+            setStrikes(0);
+            setShowGuardOverlay(false);
+            toast.success('Izin pengerjaan kamu telah dibuka kembali oleh pengawas!');
+            enterFullscreen();
+            return;
+          }
+        } catch {}
+      }
+
+      const respondentEmail = getRespondentIdentifier(identityData, currentUser, form?.id);
+      const tokenRes = await publicApi.verifyToken(form?.id || identifier, enteredToken, respondentEmail);
+      const resId = tokenRes?.response_id || tokenRes?.response?.id || tokenRes?.session_state?.response_id;
+      if (resId) {
+        setSessionId(resId);
+        try {
+          localStorage.setItem(`hidocs_session_${form?.id || identifier}`, resId);
+        } catch {}
+      }
+      const questionsToRestore = tokenRes?.session_state?.questions || tokenRes?.questions;
+      if (questionsToRestore) {
+        restoreAnswersFromQuestions(questionsToRestore);
+      }
+      setIsBlocked(false);
+      setStrikes(0);
+      setShowGuardOverlay(false);
+      toast.success('Izin pengerjaan kamu telah dibuka kembali oleh pengawas!');
+      enterFullscreen();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Status izin belum dibuka oleh operator/pengawas');
+    } finally {
+      setRecheckingAccess(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isBlocked) return;
+    const interval = setInterval(async () => {
+      try {
+        if (sessionId) {
+          const res = await publicApi.getSessionState(sessionId);
+          const sessionData = res?.data || res;
+          if (sessionData && sessionData.status && sessionData.status !== 'BLOCKED') {
+            if (sessionData.status === 'RESTARTED') {
+              await publicApi.acknowledgeWarning(sessionId).catch(() => {});
+            }
+            if (sessionData.questions) {
+              restoreAnswersFromQuestions(sessionData.questions);
+            }
+            setIsBlocked(false);
+            setStrikes(0);
+            setShowGuardOverlay(false);
+            toast.success('Izin pengerjaan kamu telah dibuka kembali oleh pengawas!');
+            enterFullscreen();
+            return;
+          }
+        } else {
+          const respondentEmail = getRespondentIdentifier(identityData, currentUser, form?.id);
+          const tokenRes = await publicApi.verifyToken(form?.id || identifier, enteredToken, respondentEmail);
+          if (tokenRes) {
+            const resId = tokenRes?.response_id || tokenRes?.response?.id;
+            if (resId) setSessionId(resId);
+            const questionsToRestore = tokenRes?.session_state?.questions || tokenRes?.questions;
+            if (questionsToRestore) {
+              restoreAnswersFromQuestions(questionsToRestore);
+            }
+            setIsBlocked(false);
+            setStrikes(0);
+            setShowGuardOverlay(false);
+            toast.success('Izin pengerjaan kamu telah dibuka kembali oleh pengawas!');
+            enterFullscreen();
+          }
+        }
+      } catch (err) {
+        // Still blocked
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [isBlocked, sessionId, identityData, currentUser, form?.id, identifier, enteredToken]);
 
   // Timer Countdown Effect
   useEffect(() => {
@@ -331,6 +595,7 @@ export default function ExamTakePage() {
         toast.error(res.error);
         return;
       }
+      enterFullscreen();
       setCurrentStage('EXAM');
     }
   };
@@ -352,6 +617,7 @@ export default function ExamTakePage() {
       return;
     }
     setTokenError('');
+    enterFullscreen();
     setCurrentStage('EXAM');
   };
 
@@ -479,6 +745,52 @@ export default function ExamTakePage() {
             </Button>
           </div>
         </Card>
+      </div>
+    );
+  }
+
+  if (isBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-slate-950 text-white select-none">
+        <div className="max-w-md w-full bg-slate-900 border-2 border-red-600 rounded-3xl p-8 text-center space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-red-500/20 text-red-500 mx-auto border border-red-500/30 animate-pulse">
+            <Lock size={44} />
+          </div>
+          <div className="space-y-2">
+            <span className="inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-red-600 text-white">
+              Sesi Ujian Dikunci
+            </span>
+            <h2 className="text-2xl font-black text-white">Izin Pengerjaan Dicabut</h2>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Kamu telah melanggar aturan ujian sebanyak <strong>3 kali</strong> (keluar dari layar penuh / berpindah aplikasi / membuka floating app). Sesi kamu diblokir secara otomatis oleh sistem anti-kecurangan.
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-red-950/40 border border-red-800/40 text-xs text-red-300 text-left space-y-2">
+            <div className="flex items-center gap-2 font-bold text-red-400">
+              <ShieldAlert size={16} className="shrink-0" />
+              <span>Instruksi untuk Siswa:</span>
+            </div>
+            <p>1. Silakan segera menghadap guru pengawas atau operator ujian di ruanganmu.</p>
+            <p>2. Minta pengawas untuk melakukan reset / buka kunci sesi kamu pada sistem monitoring.</p>
+            <p>3. Halaman ini akan otomatis pulih begitu operator mengonfirmasi pembukaan kunci.</p>
+          </div>
+
+          <div className="pt-2 flex flex-col gap-2">
+            <Button
+              variant="primary"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              onClick={handleCheckOperatorUnlock}
+              loading={recheckingAccess}
+            >
+              <RefreshCw size={16} className={recheckingAccess ? 'animate-spin' : ''} />
+              Cek Ulang Status Izin Sekarang
+            </Button>
+            <p className="text-[11px] text-slate-500">
+              Sistem secara otomatis mengecek status izin setiap beberapa detik...
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -656,10 +968,20 @@ export default function ExamTakePage() {
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full text-white font-semibold text-sm mt-3 shadow-md justify-center"
+                  className="w-full text-white font-semibold text-sm mt-3 shadow-md justify-center flex items-center gap-2"
                   style={{ backgroundColor: accent }}
                 >
-                  {isTokenProtected ? 'Lanjutkan ke Token Ujian &rarr;' : 'Mulai Kerjakan Soal &rarr;'}
+                  {isTokenProtected ? (
+                    <>
+                      <span>Lanjutkan ke Token Ujian</span>
+                      <ArrowRight size={16} />
+                    </>
+                  ) : (
+                    <>
+                      <span>Mulai Kerjakan Soal</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
                 </Button>
               </form>
             </Card>
@@ -1077,6 +1399,75 @@ export default function ExamTakePage() {
                 Ya, Kumpulkan Sekarang
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Anti-cheat Fullscreen Overlay Guard (Strike 1 & 2) */}
+      {showGuardOverlay && !isBlocked && (
+        <div
+          onClick={handleDismissGuard}
+          className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center cursor-pointer select-none animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              'max-w-lg w-full rounded-3xl p-8 border-2 shadow-2xl transition-all',
+              strikes >= 2
+                ? 'bg-gradient-to-b from-red-950 to-slate-900 border-red-600 text-white shadow-red-900/50 animate-pulse'
+                : 'bg-slate-900 border-amber-500 text-white shadow-amber-900/40'
+            )}
+          >
+            <div
+              className={cn(
+                'flex h-20 w-20 items-center justify-center rounded-3xl mx-auto mb-4 border',
+                strikes >= 2
+                  ? 'bg-red-500/20 text-red-500 border-red-500/30'
+                  : 'bg-amber-500/20 text-amber-500 border-amber-500/30'
+              )}
+            >
+              <ShieldAlert size={44} />
+            </div>
+
+            <div className="space-y-2 mb-6">
+              <span
+                className={cn(
+                  'inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider',
+                  strikes >= 2 ? 'bg-red-600 text-white' : 'bg-amber-500 text-black font-extrabold'
+                )}
+              >
+                {strikes >= 2 ? 'Peringatan Keras (Ke-2)' : 'Peringatan Pelanggaran (Ke-1)'}
+              </span>
+              <h2 className="text-2xl font-black">
+                {strikes >= 2 ? 'Terindikasi Kecurangan!' : 'Keluar dari Mode Ujian!'}
+              </h2>
+              <p className="text-sm text-slate-300 leading-relaxed">{guardReason}</p>
+            </div>
+
+            <div className="bg-black/40 rounded-2xl p-4 border border-white/10 mb-6">
+              <p className="text-xs text-slate-400 mb-2">Kembali ke layar penuh otomatis dalam:</p>
+              <div className="text-4xl font-black text-amber-400 font-mono tracking-wider">
+                {guardCountdown}s
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Sentuh atau klik layar sekarang untuk langsung melanjutkan ujian.
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleDismissGuard}
+              className={cn(
+                'w-full py-3.5 text-base font-bold rounded-xl shadow-lg transition-transform active:scale-95',
+                strikes >= 2
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-amber-500 hover:bg-amber-600 text-black'
+              )}
+            >
+              <Maximize2 size={18} className="mr-2" />
+              Masuk Layar Penuh &amp; Lanjutkan Ujian
+            </Button>
           </div>
         </div>
       )}

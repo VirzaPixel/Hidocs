@@ -469,6 +469,9 @@ func (s *formService) VerifyExamToken(ctx context.Context, identifier string, re
 	var session *domain.FormResponse
 	if s.responseRepo != nil && req.RespondentEmail != "" {
 		session, _ = s.responseRepo.GetActiveResponseSession(ctx, form.ID, req.RespondentEmail)
+		if session != nil && session.Status == domain.ResponseStatusBlocked {
+			return nil, errors.New("izin pengerjaan ujian kamu dicabut (BLOCKED) karena terindikasi kecurangan. Silakan hubungi pengawas/operator untuk membuka kunci sesi")
+		}
 		if session == nil {
 			session = &domain.FormResponse{
 				ID:                   uuid.New(),

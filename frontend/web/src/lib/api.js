@@ -69,6 +69,9 @@ export const publicApi = {
   telemetry: (responseId, payload) =>
     apiClient.post(`/public/responses/${responseId}/telemetry`, payload),
   submit: (formId, payload) => apiClient.post(`/forms/${formId}/submit`, payload),
+  getSessionState: (responseId) => apiClient.get(`/public/responses/${responseId}/session`),
+  acknowledgeWarning: (responseId) =>
+    apiClient.post(`/public/responses/${responseId}/acknowledge-warning`),
 };
 
 /* ============================= QUESTIONS ============================= */

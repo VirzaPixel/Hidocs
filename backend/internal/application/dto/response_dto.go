@@ -103,17 +103,18 @@ type ResponseDetailDTO struct {
 }
 
 type AnswerDetailDTO struct {
-	ID               uuid.UUID  `json:"id"`
-	QuestionID       uuid.UUID  `json:"question_id"`
-	QuestionText     string     `json:"question_text"`
-	SelectedOptionID *uuid.UUID `json:"selected_option_id,omitempty"`
-	SelectedOption   string     `json:"selected_option_text,omitempty"`
-	AnswerText       string     `json:"answer_text,omitempty"`
-	IsFlagged        bool       `json:"is_flagged"`
-	MatchPairJSON    *string    `json:"match_pair_json,omitempty"`
-	IsCorrect        *bool      `json:"is_correct,omitempty"`
-	PointsEarned     float64    `json:"points_earned"`
-	ScoreGiven       *float64   `json:"score_given,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	QuestionID         uuid.UUID  `json:"question_id"`
+	QuestionText       string     `json:"question_text"`
+	SelectedOptionID   *uuid.UUID `json:"selected_option_id,omitempty"`
+	SelectedOption     string     `json:"selected_option,omitempty"`
+	SelectedOptionText string     `json:"selected_option_text,omitempty"`
+	AnswerText         string     `json:"answer_text,omitempty"`
+	IsFlagged          bool       `json:"is_flagged"`
+	MatchPairJSON      *string    `json:"match_pair_json,omitempty"`
+	IsCorrect          *bool      `json:"is_correct,omitempty"`
+	PointsEarned       float64    `json:"points_earned"`
+	ScoreGiven         *float64   `json:"score_given,omitempty"`
 }
 
 // FIX: DTO baru untuk endpoint list responses yang sekarang paginated.

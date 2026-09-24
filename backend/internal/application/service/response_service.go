@@ -440,7 +440,15 @@ func (s *responseService) RestartStudentSession(ctx context.Context, userID uuid
 		return domain.ErrForbidden
 	}
 
-	return s.responseRepo.RestartStudentResponse(ctx, responseID, req.WarningMessage)
+	err = s.responseRepo.RestartStudentResponse(ctx, responseID, req.WarningMessage)
+	if err == nil {
+		infraWS.GlobalHub.BroadcastToForm(formID, "STUDENT_RESTART", map[string]any{
+			"response_id":     responseID,
+			"warning_message": req.WarningMessage,
+			"status":          domain.ResponseStatusRestarted,
+		})
+	}
+	return err
 }
 
 func (s *responseService) GetFormResponses(ctx context.Context, userID uuid.UUID, formID uuid.UUID, pg domain.Pagination) ([]dto.ResponseDetailDTO, int64, error) {
@@ -521,13 +529,13 @@ func (s *responseService) mapResponseToDTO(resp *domain.FormResponse) *dto.Respo
 	var answers []dto.AnswerDetailDTO
 	for _, a := range resp.Answers {
 		detail := dto.AnswerDetailDTO{
-			ID:               a.ID,
-			QuestionID:       a.QuestionID,
-			SelectedOptionID: a.SelectedOptionID,
-			AnswerText:       a.AnswerText,
-			IsFlagged:        a.IsFlagged,
-			MatchPairJSON:    a.MatchPairJSON,
-			ScoreGiven:       a.ScoreGiven,
+			ID:                 a.ID,
+			QuestionID:         a.QuestionID,
+			SelectedOptionID:   a.SelectedOptionID,
+			AnswerText:         a.AnswerText,
+			IsFlagged:          a.IsFlagged,
+			MatchPairJSON:      a.MatchPairJSON,
+			ScoreGiven:         a.ScoreGiven,
 		}
 
 		if a.Question != nil {
@@ -535,10 +543,23 @@ func (s *responseService) mapResponseToDTO(resp *domain.FormResponse) *dto.Respo
 		}
 		if a.SelectedOption != nil {
 			detail.SelectedOption = a.SelectedOption.OptionText
+			detail.SelectedOptionText = a.SelectedOption.OptionText
 			isCorrect := a.SelectedOption.IsCorrect
 			detail.IsCorrect = &isCorrect
-			if isCorrect && a.Question != nil {
-				detail.PointsEarned = float64(a.Question.Points)
+			if isCorrect {
+				if a.Question != nil && a.Question.Points > 0 {
+					detail.PointsEarned = float64(a.Question.Points)
+				} else if a.ScoreGiven != nil {
+					detail.PointsEarned = *a.ScoreGiven
+				}
+			} else {
+				detail.PointsEarned = 0
+			}
+		} else if a.ScoreGiven != nil {
+			detail.PointsEarned = *a.ScoreGiven
+			if a.Question != nil && a.Question.Points > 0 {
+				isCorrect := *a.ScoreGiven >= float64(a.Question.Points)
+				detail.IsCorrect = &isCorrect
 			}
 		}
 
