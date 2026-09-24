@@ -24,6 +24,62 @@ class ApiClient {
 
   static String? examSessionToken;
 
+  /// Callback yang dipanggil SEKALI saat server membalas 401 (access token
+  /// kedaluwarsa). AuthProvider mengisinya dengan `refreshSession()` sehingga
+  /// token diperpanjang otomatis dan pengguna tidak perlu login ulang selama
+  /// refresh token (14 hari) masih berlaku.
+  static Future<bool> Function()? onUnauthorized;
+
+  /// Single-flight: beberapa request yang kena 401 bersamaan hanya memicu SATU
+  /// panggilan /auth/refresh. Ini penting karena refresh token di backend
+  /// bersifat sekali pakai (dirotasi) — kalau dipanggil dua kali bersamaan,
+  /// panggilan kedua akan ditolak dan sesi bisa dicabut semua.
+  static Future<bool>? _refreshInFlight;
+
+  /// Endpoint auth yang TIDAK boleh memicu auto-refresh.
+  ///
+  /// Yang paling penting: `/auth/refresh` sendiri. Kalau request refresh dibalas
+  /// 401 lalu helper ini mencoba refresh lagi, ia akan menunggu future dirinya
+  /// sendiri (_refreshInFlight) yang belum pernah selesai -> DEADLOCK (aplikasi
+  /// menggantung). Endpoint login/OTP juga tidak perlu refresh.
+  static bool _isAuthEndpoint(http.Response response) {
+    final path = response.request?.url.path ?? '';
+    return path.contains('/auth/login') ||
+        path.contains('/auth/register') ||
+        path.contains('/auth/verify-otp') ||
+        path.contains('/auth/resend-otp') ||
+        path.contains('/auth/forgot-password') ||
+        path.contains('/auth/reset-password') ||
+        path.contains('/auth/refresh');
+  }
+
+  static Future<bool> _ensureRefreshed() {
+    final refresher = onUnauthorized;
+    if (refresher == null) return Future.value(false);
+    return _refreshInFlight ??= refresher().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  /// Jalankan request; bila balasannya 401 dan refresh token masih hidup,
+  /// perbarui token lalu ulangi request satu kali dengan access token baru.
+  static Future<http.Response> _sendWithAuthRetry(
+    Future<http.Response> Function() send,
+  ) async {
+    var response = await send();
+    if (response.statusCode != 401 ||
+        onUnauthorized == null ||
+        _isAuthEndpoint(response)) {
+      return response;
+    }
+
+    final refreshed = await _ensureRefreshed();
+    if (!refreshed) return response;
+
+    // _headers() membaca ApiClient.token yang sudah diperbarui refreshSession().
+    return send();
+  }
+
   static Map<String, String> _headers({bool json = true, String? sessionToken}) {
     final headers = <String, String>{'Accept': 'application/json'};
 
@@ -82,12 +138,13 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
   }) async {
-    final response =
-        await http.get(_uri(path, query), headers: _headers()).timeout(
-      _timeout,
-      onTimeout: () => throw ApiException(
-        'Koneksi timeout. Periksa jaringan Anda.',
-      ),
+    final response = await _sendWithAuthRetry(
+      () => http.get(_uri(path, query), headers: _headers()).timeout(
+            _timeout,
+            onTimeout: () => throw ApiException(
+              'Koneksi timeout. Periksa jaringan Anda.',
+            ),
+          ),
     );
     return _parse(response);
   }
@@ -97,45 +154,43 @@ class ApiClient {
     Object? body,
     bool json = true,
   }) async {
-    final response = await http
-        .post(
-          _uri(path),
-          headers: _headers(),
-          body: json ? jsonEncode(body ?? {}) : body,
-        )
-        .timeout(
-      _timeout,
-      onTimeout: () => throw ApiException(
-        'Koneksi timeout. Periksa jaringan Anda.',
-      ),
+    final payload = json ? jsonEncode(body ?? {}) : body;
+    final response = await _sendWithAuthRetry(
+      () => http
+          .post(_uri(path), headers: _headers(), body: payload)
+          .timeout(
+            _timeout,
+            onTimeout: () => throw ApiException(
+              'Koneksi timeout. Periksa jaringan Anda.',
+            ),
+          ),
     );
     return _parse(response);
   }
 
   static Future<dynamic> put(String path, {Object? body}) async {
-    final response = await http
-        .put(
-          _uri(path),
-          headers: _headers(),
-          body: jsonEncode(body ?? {}),
-        )
-        .timeout(
-      _timeout,
-      onTimeout: () => throw ApiException(
-        'Koneksi timeout. Periksa jaringan Anda.',
-      ),
+    final payload = jsonEncode(body ?? {});
+    final response = await _sendWithAuthRetry(
+      () => http
+          .put(_uri(path), headers: _headers(), body: payload)
+          .timeout(
+            _timeout,
+            onTimeout: () => throw ApiException(
+              'Koneksi timeout. Periksa jaringan Anda.',
+            ),
+          ),
     );
     return _parse(response);
   }
 
   static Future<dynamic> delete(String path) async {
-    final response = await http
-        .delete(_uri(path), headers: _headers())
-        .timeout(
-      _timeout,
-      onTimeout: () => throw ApiException(
-        'Koneksi timeout. Periksa jaringan Anda.',
-      ),
+    final response = await _sendWithAuthRetry(
+      () => http.delete(_uri(path), headers: _headers()).timeout(
+            _timeout,
+            onTimeout: () => throw ApiException(
+              'Koneksi timeout. Periksa jaringan Anda.',
+            ),
+          ),
     );
     return _parse(response);
   }

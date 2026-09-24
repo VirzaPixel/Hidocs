@@ -30,7 +30,7 @@ func RequireAuth(jwtManager *security.JWTManager) gin.HandlerFunc {
 		}
 
 		tokenStr = strings.TrimSpace(tokenStr)
-		claims, err := jwtManager.ValidateToken(tokenStr)
+		claims, err := jwtManager.ValidateAccessToken(tokenStr)
 		if err != nil {
 			response.Unauthorized(c, "Invalid or expired token", err)
 			c.Abort()

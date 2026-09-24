@@ -1,8 +1,13 @@
 package handler
 
 import (
+	"errors"
+
 	"backend/internal/application/dto"
 	"backend/internal/application/service"
+	"backend/internal/domain"
+	"backend/internal/infrastructure/security"
+	"backend/internal/interfaces/http/middleware"
 	"backend/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -114,6 +119,81 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	response.OK(c, "Login successful", res)
+}
+
+// Refresh godoc
+// @Summary Tukar refresh token dengan access token baru
+// @Description Menerbitkan access token baru dan refresh token baru (rotasi) dari refresh token yang masih valid. Pemakaian ulang dalam 60 detik setelah rotasi masih ditoleransi (balapan antar-klien sah); di luar rentang itu dianggap pencurian token sehingga seluruh sesi user dicabut.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body dto.RefreshRequest true "Refresh Token Payload"
+// @Success 200 {object} response.APIResponse{data=dto.AuthResponse}
+// @Failure 401 {object} response.APIResponse
+// @Router /api/v1/auth/refresh [post]
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req dto.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request payload", err)
+		return
+	}
+
+	res, err := h.authService.Refresh(c.Request.Context(), req)
+	if err != nil {
+		// 401: token tidak bisa dipakai -> klien harus meminta pengguna login ulang.
+		if errors.Is(err, domain.ErrInvalidRefreshToken) ||
+			errors.Is(err, domain.ErrRefreshTokenRevoked) ||
+			errors.Is(err, domain.ErrUserNotFound) {
+			response.Unauthorized(c, err.Error(), err)
+			return
+		}
+		// 403: akun sudah dinonaktifkan, sesi tidak boleh diperpanjang.
+		if errors.Is(err, domain.ErrForbidden) {
+			response.Forbidden(c, err.Error(), err)
+			return
+		}
+		// Selain itu (mis. Redis/DB lagi error) bukan masalah kredensial —
+		// jangan dikirim sebagai 401 karena akan memicu logout palsu di klien.
+		response.InternalServerError(c, "Failed to refresh token. Please try again.", err)
+		return
+	}
+
+	response.OK(c, "Token refreshed successfully", res)
+}
+
+// Logout godoc
+// @Summary Logout & cabut refresh token
+// @Description Mencabut refresh token aktif. Bila body berisi refresh_token, hanya sesi/perangkat ini yang dicabut; bila body dikosongkan, seluruh sesi user dicabut (logout dari semua perangkat).
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.LogoutRequest false "Logout Payload (opsional)"
+// @Success 200 {object} response.APIResponse
+// @Failure 401 {object} response.APIResponse
+// @Router /api/v1/auth/logout [post]
+func (h *AuthHandler) Logout(c *gin.Context) {
+	claims := c.MustGet(middleware.UserContextKey).(*security.JWTClaims)
+
+	// Body bersifat opsional (aplikasi Android memanggil tanpa body), jadi error
+	// EOF / body kosong bukan kesalahan fatal — diperlakukan sebagai logout semua
+	// perangkat.
+	var req dto.LogoutRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if err := h.authService.Logout(c.Request.Context(), claims.UserID, req.RefreshToken); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			// Refresh token milik user lain dikirim untuk mencabut sesi.
+			response.Forbidden(c, err.Error(), err)
+			return
+		}
+		// Kegagalan infrastruktur: logout lokal tetap dilakukan oleh klien,
+		// tapi jangan laporkan sebagai 400 seolah payload-nya salah.
+		response.InternalServerError(c, "Failed to revoke session on server. Please try again.", err)
+		return
+	}
+
+	response.OK(c, "Logged out successfully. Refresh token has been revoked.", nil)
 }
 
 // ForgotPassword godoc

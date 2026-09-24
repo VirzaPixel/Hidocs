@@ -23,4 +23,11 @@ var (
 	
 	ErrInvalidFileType     = errors.New("invalid file type, only docx is supported")
 	ErrInvalidToken        = errors.New("invalid or expired token")
+	// ErrInvalidRefreshToken dipakai endpoint POST /auth/refresh saat refresh
+	// token tidak valid, kedaluwarsa, atau salah tipe.
+	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
+	// ErrRefreshTokenRevoked menandakan refresh token sudah pernah dipakai
+	// (rotasi) atau sudah dicabut lewat logout — indikasi token dicuri/dipakai
+	// ulang oleh pihak lain.
+	ErrRefreshTokenRevoked = errors.New("refresh token has been revoked or already used")
 )

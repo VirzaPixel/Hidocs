@@ -12,6 +12,17 @@ services:
       - .env
     depends_on:
       - postgres-db
+      - redis
+    restart: always
+
+  # Service Redis — dipakai OTP cache + whitelist refresh token JWT.
+  # Tanpa ini backend otomatis fallback ke cache in-memory: OTP/refresh token
+  # hanya hidup di 1 proses dan hilang setiap container di-restart.
+  # Pastikan REDIS_HOST=redis di .env saat memakai compose ini.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6389}:6379"
     restart: always
 
   # Service Frontend Web React

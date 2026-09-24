@@ -62,9 +62,18 @@ npm run dev
 - **Struktur**: `src/lib/api.js` berisi SEMUA fungsi pemanggilan API ke backend Go,
   dikelompokkan per resource (authApi, formApi, questionApi, questionBankApi, responseApi,
   aiApi, userApi). Kalau backend nanti nambah/ubah endpoint, cukup edit file ini.
-- **Auth**: token JWT disimpan di `localStorage` (key `hidocs_token`), otomatis dilampirkan
-  ke tiap request lewat interceptor axios di `src/lib/apiClient.js`. Kalau dapat 401,
-  otomatis logout & redirect ke `/login`.
+- **Auth**: Token JWT disimpan di `localStorage` — `hidocs_token` (access token,
+  umur 60 menit) dan `hidocs_refresh_token` (umur 14 hari) — otomatis dilampirkan
+  ke tiap request lewat interceptor axios di `src/lib/apiClient.js`.
+  - Kalau server membalas **401** (access token expired), interceptor otomatis
+    memanggil `POST /auth/refresh` sekali (single-flight, jadi beberapa request
+    yang gagal bersamaan hanya memicu 1x refresh), menyimpan token baru, lalu
+    **mengulang request yang gagal**. User tidak perlu login ulang selama
+    refresh token masih hidup (±14 hari).
+  - Baru kalau refresh token juga mati (kedaluwarsa / sudah logout), sesi
+    dibersihkan & diarahkan ke `/login`.
+  - `logout()` di `src/store/authStore.js` mencabut refresh token di server
+    (best-effort), jadi token yang sudah tersimpan tidak bisa dipakai lagi.
 - **Live Monitoring**: polling tiap 8 detik (bukan WebSocket, sesuai backend saat ini) —
   bisa diatur di `src/features/monitoring/LiveTab.jsx` (`POLL_INTERVAL_MS`).
 - **Status "Review"**: BUKAN status asli dari backend (backend cuma punya DRAFT/ACTIVE/CLOSED

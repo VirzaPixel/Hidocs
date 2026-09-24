@@ -62,6 +62,27 @@ backend/
 - **`user`**: Creators & Respondents who build forms/exams, manage questions, and submit responses.
 - **Security**: Password hashing with `bcrypt`, JWT Tokens, Passcode/PIN protection, Exambro browser header verification (`X-Exambro-Token`), single submission enforcement per email.
 
+### JWT: Access Token + Refresh Token (Opsi A)
+| Variabel Env | Default | Fungsi |
+| :--- | :--- | :--- |
+| `JWT_SECRET` | `dev-secret-change-in-prod` | Kunci HMAC-SHA256 penandatangan token (wajib diganti di produksi). |
+| `JWT_ACCESS_EXPIRE_MINUTES` | `60` | Umur **access token** — dikirim di header `Authorization` tiap request. |
+| `JWT_REFRESH_EXPIRE_HOURS` | `336` (14 hari) | Umur **refresh token** = durasi sesi total sebelum user wajib login ulang. |
+| `JWT_EXPIRE_HOURS` | — | Fallback lama; hanya dipakai bila `JWT_REFRESH_EXPIRE_HOURS` tidak diset. |
+
+Cara kerja singkat:
+1. `POST /auth/login` (atau `/auth/verify-otp`) mengembalikan **sepasang** token: `access_token` (pendek) + `refresh_token` (14 hari).
+2. Setiap request protected memakai `access_token`. Saat kedaluwarsa, server membalas **401**.
+3. Klien memanggil `POST /auth/refresh` → dapat pasangan token baru (klien web & Android sudah melakukannya otomatis).
+4. `refresh_token` disimpan sebagai whitelist `jti` di **Redis** (`refresh:<user_id>:<jti>`, TTL 14 hari) sehingga bisa **dicabut** saat logout — hal yang tidak mungkin dilakukan dengan JWT stateless biasa.
+5. Setiap refresh, token lama **dirotasi** dan ditandai dua penanda:
+   - `refresh:used:...` (TTL 24 jam) — untuk deteksi pencurian token.
+   - `refresh:grace:...` (TTL 60 detik) — **jendela toleransi replay**: kalau dua klien sah (dua tab browser, atau web + HP) memakai refresh token yang sama hampir bersamaan, permintaan kedua tetap dilayani dan *tidak ada* sesi yang dicabut.
+   Pemakaian ulang **di luar** jendela 60 detik dianggap token dicuri → **semua sesi user dicabut** dan klien dipaksa login ulang. Pemakaian token yang sudah di-logout/kedaluwarsa hanya ditolak `401`, sedangkan kegagalan Redis/DB dijawab `500` (tidak memicu logout palsu).
+6. `POST /auth/logout` mencabut refresh token (satu perangkat bila body berisi `refresh_token` yang masih aktif, atau semua perangkat bila tanpa body / tokennya sudah tidak aktif). Reset password juga mencabut semua sesi.
+
+> **Deployment note**: karena whitelist refresh token disimpan di Redis, jalankan **satu instance Redis yang dipakai bersama** semua replika backend. Bila Redis tidak tersedia, backend otomatis jatuh ke mode in-memory (hanya cocok untuk 1 instance / development) — token yang di-refresh di instance A tidak dikenali instance B.
+
 ---
 
 ## 🚀 API Endpoint Reference
@@ -72,7 +93,9 @@ backend/
 | **GET** | `/health` | Server Health Check | Public |
 | **GET** | `/api/v1/public/forms/:short_code` | Access Public Form / Exam | Public |
 | **POST** | `/api/v1/auth/register` | Register User | Public |
-| **POST** | `/api/v1/auth/login` | Login & get JWT token | Public |
+| **POST** | `/api/v1/auth/login` | Login & dapatkan access + refresh token | Public |
+| **POST** | `/api/v1/auth/refresh` | Tukar refresh token dengan access token baru (rotasi) | Public |
+| **POST** | `/api/v1/auth/logout` | Cabut refresh token (1 perangkat / semua perangkat) | Bearer Token |
 | **POST** | `/api/v1/auth/forgot-password` | Request password reset token | Public |
 | **POST** | `/api/v1/auth/reset-password` | Reset password using token | Public |
 | **GET** | `/api/v1/users/me` | Get Profile | Bearer Token |

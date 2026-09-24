@@ -16,11 +16,36 @@ import (
 	"github.com/google/uuid"
 )
 
+// rotationDetectionWindow adalah berapa lama penanda "sudah dirotasi" disimpan.
+// Selama masa ini, bila token lama muncul lagi SETELAH jendela toleransi replay
+// lewat, sistem menganggapnya indikasi pencurian token dan mencabut seluruh sesi
+// user. Setelah jendela ini lewat, token lama dianggap sekadar kedaluwarsa
+// (reject biasa, tanpa mencabut sesi lain).
+const rotationDetectionWindow = 24 * time.Hour
+
+// RotationReplayWindow adalah jendela toleransi pemakaian ulang refresh token
+// TEPAT setelah rotasi. Alasannya: dua klien sah (dua tab browser, atau web +
+// aplikasi HP) bisa memakai refresh token yang sama hampir bersamaan. Tanpa
+// toleransi ini, panggilan kedua akan dianggap pencurian token dan seluruh sesi
+// user tercabut padahal bukan serangan. Di dalam jendela ini token yang sudah
+// dirotasi masih boleh ditukar dengan pasangan baru (tanpa mencabut sesi siapa
+// pun); di luar jendela, pemakaian ulang tetap dianggap pencurian.
+//
+// Variabel (bukan const) supaya test bisa mempersempitnya. Nilai <= 0 mematikan
+// toleransi (perilaku ketat: setiap pemakaian ulang = pencurian).
+var RotationReplayWindow = 60 * time.Second
+
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (string, error)
 	VerifyOTP(ctx context.Context, req dto.VerifyOTPRequest) (*dto.AuthResponse, error)
 	ResendOTP(ctx context.Context, req dto.ResendOTPRequest) error
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error)
+	// Refresh menerbitkan access token baru dari refresh token yang masih
+	// valid, sekaligus memutar (rotate) refresh token lama menjadi yang baru.
+	Refresh(ctx context.Context, req dto.RefreshRequest) (*dto.AuthResponse, error)
+	// Logout mencabut refresh token. Bila refreshToken kosong, SELURUH sesi
+	// user dicabut (logout dari semua perangkat).
+	Logout(ctx context.Context, userID uuid.UUID, refreshToken string) error
 	ForgotPassword(ctx context.Context, req dto.ForgotPasswordRequest) (string, error)
 	ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error
 }
@@ -30,6 +55,7 @@ type authService struct {
 	passwordHasher security.PasswordHasher
 	jwtManager     *security.JWTManager
 	otpCache       cache.OTPCache
+	refreshStore   cache.RefreshTokenStore
 	emailSender    email.EmailSender
 }
 
@@ -38,6 +64,7 @@ func NewAuthService(
 	hasher security.PasswordHasher,
 	jwt *security.JWTManager,
 	otpCache cache.OTPCache,
+	refreshStore cache.RefreshTokenStore,
 	emailSender email.EmailSender,
 ) AuthService {
 	return &authService{
@@ -45,6 +72,7 @@ func NewAuthService(
 		passwordHasher: hasher,
 		jwtManager:     jwt,
 		otpCache:       otpCache,
+		refreshStore:   refreshStore,
 		emailSender:    emailSender,
 	}
 }
@@ -132,23 +160,154 @@ func (s *authService) VerifyOTP(ctx context.Context, req dto.VerifyOTPRequest) (
 	// 5. Delete OTP & pending data from Redis
 	_ = s.otpCache.DeleteOTP(ctx, emailStr)
 
-	// 6. Generate JWT Session Token
-	token, err := s.jwtManager.GenerateToken(user)
+	// 6. Terbitkan sepasang token (access + refresh) dan simpan whitelist refresh
+	return s.issueSession(ctx, user, user.AvatarURL)
+}
+
+// issueSession membuat access token + refresh token baru, menyimpan jti refresh
+// token ke whitelist (Redis) dengan TTL seumur refresh token, lalu menyusun
+// response. Dipakai oleh VerifyOTP, Login, dan Refresh supaya formatnya
+// konsisten di semua endpoint.
+func (s *authService) issueSession(ctx context.Context, user *domain.User, avatarURL string) (*dto.AuthResponse, error) {
+	accessToken, err := s.jwtManager.GenerateAccessToken(user)
 	if err != nil {
 		return nil, err
 	}
 
+	refreshToken, jti, err := s.jwtManager.GenerateRefreshToken(user)
+	if err != nil {
+		return nil, err
+	}
+
+	// JWT bersifat stateless: tanpa langkah ini refresh token tetap valid
+	// sampai exp-nya habis walau sudah di-logout, sehingga tidak bisa dicabut.
+	if err := s.refreshStore.StoreRefreshToken(ctx, user.ID, jti, s.jwtManager.RefreshExpiresIn()); err != nil {
+		return nil, err
+	}
+
 	return &dto.AuthResponse{
-		Token: token,
+		// Token = access token (kompatibel dengan klien lama yang baca `token`).
+		Token:        accessToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int(s.jwtManager.AccessExpiresIn().Seconds()),
 		User: dto.UserResponse{
 			ID:        user.ID,
 			Name:      user.Name,
 			Email:     user.Email,
 			Role:      user.Role,
+			AvatarURL: avatarURL,
 			IsActive:  user.IsActive,
 			CreatedAt: user.CreatedAt,
 		},
 	}, nil
+}
+
+// Refresh menukar refresh token yang valid dengan pasangan token baru.
+//
+// Alur (rotasi sekali pakai + deteksi pemakaian ulang):
+//  1. Validasi signature, tipe token, dan masa berlaku refresh token.
+//  2. Cek status jti di whitelist:
+//     - active: lanjut rotasi.
+//     - rotated_recently: baru saja dirotasi, masih di jendela toleransi replay. Ini yang terjadi saat dua klien sah memakai token sama hampir bersamaan, jadi permintaan tetap dilayani tanpa mencabut sesi siapa pun.
+//     - rotated: sudah dirotasi dan jendela toleransi lewat = indikasi token dicuri, cabut SELURUH sesi user lalu tolak.
+//     - unknown: sudah logout / dicabut / kedaluwarsa; tolak tanpa mengganggu sesi perangkat lain.
+//  3. Rotasi: tandai token lama (penanda 24 jam + jendela grace), lalu terbitkan pasangan access + refresh baru.
+func (s *authService) Refresh(ctx context.Context, req dto.RefreshRequest) (*dto.AuthResponse, error) {
+	claims, err := s.jwtManager.ValidateRefreshToken(strings.TrimSpace(req.RefreshToken))
+	if err != nil {
+		return nil, domain.ErrInvalidRefreshToken
+	}
+
+	state, err := s.refreshStore.RefreshTokenState(ctx, claims.UserID, claims.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch state {
+	case cache.RefreshTokenRotated:
+		// Token ini sudah dipakai sekali lalu dirotasi, dan jendela toleransi
+		// sudah lewat — kemungkinan besar salinannya ada di tangan pihak lain.
+		// Amankan akun dengan mencabut semua sesi.
+		_ = s.refreshStore.RevokeAllRefreshTokens(ctx, claims.UserID)
+		return nil, domain.ErrRefreshTokenRevoked
+	case cache.RefreshTokenUnknown:
+		// Sudah logout / dicabut / kedaluwarsa. Tidak perlu mencabut sesi lain
+		// (perangkat lain milik user ini harus tetap bisa dipakai).
+		return nil, domain.ErrInvalidRefreshToken
+	case cache.RefreshTokenRotatedRecently:
+		// Balapan antar-klien yang sah: lanjut menerbitkan pasangan token baru
+		// tanpa mencabut apa pun. Tidak ada rotasi tambahan di sini supaya token
+		// pengguna lain (yang sudah memegang hasil rotasi pertama) tetap valid.
+		user, err := s.userRepo.GetByID(ctx, claims.UserID)
+		if err != nil {
+			return nil, domain.ErrUserNotFound
+		}
+		if !user.IsActive {
+			_ = s.refreshStore.RevokeAllRefreshTokens(ctx, user.ID)
+			return nil, domain.ErrForbidden
+		}
+		return s.issueSession(ctx, user, user.AvatarURL)
+	}
+
+	user, err := s.userRepo.GetByID(ctx, claims.UserID)
+	if err != nil {
+		return nil, domain.ErrUserNotFound
+	}
+	if !user.IsActive {
+		// Akun dinonaktifkan admin -> sesi tidak boleh diperpanjang lagi.
+		_ = s.refreshStore.RevokeAllRefreshTokens(ctx, user.ID)
+		return nil, domain.ErrForbidden
+	}
+
+	// Rotasi: token lama hangus dan ditandai supaya pemakaian ulangnya bisa
+	// dibedakan antara "balapan antar-klien" dan "token dicuri".
+	if err := s.refreshStore.MarkRefreshTokenRotated(
+		ctx, claims.UserID, claims.ID, rotationDetectionWindow, RotationReplayWindow,
+	); err != nil {
+		return nil, err
+	}
+
+	return s.issueSession(ctx, user, user.AvatarURL)
+}
+
+// Logout mencabut sesi pengguna. Bila refreshToken diberikan, hanya perangkat
+// itu yang logout; bila kosong, semua perangkat milik user tersebut logout.
+func (s *authService) Logout(ctx context.Context, userID uuid.UUID, refreshToken string) error {
+	refreshToken = strings.TrimSpace(refreshToken)
+
+	// Tanpa refresh token: treat as "logout dari semua perangkat".
+	if refreshToken == "" {
+		return s.refreshStore.RevokeAllRefreshTokens(ctx, userID)
+	}
+
+	claims, err := s.jwtManager.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		// Token yang dikirim sudah tidak bisa dibaca (kedaluwarsa / cacat).
+		// Karena pemanggil sudah terautentikasi lewat access token, cara aman
+		// adalah mencabut SEMUA sesi user: ini mencegah refresh token hasil
+		// rotasi yang dicabut sebagian tetap hidup di server (token yatim).
+		return s.refreshStore.RevokeAllRefreshTokens(ctx, userID)
+	}
+
+	// Jangan biarkan user A mencabut sesi user B dengan menebak token.
+	if claims.UserID != userID {
+		return domain.ErrForbidden
+	}
+
+	state, err := s.refreshStore.RefreshTokenState(ctx, userID, claims.ID)
+	if err != nil {
+		return err
+	}
+	if state != cache.RefreshTokenActive {
+		// Token yang dikirim valid tapi bukan token yang sedang aktif (mis. sudah
+		// dirotasi). Cabut semua sesi user supaya tidak ada token yatim yang
+		// tertinggal hidup di server.
+		return s.refreshStore.RevokeAllRefreshTokens(ctx, userID)
+	}
+
+	return s.refreshStore.RevokeRefreshToken(ctx, userID, claims.ID)
 }
 
 func (s *authService) ResendOTP(ctx context.Context, req dto.ResendOTPRequest) error {
@@ -192,23 +351,8 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 		return nil, domain.ErrInvalidCredentials
 	}
 
-	token, err := s.jwtManager.GenerateToken(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.AuthResponse{
-		Token: token,
-		User: dto.UserResponse{
-			ID:        user.ID,
-			Name:      user.Name,
-			Email:     user.Email,
-			Role:      user.Role,
-			AvatarURL: user.AvatarURL,
-			IsActive:  user.IsActive,
-			CreatedAt: user.CreatedAt,
-		},
-	}, nil
+	// Terbitkan access token (umur pendek) + refresh token (umur panjang) baru.
+	return s.issueSession(ctx, user, user.AvatarURL)
 }
 
 func (s *authService) ForgotPassword(ctx context.Context, req dto.ForgotPasswordRequest) (string, error) {
@@ -254,6 +398,10 @@ func (s *authService) ResetPassword(ctx context.Context, req dto.ResetPasswordRe
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return err
 	}
+
+	// Keamanan: ganti password = semua sesi lama (token di HP/browser lain)
+	// langsung dicabut supaya tidak tetap bisa dipakai.
+	_ = s.refreshStore.RevokeAllRefreshTokens(ctx, user.ID)
 
 	_ = s.userRepo.DeletePasswordReset(ctx, user.Email)
 	return nil

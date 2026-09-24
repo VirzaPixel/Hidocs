@@ -104,6 +104,10 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 			auth.POST("/verify-otp", cfg.AuthHandler.VerifyOTP)
 			auth.POST("/resend-otp", cfg.AuthHandler.ResendOTP)
 			auth.POST("/login", cfg.AuthHandler.Login)
+			// Refresh token: satu-satunya endpoint yang menerima refresh token.
+			// Access token yang sudah expired ditukar dengan pasangan token baru
+			// tanpa meminta pengguna login ulang (sliding session).
+			auth.POST("/refresh", cfg.AuthHandler.Refresh)
 			auth.POST("/forgot-password", cfg.AuthHandler.ForgotPassword)
 			auth.POST("/reset-password", cfg.AuthHandler.ResetPassword)
 		}
@@ -112,6 +116,9 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 		protected := api.Group("")
 		protected.Use(middleware.RequireAuth(cfg.JWTManager))
 		{
+			// 2b. Logout: cabut refresh token (satu perangkat atau semua perangkat).
+			protected.POST("/auth/logout", cfg.AuthHandler.Logout)
+
 			// 3. User Profile & Student Import
 			users := protected.Group("/users")
 			{

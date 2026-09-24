@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import { TOKEN_KEY, USER_KEY } from '../lib/apiClient';
+import {
+  TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+  USER_KEY,
+  saveTokens,
+  clearSession,
+} from '../lib/apiClient';
 
 function loadUser() {
   try {
@@ -13,11 +19,17 @@ function loadUser() {
 export const useAuthStore = create((set) => ({
   user: loadUser(),
   token: localStorage.getItem(TOKEN_KEY) || null,
+  refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || null,
 
-  login: (token, user) => {
-    localStorage.setItem(TOKEN_KEY, token);
+  // refreshToken diambil dari respons backend: { token, access_token, refresh_token }
+  login: (token, user, refreshToken) => {
+    const access = saveTokens({ token, refresh_token: refreshToken });
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    set({ token, user });
+    set({
+      token: access,
+      refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || null,
+      user,
+    });
   },
 
   setUser: (user) => {
@@ -26,8 +38,7 @@ export const useAuthStore = create((set) => ({
   },
 
   logout: () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    set({ token: null, user: null });
+    clearSession();
+    set({ token: null, refreshToken: null, user: null });
   },
 }));
