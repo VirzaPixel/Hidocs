@@ -5,7 +5,6 @@ import (
 	"backend/internal/application/service"
 	"backend/pkg/response"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type PublicHandler struct {
@@ -75,10 +74,9 @@ func (h *PublicHandler) GetFormQRCode(c *gin.Context) {
 // @Success 200 {object} response.APIResponse{data=dto.VerifyExamTokenResponse}
 // @Router /api/v1/public/forms/{form_id}/verify-token [post]
 func (h *PublicHandler) VerifyExamToken(c *gin.Context) {
-	formID, err := uuid.Parse(c.Param("form_id"))
-	if err != nil {
-		response.BadRequest(c, "Invalid form_id UUID format", err)
-		return
+	identifier := c.Param("form_id")
+	if identifier == "" {
+		identifier = c.Param("short_code")
 	}
 
 	var req dto.VerifyExamTokenRequest
@@ -87,7 +85,7 @@ func (h *PublicHandler) VerifyExamToken(c *gin.Context) {
 		return
 	}
 
-	res, err := h.formService.VerifyExamToken(c.Request.Context(), formID, req)
+	res, err := h.formService.VerifyExamToken(c.Request.Context(), identifier, req)
 	if err != nil {
 		response.BadRequest(c, err.Error(), err)
 		return

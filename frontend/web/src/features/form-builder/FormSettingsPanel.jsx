@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Save, Dices, RotateCcw, Palette, Sparkles, X, Plus, Trash2, ArrowUp, ArrowDown, UserCheck, KeyRound, Layers } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Save, Dices, RotateCcw, Palette, Sparkles, X, Plus, Trash2, ArrowUp, ArrowDown, UserCheck, KeyRound, Layers, Check, AlertCircle } from 'lucide-react';
 import { formApi } from '../../lib/api';
 import { Button, Input, Toggle, Card, Select, Badge } from '../../shared/ui';
 import MediaUploadField from '../../shared/MediaUploadField';
@@ -32,7 +32,6 @@ const DEFAULT_IDENTITY_FIELDS = [
   { id: 'field_name', label: 'Nama Lengkap', field_type: 'text', placeholder: 'Masukkan nama lengkap kamu', is_required: true },
   { id: 'field_class', label: 'Kelas', field_type: 'dropdown', placeholder: 'Pilih Kelas', is_required: true, options: ['X RPL 1', 'X RPL 2', 'XI RPL 1', 'XI RPL 2', 'XII RPL 1', 'XII RPL 2'] },
   { id: 'field_absence', label: 'Nomor Absen', field_type: 'number', placeholder: 'Contoh: 18', is_required: true },
-  { id: 'field_email', label: 'Alamat Email', field_type: 'email', placeholder: 'nama@sekolah.sch.id', is_required: true },
 ];
 
 function parseIdentityFields(jsonStr) {
@@ -81,7 +80,7 @@ function generateRandomToken() {
   return `${p1}-${p2}`;
 }
 
-export default function FormSettingsPanel({ formId, formData, settings, onSaved }) {
+export default function FormSettingsPanel({ formId, formData, settings, onSaved, isActive = true }) {
   const { t } = useLangStore();
   const [form, setForm] = useState(() => ({
     custom_url: formData?.custom_url || '',
@@ -111,9 +110,43 @@ export default function FormSettingsPanel({ formId, formData, settings, onSaved 
     return fields.length > 0;
   });
   const [saving, setSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
   const toast = useToast();
 
   const patch = (fields) => setForm((f) => ({ ...f, ...fields }));
+
+  const getPayload = (currentState, currentIdentity, currentEnableIdentity) => {
+    const fieldsToSave = currentEnableIdentity ? currentIdentity : [];
+    return {
+      duration_minutes: Number(currentState.duration_minutes) || 0,
+      auto_active_days: 30,
+      is_active_immediately: currentState.is_active_immediately,
+      is_one_time_submission: currentState.is_one_time_submission,
+      max_attempts: Number(currentState.max_attempts) || 0,
+      randomize_questions: currentState.randomize_questions,
+      randomize_options: currentState.randomize_options,
+      start_time: currentState.start_time ? new Date(currentState.start_time).toISOString() : null,
+      end_time: currentState.end_time ? new Date(currentState.end_time).toISOString() : null,
+      theme_color: currentState.theme_color,
+      font_family: currentState.font_family,
+      cover_image_url: currentState.cover_image_url || null,
+      logo_url: settings?.logo_url || null,
+      allow_backtrack: currentState.allow_backtrack,
+      show_question_number: currentState.show_question_number,
+      fullscreen_mode: currentState.fullscreen_mode,
+      exam_token: currentState.is_token_protected ? currentState.exam_token?.trim() || null : null,
+      is_token_protected: currentState.is_token_protected,
+      identity_fields_json: JSON.stringify(fieldsToSave),
+      custom_url: currentState.custom_url,
+    };
+  };
+
+  const [savedSnapshot, setSavedSnapshot] = useState(() => {
+    return JSON.stringify(getPayload(form, identityFields, enableIdentityPage));
+  });
+
+  const currentSnapshot = JSON.stringify(getPayload(form, identityFields, enableIdentityPage));
+  const isDirty = savedSnapshot !== currentSnapshot;
 
   const handleRandomizeUrl = () => {
     const base = generateSlug(formData?.title || 'ujian') || 'form';
@@ -180,32 +213,14 @@ export default function FormSettingsPanel({ formId, formData, settings, onSaved 
     toast.info('Template data peserta standar dimuat (Nama, Kelas, No Absen, Email)');
   };
 
-  const handleSave = async () => {
+  const handleSave = async (silent = false) => {
+    if (saving) return;
+    const payload = getPayload(form, identityFields, enableIdentityPage);
+    const snapshotToSave = JSON.stringify(payload);
     setSaving(true);
     try {
-      const fieldsToSave = enableIdentityPage ? identityFields : [];
-      const payload = {
-        duration_minutes: Number(form.duration_minutes) || 0,
-        auto_active_days: 30,
-        is_active_immediately: form.is_active_immediately,
-        is_one_time_submission: form.is_one_time_submission,
-        max_attempts: Number(form.max_attempts) || 0,
-        randomize_questions: form.randomize_questions,
-        randomize_options: form.randomize_options,
-        start_time: form.start_time ? new Date(form.start_time).toISOString() : null,
-        end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
-        theme_color: form.theme_color,
-        font_family: form.font_family,
-        cover_image_url: form.cover_image_url || null,
-        logo_url: settings?.logo_url || null,
-        allow_backtrack: form.allow_backtrack,
-        show_question_number: form.show_question_number,
-        fullscreen_mode: form.fullscreen_mode,
-        exam_token: form.is_token_protected ? form.exam_token?.trim() || null : null,
-        is_token_protected: form.is_token_protected,
-        identity_fields_json: JSON.stringify(fieldsToSave),
-      };
-      await formApi.updateSettings(formId, payload);
+      const { custom_url, ...settingsPayload } = payload;
+      await formApi.updateSettings(formId, settingsPayload);
       if (form.custom_url !== formData?.custom_url) {
         await formApi.update(formId, {
           title: formData.title,
@@ -217,17 +232,72 @@ export default function FormSettingsPanel({ formId, formData, settings, onSaved 
           is_template: formData.is_template,
         });
       }
-      toast.success(t('settings.settingsSaved', 'Pengaturan form berhasil disimpan'));
+      setSavedSnapshot(snapshotToSave);
+      setLastSavedAt(new Date());
+      if (!silent) {
+        toast.success(t('settings.settingsSaved', 'Pengaturan form berhasil disimpan'));
+      }
       onSaved?.();
     } catch (err) {
-      toast.error(err.message);
+      if (!silent) {
+        toast.error(err.message);
+      }
     } finally {
       setSaving(false);
     }
   };
 
+  // 1. Debounced auto-save (1200ms after user finishes changing settings)
+  useEffect(() => {
+    if (!isDirty || saving) return;
+
+    const timer = setTimeout(() => {
+      handleSave(true);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [currentSnapshot, isDirty, saving]);
+
+  // 2. Auto-save on Tab change (when switching away from settings tab)
+  const prevIsActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (prevIsActiveRef.current && !isActive && isDirty && !saving) {
+      handleSave(true);
+    }
+    prevIsActiveRef.current = isActive;
+  }, [isActive, isDirty, saving]);
+
+  // 3. Auto-save on Unmount (when navigating to any other sidebar route or page)
+  const latestDataRef = useRef({ form, identityFields, enableIdentityPage, isDirty, saving });
+  useEffect(() => {
+    latestDataRef.current = { form, identityFields, enableIdentityPage, isDirty, saving };
+  });
+
+  useEffect(() => {
+    return () => {
+      const { form: f, identityFields: idf, enableIdentityPage: eid, isDirty: dirty, saving: isSaving } = latestDataRef.current;
+      if (dirty && !isSaving) {
+        const payload = getPayload(f, idf, eid);
+        const { custom_url, ...settingsPayload } = payload;
+        formApi.updateSettings(formId, settingsPayload).catch(() => {});
+        if (f.custom_url !== formData?.custom_url) {
+          formApi.update(formId, {
+            title: formData.title,
+            description: formData.description || '',
+            category: formData.category || '',
+            type: formData.type,
+            custom_url: f.custom_url.trim(),
+            status: formData.status,
+            is_template: formData.is_template,
+          }).catch(() => {});
+        }
+      }
+    };
+  }, [formId]);
+
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 relative">
+
       {/* 1. Halaman Pengumpulan Data Peserta (Identity Page) */}
       <Card className="flex flex-col gap-4 border-primary/20">
         <div className="flex items-start justify-between gap-3">
@@ -729,10 +799,29 @@ export default function FormSettingsPanel({ formId, formData, settings, onSaved 
         />
       </Card>
 
-      <Button onClick={handleSave} loading={saving} className="self-start">
-        <Save size={16} />
-        {t('settings.saveSettings', 'Simpan Pengaturan')}
-      </Button>
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <Button onClick={() => handleSave(false)} loading={saving} className="self-start gap-1.5">
+          <Save size={16} />
+          {t('settings.saveSettings', 'Simpan Pengaturan')}
+        </Button>
+
+        {saving ? (
+          <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+            <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            Menyimpan otomatis...
+          </span>
+        ) : isDirty ? (
+          <span className="flex items-center gap-1.5 text-xs text-amber-500 font-medium">
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+            Ada perubahan yang akan tersimpan otomatis...
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+            <Check size={14} className="text-emerald-600" />
+            Semua perubahan tersimpan otomatis
+          </span>
+        )}
+      </div>
     </div>
   );
 }

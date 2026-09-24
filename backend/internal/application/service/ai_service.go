@@ -283,28 +283,70 @@ func (s *aiService) GradeEssay(ctx context.Context, req dto.AIGradeEssayRequest)
 	if req.MaxPoints < 0 {
 		return nil, fmt.Errorf("max_points must be >= 0")
 	}
-	if !s.gemini.IsEnabled() {
-		return nil, fmt.Errorf("GEMINI_API_KEY belum diisi — grading tidak tersedia")
+
+	ansText := strings.TrimSpace(req.AnswerText)
+	ansKey := strings.TrimSpace(req.AnswerKey)
+
+	// TOKEN SAVING 1: Jawaban kosong langsung 0 tanpa panggil API AI
+	if ansText == "" {
+		res := &dto.AIGradeEssayResponse{
+			Score:      0,
+			MaxPoints:  req.MaxPoints,
+			Similarity: 0,
+			Feedback:   "Jawaban tidak diisi / kosong.",
+		}
+		if req.AutoPersist && req.ResponseID != nil {
+			_ = s.persistEssayScore(ctx, *req.ResponseID, req.QuestionID, 0)
+		}
+		return res, nil
 	}
-	prompt := fmt.Sprintf(`Kamu adalah penilai essay yang adil. Nilai jawaban murid terhadap kunci jawaban secara semantik (makna sama dengan susunan kata berbeda tetap dinilai tinggi).
-Kunci jawaban: %s
-Jawaban murid: %s
-Rubrik (opsional): %s
-Skor maksimum: %.2f
-Keluarkan HANYA JSON: {"score": <0..maks>, "similarity": <0..1>, "feedback": "<1-2 kalimat bahasa Indonesia>"}.
-Aturan: semakin dekat makna dengan kunci, semakin mendekati skor penuh. Jawaban kosong => score 0.`,
-		req.AnswerKey, req.AnswerText, req.Rubric, req.MaxPoints)
+
+	// TOKEN SAVING 2: Jawaban persis sama dengan kunci langsung poin penuh tanpa panggil API AI
+	if ansKey != "" && strings.EqualFold(ansKey, ansText) {
+		res := &dto.AIGradeEssayResponse{
+			Score:      req.MaxPoints,
+			MaxPoints:  req.MaxPoints,
+			Similarity: 1.0,
+			Feedback:   "Jawaban tepat dan sangat lengkap sesuai kunci jawaban.",
+		}
+		if req.AutoPersist && req.ResponseID != nil {
+			_ = s.persistEssayScore(ctx, *req.ResponseID, req.QuestionID, req.MaxPoints)
+		}
+		return res, nil
+	}
+
+	if !s.gemini.IsEnabled() {
+		return s.mockGrade(req)
+	}
+
+	prompt := fmt.Sprintf(`Peran: Penilai esai akademik yang adil, proporsional, dan bijaksana.
+Tugas: Evaluasi kemiripan makna (semantik) antara Jawaban Murid dengan Kunci Jawaban & Rubrik acuan.
+
+Kunci Jawaban: %s
+Rubrik (Opsional): %s
+Jawaban Murid: %s
+Skor Maksimal: %.1f
+
+Pedoman Penilaian:
+- Nilai kesesuaian makna & konsep inti, jangan terpaku pada urutan kata.
+- Berikan nilai proporsional / parsial (misal 50%%-85%%) jika murid menjawab sebagian poin penting dengan benar.
+- Hanya berikan 0 jika jawaban murid benar-benar ngawur, menyimpang total, atau tidak relevan.
+- Feedback maksimal 1 kalimat bahasa Indonesia yang ramah dan konstruktif.
+
+Keluarkan HANYA JSON: {"score": <angka 0..%.1f>, "similarity": <0.0..1.0>, "feedback": "<penjelasan 1 kalimat>"}`,
+		ansKey, req.Rubric, ansText, req.MaxPoints, req.MaxPoints)
+
 	raw, err := s.gemini.GenerateJSON(ctx, prompt)
 	if err != nil {
-		return nil, err
+		return s.mockGrade(req)
 	}
+
 	var parsed struct {
 		Score      float64 `json:"score"`
 		Similarity float64 `json:"similarity"`
 		Feedback   string  `json:"feedback"`
 	}
 	if err := json.Unmarshal([]byte(infraAI.HealJSON(raw)), &parsed); err != nil {
-		// Fallback to mock evaluation instead of erroring
 		return s.mockGrade(req)
 	}
 	if parsed.Score < 0 {
@@ -319,6 +361,7 @@ Aturan: semakin dekat makna dengan kunci, semakin mendekati skor penuh. Jawaban 
 	if parsed.Similarity > 1 {
 		parsed.Similarity = 1
 	}
+
 	res := &dto.AIGradeEssayResponse{Score: parsed.Score, MaxPoints: req.MaxPoints, Similarity: parsed.Similarity, Feedback: parsed.Feedback}
 	if req.AutoPersist && req.ResponseID != nil {
 		_ = s.persistEssayScore(ctx, *req.ResponseID, req.QuestionID, parsed.Score)

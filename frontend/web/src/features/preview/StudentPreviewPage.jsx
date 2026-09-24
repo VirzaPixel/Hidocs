@@ -11,7 +11,6 @@ const DEFAULT_IDENTITY_FIELDS = [
   { id: 'field_name', label: 'Nama Lengkap', field_type: 'text', placeholder: 'Masukkan nama lengkap kamu', is_required: true },
   { id: 'field_class', label: 'Kelas', field_type: 'dropdown', placeholder: 'Pilih Kelas', is_required: true, options: ['X RPL 1', 'X RPL 2', 'XI RPL 1', 'XI RPL 2', 'XII RPL 1', 'XII RPL 2'] },
   { id: 'field_absence', label: 'Nomor Absen', field_type: 'number', placeholder: 'Contoh: 18', is_required: true },
-  { id: 'field_email', label: 'Alamat Email', field_type: 'email', placeholder: 'nama@sekolah.sch.id', is_required: true },
 ];
 
 function parseIdentityFields(jsonStr) {
@@ -39,7 +38,7 @@ export default function StudentPreviewPage() {
   const settings = form?.form_settings;
 
   const identityFields = parseIdentityFields(settings?.identity_fields_json);
-  const isTokenProtected = settings?.is_token_protected && !!settings?.exam_token;
+  const isTokenProtected = Boolean(settings?.is_token_protected);
 
   // Stages: 'IDENTITY' -> 'TOKEN' -> 'EXAM'
   const [currentStage, setCurrentStage] = useState('EXAM');
@@ -48,7 +47,7 @@ export default function StudentPreviewPage() {
   useEffect(() => {
     if (form && !stageInitialized) {
       const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
-      const isProt = form.form_settings?.is_token_protected && !!form.form_settings?.exam_token;
+      const isProt = Boolean(form.form_settings?.is_token_protected);
       if (fields.length > 0) {
         setCurrentStage('IDENTITY');
       } else if (isProt) {
@@ -383,7 +382,7 @@ export default function StudentPreviewPage() {
                       </div>
 
                       <div
-                        className="mb-4 text-sm font-medium text-gray-900 leading-relaxed"
+                        className="mb-4 text-base font-semibold text-gray-900 leading-relaxed"
                         dangerouslySetInnerHTML={{ __html: renderMixedText(currentQuestion.question_text) }}
                       />
 

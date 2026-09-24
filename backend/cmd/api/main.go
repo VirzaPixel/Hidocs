@@ -95,21 +95,23 @@ func main() {
 	aiHandler := handler.NewAIHandler(aiService)
 	// FIX: handler baru untuk Bank Soal.
 	questionBankHandler := handler.NewQuestionBankHandler(questionBankService)
+	wsHandler := handler.NewWSHandler(nil)
 
 	// Router
 	r := router.SetupRouter(&router.RouterConfig{
-		AuthHandler:     authHandler,
-		UserHandler:     userHandler,
-		FormHandler:     formHandler,
-		QuestionHandler: questionHandler,
-		ResponseHandler: responseHandler,
-		PublicHandler:   publicHandler,
-		AdminHandler:    adminHandler,
-		MetricsHandler:  metricsHandler,
-		AIHandler:       aiHandler,
+		AuthHandler:         authHandler,
+		UserHandler:         userHandler,
+		FormHandler:         formHandler,
+		QuestionHandler:     questionHandler,
+		ResponseHandler:     responseHandler,
+		PublicHandler:       publicHandler,
+		AdminHandler:        adminHandler,
+		MetricsHandler:      metricsHandler,
+		AIHandler:           aiHandler,
 		QuestionBankHandler: questionBankHandler,
-		JWTManager:      jwtManager,
-		Cfg:             cfg,
+		WSHandler:           wsHandler,
+		JWTManager:          jwtManager,
+		Cfg:                 cfg,
 	})
 
 	// Auto-seed default SuperAdmin and Test Exam Form for load testing

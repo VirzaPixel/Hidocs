@@ -59,7 +59,15 @@ export const formApi = {
 /* ============================= PUBLIC EXAM ============================= */
 export const publicApi = {
   getForm: (codeOrSlug) => apiClient.get(`/public/forms/${codeOrSlug}`),
-  verifyToken: (formId, token) => apiClient.post(`/public/forms/${formId}/verify-token`, { token }),
+  verifyToken: (formId, token, respondentEmail = '') =>
+    apiClient.post(`/public/forms/${formId}/verify-token`, {
+      token,
+      respondent_email: respondentEmail || undefined,
+    }),
+  autosave: (responseId, payload) =>
+    apiClient.post(`/public/responses/${responseId}/autosave`, payload),
+  telemetry: (responseId, payload) =>
+    apiClient.post(`/public/responses/${responseId}/telemetry`, payload),
   submit: (formId, payload) => apiClient.post(`/forms/${formId}/submit`, payload),
 };
 

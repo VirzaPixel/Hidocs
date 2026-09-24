@@ -7,6 +7,7 @@ import (
 
 	"backend/internal/application/dto"
 	"backend/internal/domain"
+	infraWS "backend/internal/infrastructure/websocket"
 	"github.com/google/uuid"
 )
 
@@ -254,6 +255,14 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		_ = s.responseRepo.UpsertAnswersBatch(ctx, answers)
 	}
 
+	infraWS.GlobalHub.BroadcastToForm(formID, "STUDENT_SUBMIT", map[string]any{
+		"response_id":      responseID,
+		"respondent_email": req.RespondentEmail,
+		"status":           domain.ResponseStatusSubmitted,
+		"total_score":      totalScore,
+		"submitted_at":     formResponse.SubmittedAt,
+	})
+
 	return &dto.SubmitResponseResult{
 		ResponseID:      responseID,
 		TotalScore:      totalScore,
@@ -286,6 +295,14 @@ func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UU
 		return nil, err
 	}
 
+	if resp, err := s.responseRepo.GetResponseByID(ctx, responseID); err == nil && resp != nil {
+		infraWS.GlobalHub.BroadcastToForm(resp.FormID, "STUDENT_UPDATE", map[string]any{
+			"response_id": responseID,
+			"question_id": req.QuestionID,
+			"is_flagged":  req.IsFlagged,
+		})
+	}
+
 	return &dto.AutosaveResponse{
 		Success:    true,
 		Message:    "Answer autosaved successfully",
@@ -296,7 +313,18 @@ func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UU
 }
 
 func (s *responseService) SendTelemetry(ctx context.Context, responseID uuid.UUID, req dto.TelemetryEventRequest) error {
-	return s.responseRepo.UpdateTelemetry(ctx, responseID, req.EventType, req.EventMessage, req.CurrentQuestionIndex, req.Metadata)
+	err := s.responseRepo.UpdateTelemetry(ctx, responseID, req.EventType, req.EventMessage, req.CurrentQuestionIndex, req.Metadata)
+	if err == nil {
+		if resp, err2 := s.responseRepo.GetResponseByID(ctx, responseID); err2 == nil && resp != nil {
+			infraWS.GlobalHub.BroadcastToForm(resp.FormID, "TELEMETRY", map[string]any{
+				"response_id":            responseID,
+				"event_type":             req.EventType,
+				"event_message":          req.EventMessage,
+				"current_question_index": req.CurrentQuestionIndex,
+			})
+		}
+	}
+	return err
 }
 
 func (s *responseService) GetSessionState(ctx context.Context, responseID uuid.UUID) (*dto.SessionStateDTO, error) {

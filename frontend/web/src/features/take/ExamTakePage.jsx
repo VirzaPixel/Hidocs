@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -36,6 +36,48 @@ function parseIdentityFields(jsonStr) {
   }
 }
 
+function getRespondentIdentifier(identityData, currentUser, formId) {
+  // If explicitly entered email
+  const explicitEmail =
+    identityData?.field_email ||
+    identityData?.email ||
+    Object.values(identityData || {}).find(
+      (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+    ) ||
+    currentUser?.email;
+
+  if (explicitEmail && String(explicitEmail).trim()) {
+    return String(explicitEmail).trim().toLowerCase();
+  }
+
+  // Otherwise deterministic slug from default fields (Nama, Kelas, No Absen)
+  const name = String(identityData?.field_name || identityData?.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const cls = String(identityData?.field_class || identityData?.class || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const absence = String(identityData?.field_absence || identityData?.absence || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+  if (name || cls || absence) {
+    const slug = [name || 'peserta', cls || 'kelas', absence || '00'].join('.');
+    return `${slug}@student.hidocs.local`;
+  }
+
+  // Persistent browser device ID fallback
+  let deviceId = localStorage.getItem('hidocs_student_uid');
+  if (!deviceId) {
+    deviceId = Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('hidocs_student_uid', deviceId);
+  }
+  return `device-${deviceId}@student.hidocs.local`;
+}
+
 export default function ExamTakePage() {
   const { identifier } = useParams();
   const navigate = useNavigate();
@@ -48,8 +90,11 @@ export default function ExamTakePage() {
     retry: 1,
   });
 
-  const settings = form?.form_settings;
-  const questions = useMemo(() => form?.questions || [], [form]);
+  const [verifiedForm, setVerifiedForm] = useState(null);
+  const activeForm = verifiedForm || form;
+
+  const settings = activeForm?.form_settings;
+  const questions = useMemo(() => activeForm?.questions || [], [activeForm]);
   const accent = settings?.theme_color || '#4F46E5';
   const fontFamily = settings?.font_family || 'Inter';
 
@@ -57,11 +102,13 @@ export default function ExamTakePage() {
     () => parseIdentityFields(settings?.identity_fields_json),
     [settings]
   );
-  const isTokenProtected = Boolean(settings?.is_token_protected && settings?.exam_token);
+  const isTokenProtected = Boolean(settings?.is_token_protected);
+  const isOneTimeSubmission = Boolean(settings?.is_one_time_submission);
 
   // Stages: 'IDENTITY' | 'TOKEN' | 'EXAM' | 'COMPLETED'
   const [currentStage, setCurrentStage] = useState('EXAM');
   const [stageInitialized, setStageInitialized] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
   // Identity Form State
   const [identityData, setIdentityData] = useState({});
@@ -80,14 +127,41 @@ export default function ExamTakePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
 
+  const autosaveTimeoutRef = useRef(null);
+
   // Timer State (if duration_minutes > 0)
   const durationSeconds = (settings?.duration_minutes || 0) * 60;
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
 
+  const isAlreadySubmittedLocally = Boolean(
+    form?.id && isOneTimeSubmission && localStorage.getItem(`hidocs_submitted_${form.id}`) === 'true'
+  );
+
+  const ensureSessionActive = async (enteredTok = '', customIdentity = null) => {
+    const currentIdent = customIdentity || identityData;
+    const respondentEmail = getRespondentIdentifier(currentIdent, currentUser, form?.id);
+
+    try {
+      const res = await publicApi.verifyToken(form?.id || identifier, enteredTok, respondentEmail);
+      const returnedForm = res?.form || res?.data?.form;
+      if (returnedForm) {
+        setVerifiedForm(returnedForm);
+      }
+      const respId = res?.response_id || res?.data?.response_id;
+      if (respId) {
+        setSessionId(respId);
+      }
+      return { success: true, returnedForm, respId };
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Gagal memulai sesi ujian';
+      return { success: false, error: msg };
+    }
+  };
+
   useEffect(() => {
     if (form && !stageInitialized) {
       const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
-      const isProt = Boolean(form.form_settings?.is_token_protected && form.form_settings?.exam_token);
+      const isProt = Boolean(form.form_settings?.is_token_protected);
 
       if (fields.length > 0) {
         setCurrentStage('IDENTITY');
@@ -95,6 +169,7 @@ export default function ExamTakePage() {
         setCurrentStage('TOKEN');
       } else {
         setCurrentStage('EXAM');
+        ensureSessionActive('', {});
       }
       if (form.form_settings?.duration_minutes) {
         setTimeLeft(form.form_settings.duration_minutes * 60);
@@ -102,6 +177,41 @@ export default function ExamTakePage() {
       setStageInitialized(true);
     }
   }, [form, stageInitialized]);
+
+  // Anti-cheat Telemetry Listeners (Tab Switch / Window Blur)
+  useEffect(() => {
+    if (currentStage !== 'EXAM' || !sessionId) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        publicApi
+          .telemetry(sessionId, {
+            event_type: 'TAB_SWITCH',
+            event_message: 'Siswa berpindah tab / membuka aplikasi lain di luar browser',
+            current_question_index: currentIndex,
+          })
+          .catch((e) => console.error('Telemetry error:', e));
+      }
+    };
+
+    const handleBlur = () => {
+      publicApi
+        .telemetry(sessionId, {
+          event_type: 'BLUR',
+          event_message: 'Jendela ujian kehilangan fokus (klik di luar jendela browser)',
+          current_question_index: currentIndex,
+        })
+        .catch((e) => console.error('Telemetry error:', e));
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [currentStage, sessionId, currentIndex]);
 
   // Timer Countdown Effect
   useEffect(() => {
@@ -138,18 +248,64 @@ export default function ExamTakePage() {
 
   const currentQuestion = questions[currentIndex];
 
+  const triggerAutosave = async (questionId, value, isFlaggedVal) => {
+    if (!sessionId || !questionId) return;
+    const q = questions.find((item) => item.id === questionId);
+    if (!q) return;
+
+    const payload = {
+      question_id: questionId,
+      is_flagged: Boolean(isFlaggedVal !== undefined ? isFlaggedVal : flagged[questionId]),
+    };
+
+    if (q.question_type === 'CHECKBOXES') {
+      const selected = Array.isArray(value) ? value : [];
+      payload.selected_option_id = selected.length > 0 ? selected[0] : null;
+      payload.answer_text = selected.join(',');
+    } else if (q.question_type === 'MATCHING') {
+      payload.selected_option_id = null;
+      payload.match_pairs = Array.isArray(value) ? value : [];
+    } else if (q.options && q.options.length > 0) {
+      payload.selected_option_id = value || null;
+    } else {
+      payload.selected_option_id = null;
+      payload.answer_text = value != null ? String(value) : '';
+    }
+
+    try {
+      await publicApi.autosave(sessionId, payload);
+    } catch (err) {
+      console.error('Autosave error:', err);
+    }
+  };
+
   const handleSetAnswer = (val) => {
     if (!currentQuestion) return;
     setAnswers((prev) => ({ ...prev, [currentQuestion.id]: val }));
+
+    const isTextType = ['SHORT_TEXT', 'LONG_TEXT', 'CODE'].includes(currentQuestion.question_type);
+    if (isTextType) {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+      autosaveTimeoutRef.current = setTimeout(() => {
+        triggerAutosave(currentQuestion.id, val);
+      }, 600);
+    } else {
+      // Instant broadcast for MCQ, Checkbox, Rating, Matching
+      triggerAutosave(currentQuestion.id, val);
+    }
   };
 
   const handleToggleFlag = () => {
     if (!currentQuestion) return;
-    setFlagged((prev) => ({ ...prev, [currentQuestion.id]: !prev[currentQuestion.id] }));
+    const nextFlag = !flagged[currentQuestion.id];
+    setFlagged((prev) => ({ ...prev, [currentQuestion.id]: nextFlag }));
+    triggerAutosave(currentQuestion.id, answers[currentQuestion.id], nextFlag);
   };
 
   // Stage Handlers
-  const handleProceedFromIdentity = (e) => {
+  const handleProceedFromIdentity = async (e) => {
     e?.preventDefault?.();
     const errors = {};
     identityFields.forEach((field) => {
@@ -168,25 +324,33 @@ export default function ExamTakePage() {
     if (isTokenProtected) {
       setCurrentStage('TOKEN');
     } else {
+      setSubmitting(true);
+      const res = await ensureSessionActive('', identityData);
+      setSubmitting(false);
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
       setCurrentStage('EXAM');
     }
   };
 
-  const handleProceedFromToken = (e) => {
+  const handleProceedFromToken = async (e) => {
     e?.preventDefault?.();
-    const expectedToken = (settings?.exam_token || '').trim().toUpperCase();
-    const actualToken = enteredToken.trim().toUpperCase();
+    const actualToken = enteredToken.trim();
 
     if (!actualToken) {
       setTokenError('Masukkan kode token ujian');
       return;
     }
 
-    if (expectedToken && actualToken !== expectedToken) {
-      setTokenError('Kode token ujian tidak cocok atau salah.');
+    setSubmitting(true);
+    const res = await ensureSessionActive(actualToken, identityData);
+    setSubmitting(false);
+    if (!res.success) {
+      setTokenError(res.error);
       return;
     }
-
     setTokenError('');
     setCurrentStage('EXAM');
   };
@@ -194,14 +358,8 @@ export default function ExamTakePage() {
   const handleFinalSubmit = async () => {
     setSubmitting(true);
     try {
-      // 1. Determine valid respondent email
-      const rawEmail =
-        identityData.field_email ||
-        identityData.email ||
-        Object.values(identityData).find((v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) ||
-        currentUser?.email ||
-        `peserta-${Math.floor(1000 + Math.random() * 9000)}@hidocs.exam`;
-      const respondentEmail = String(rawEmail).trim();
+      // 1. Determine valid deterministic respondent email
+      const respondentEmail = getRespondentIdentifier(identityData, currentUser, form?.id);
 
       // 2. Build submission answers array matching backend SubmitAnswerDetail
       const submissionAnswers = [];
@@ -252,6 +410,7 @@ export default function ExamTakePage() {
       });
 
       const payload = {
+        response_id: sessionId || undefined,
         respondent_email: respondentEmail,
         device_platform: 'WEB',
         passcode: enteredToken ? enteredToken.trim().toUpperCase() : '',
@@ -259,6 +418,11 @@ export default function ExamTakePage() {
       };
 
       await publicApi.submit(form.id, payload);
+
+      if (form?.id) {
+        localStorage.setItem(`hidocs_submitted_${form.id}`, 'true');
+      }
+
       setSubmissionResult({
         formTitle: form.title,
         answered: answeredCount,
@@ -298,6 +462,27 @@ export default function ExamTakePage() {
     );
   }
 
+  if (isAlreadySubmittedLocally) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-bg">
+        <Card className="max-w-md w-full p-8 text-center space-y-4 border-emerald-500/30 shadow-lg">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 mx-auto">
+            <CheckCircle2 size={36} />
+          </div>
+          <h2 className="text-lg font-bold text-text">Ujian Sudah Dikerjakan</h2>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Kamu sudah pernah mengumpulkan lembar jawaban untuk form <strong>{form.title}</strong>. Form ini hanya memperbolehkan 1 kali pengumpulan.
+          </p>
+          <div className="flex gap-2 justify-center pt-2">
+            <Button variant="primary" onClick={() => navigate('/take')}>
+              Kembali ke Portal Ujian
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col bg-bg text-text selection:bg-primary/20"
@@ -317,11 +502,11 @@ export default function ExamTakePage() {
             </button>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-bold text-text truncate">
-                {form.title}
+                {activeForm?.title}
               </h1>
-              {form.category && (
+              {activeForm?.category && (
                 <span className="text-[11px] text-text-secondary">
-                  {form.category}
+                  {activeForm.category}
                 </span>
               )}
             </div>
@@ -571,7 +756,7 @@ export default function ExamTakePage() {
 
                   {/* Question Text */}
                   <div
-                    className="text-base sm:text-lg font-medium text-text leading-relaxed select-text"
+                    className="text-lg sm:text-xl font-semibold text-text leading-relaxed select-text"
                     dangerouslySetInnerHTML={{
                       __html: renderMixedText(currentQuestion.question_text || 'Teks soal...'),
                     }}
@@ -906,7 +1091,7 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
   if (type === 'SHORT_TEXT') {
     return (
       <input
-        className="w-full rounded-xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text transition-all focus:border-primary focus:bg-surface focus:outline-none"
+        className="w-full rounded-xl border border-border bg-bg-secondary px-4 py-3 text-base text-text transition-all focus:border-primary focus:bg-surface focus:outline-none"
         placeholder="Ketik jawaban singkat kamu di sini..."
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
@@ -917,7 +1102,7 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
   if (type === 'LONG_TEXT' || type === 'CODE') {
     return (
       <textarea
-        className="w-full rounded-xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text transition-all focus:border-primary focus:bg-surface focus:outline-none"
+        className="w-full rounded-xl border border-border bg-bg-secondary px-4 py-3 text-base text-text transition-all focus:border-primary focus:bg-surface focus:outline-none leading-relaxed"
         rows={6}
         placeholder={
           type === 'CODE'
@@ -932,11 +1117,11 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
 
   if (type === 'MATCHING') {
     return (
-      <div className="flex flex-col gap-2.5 text-sm">
+      <div className="flex flex-col gap-2.5 text-base">
         {question.options?.map((o) => (
           <div
             key={o.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 bg-bg-secondary"
+            className="flex items-center justify-between gap-3 rounded-xl border border-border p-3.5 bg-bg-secondary"
           >
             <span className="font-semibold text-text">{o.option_text}</span>
             <span className="text-primary font-bold">&harr;</span>
@@ -955,7 +1140,7 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
             key={n}
             type="button"
             onClick={() => onChange(n)}
-            className="flex h-12 w-12 items-center justify-center rounded-2xl border text-base font-bold transition-all shadow-sm"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl border text-lg font-bold transition-all shadow-sm"
             style={
               value === n
                 ? { backgroundColor: accent, color: '#fff', borderColor: accent }
@@ -980,7 +1165,7 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
             <label
               key={o.id}
               className={cn(
-                'flex items-start gap-3.5 rounded-2xl border p-3.5 text-sm cursor-pointer transition-all shadow-sm',
+                'flex items-start gap-3.5 rounded-2xl border p-4 text-base cursor-pointer transition-all shadow-sm',
                 isSelected
                   ? 'border-primary bg-primary/10 font-semibold'
                   : 'border-border bg-surface hover:bg-bg-secondary'
@@ -995,9 +1180,9 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
                       isSelected ? selected.filter((id) => id !== o.id) : [...selected, o.id]
                     )
                   }
-                  className="rounded text-primary focus:ring-primary h-4 w-4"
+                  className="rounded text-primary focus:ring-primary h-4.5 w-4.5"
                 />
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-bold text-text border border-border">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-bold text-text border border-border">
                   {letter}
                 </span>
               </div>
@@ -1022,7 +1207,7 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
             <label
               key={o.id}
               className={cn(
-                'flex items-start gap-3.5 rounded-2xl border p-3.5 text-sm cursor-pointer transition-all shadow-sm',
+                'flex items-start gap-3.5 rounded-2xl border p-4 text-base cursor-pointer transition-all shadow-sm',
                 isSelected
                   ? 'border-primary bg-primary/10 font-semibold'
                   : 'border-border bg-surface hover:bg-bg-secondary'
@@ -1034,9 +1219,9 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
                   name={question.id}
                   checked={isSelected}
                   onChange={() => onChange(o.id)}
-                  className="text-primary focus:ring-primary h-4 w-4"
+                  className="text-primary focus:ring-primary h-4.5 w-4.5"
                 />
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-bold text-text border border-border">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-bold text-text border border-border">
                   {letter}
                 </span>
               </div>
@@ -1052,7 +1237,7 @@ function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
 
   return (
     <input
-      className="w-full rounded-xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text focus:border-primary focus:bg-surface focus:outline-none"
+      className="w-full rounded-xl border border-border bg-bg-secondary px-4 py-3 text-base text-text focus:border-primary focus:bg-surface focus:outline-none"
       placeholder="Ketik jawabanmu..."
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}

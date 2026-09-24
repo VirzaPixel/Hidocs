@@ -26,7 +26,8 @@ type RouterConfig struct {
 	AIHandler  *handler.AIHandler
 	// FIX: baru — handler untuk Bank Soal.
 	QuestionBankHandler *handler.QuestionBankHandler
-	JWTManager *security.JWTManager
+	WSHandler           *handler.WSHandler
+	JWTManager          *security.JWTManager
 	// FIX: dibutuhkan supaya CORS, RateLimiter, dan BodyLimit bisa pakai nilai dari
 	// env (config) alih-alih angka/daftar yang di-hardcode di file ini.
 	Cfg *config.Config
@@ -95,6 +96,11 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 			public.POST("/responses/:response_id/telemetry", cfg.ResponseHandler.SendTelemetry)
 			public.GET("/responses/:response_id/session", cfg.ResponseHandler.GetSessionState)
 			public.POST("/responses/:response_id/acknowledge-warning", cfg.ResponseHandler.AcknowledgeWarning)
+		}
+
+		// 1b. Real-Time WebSocket for Live Monitoring
+		if cfg.WSHandler != nil {
+			api.GET("/ws/forms/:form_id/live", cfg.WSHandler.HandleLiveMonitoring)
 		}
 
 		// 2. Authentication & OTP Verification
