@@ -6,6 +6,13 @@ export const authApi = {
   verifyOtp: (payload) => apiClient.post('/auth/verify-otp', payload),
   resendOtp: (payload) => apiClient.post('/auth/resend-otp', payload),
   login: (payload) => apiClient.post('/auth/login', payload),
+  // Tukar refresh token (umur 14 hari) dengan access token baru. Dipakai
+  // otomatis oleh interceptor apiClient saat menerima 401.
+  refresh: (refreshToken) =>
+    apiClient.post('/auth/refresh', { refresh_token: refreshToken }),
+  // Cabut refresh token di server. Tanpa body = logout dari semua perangkat.
+  logout: (refreshToken) =>
+    apiClient.post('/auth/logout', refreshToken ? { refresh_token: refreshToken } : {}),
   forgotPassword: (payload) => apiClient.post('/auth/forgot-password', payload),
   resetPassword: (payload) => apiClient.post('/auth/reset-password', payload),
 };

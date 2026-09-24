@@ -47,7 +47,7 @@ func main() {
 
 	// Security & External Infrastructure Components
 	hasher := security.NewBcryptHasher()
-	jwtManager := security.NewJWTManager(cfg.JWTSecret, cfg.JWTExpireHr)
+	jwtManager := security.NewJWTManager(cfg.JWTSecret, cfg.JWTAccessExpireMin, cfg.JWTExpireHr)
 	docxParser := parser.NewDocxParser()
 	redisClient := cache.NewRedisClient(cfg)
 	emailSender := email.NewSMTPEmailSender(cfg)
@@ -63,7 +63,9 @@ func main() {
 	bankQuestionRepo := repository.NewBankQuestionRepository(db)
 
 	// Services
-	authService := service.NewAuthService(userRepo, hasher, jwtManager, redisClient, emailSender)
+	// FIX: redisClient dipakai dua peran — sebagai OTP cache dan sebagai
+	// whitelist refresh token (Opsi A) supaya sesi bisa dicabut saat logout.
+	authService := service.NewAuthService(userRepo, hasher, jwtManager, redisClient, redisClient, emailSender)
 	userService := service.NewUserService(userRepo, hasher)
 	// FIX: NewFormService sekarang butuh appBaseURL (QR code) + collabRepo/userRepo
 	// (Share Monitoring).

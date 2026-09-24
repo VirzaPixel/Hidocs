@@ -21,6 +21,11 @@ const docTemplate = `{
     "paths": {
         "/api/v1/admin/creators": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -50,14 +55,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -98,16 +103,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/creators/{creator_id}/status": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -143,16 +148,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/dashboard/stats": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -179,16 +184,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/forms": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -218,16 +223,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/forms/{form_id}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "Admin"
                 ],
@@ -248,16 +253,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/forms/{form_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Track live active students taking a specific exam form in real-time.",
                 "produces": [
                     "application/json"
@@ -294,16 +299,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/live-exams": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Monitor active exams currently in progress and distribution of students taking each exam.",
                 "produces": [
                     "application/json"
@@ -319,16 +324,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.LiveExamsResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/realtime": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Stream live telemetry via WebSocket or retrieve instantaneous snapshot JSON (RPS, Latency P95/P99, Active Users, Submissions).",
                 "produces": [
                     "application/json"
@@ -344,16 +349,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.RealtimeMetricsResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/system": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Monitor CPU, memory allocations, goroutines count, and database connection pool status during peak load.",
                 "produces": [
                     "application/json"
@@ -369,16 +374,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.SystemMetricsResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/admin/metrics/traffic-history": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Retrieve traffic time-series (RPS, Latency ms, Error count) over the last 1-2 hours for Line Chart visualization.",
                 "produces": [
                     "application/json"
@@ -402,12 +407,273 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.TrafficHistoryResponse"
                         }
                     }
-                },
+                }
+            }
+        },
+        "/api/v1/ai/extract-material": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
+                ],
+                "description": "Dipakai fitur \"lampirkan materi\" di form AI generate — BEDA dari",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Ekstrak teks mentah dari PDF/Word untuk dipakai sebagai materi AI",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "PDF atau Word (.pdf/.docx)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "text": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/generate-form": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Generate + simpan form dengan AI",
+                "parameters": [
+                    {
+                        "description": "AI Generate Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AIGenerateFormRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/generate-preview": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Generate preview form dengan AI (tanpa simpan)",
+                "parameters": [
+                    {
+                        "description": "AI Generate Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AIGenerateFormRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/grade-essay": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Nilai satu jawaban essay dengan AI (semantik)",
+                "parameters": [
+                    {
+                        "description": "Grade Essay Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AIGradeEssayRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/grade-response": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Nilai semua essay dalam satu response (milik creator)",
+                "parameters": [
+                    {
+                        "description": "Grade Response Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.AIGradeResponseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/template-prompt": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Ambil template prompt pembuatan form dengan AI",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ai/transcribe": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AI"
+                ],
+                "summary": "Speech-to-text: ubah audio menjadi prompt pembuatan form",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Audio (webm/mp3/wav/m4a, max 25MB)",
+                        "name": "audio",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
             }
         },
         "/api/v1/auth/forgot-password": {
@@ -465,6 +731,102 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/dto.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.AuthResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mencabut refresh token aktif. Bila body berisi refresh_token, hanya sesi/perangkat ini yang dicabut; bila body dikosongkan, seluruh sesi user dicabut (logout dari semua perangkat).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Logout \u0026 cabut refresh token",
+                "parameters": [
+                    {
+                        "description": "Logout Payload (opsional)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/dto.LogoutRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "description": "Menerbitkan access token baru dan refresh token baru (rotasi) dari refresh token yang masih valid. Pemakaian ulang dalam 60 detik setelah rotasi masih ditoleransi (balapan antar-klien sah); di luar rentang itu dianggap pencurian token sehingga seluruh sesi user dicabut.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Tukar refresh token dengan access token baru",
+                "parameters": [
+                    {
+                        "description": "Refresh Token Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RefreshRequest"
                         }
                     }
                 ],
@@ -657,6 +1019,11 @@ const docTemplate = `{
         },
         "/api/v1/forms": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -700,14 +1067,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -748,16 +1115,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/categories": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -787,16 +1154,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/import-docx": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -835,16 +1202,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/import-excel": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -883,16 +1250,64 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            }
+        },
+        "/api/v1/forms/import-pdf": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
+                ],
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Forms"
+                ],
+                "summary": "Import form from PDF file",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "PDF Document (.pdf)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.FormResponseDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
             }
         },
         "/api/v1/forms/{form_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -928,14 +1343,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -983,14 +1398,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "tags": [
                     "Forms"
                 ],
@@ -1011,16 +1426,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/analytics": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1056,16 +1471,150 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            }
+        },
+        "/api/v1/forms/{form_id}/collaborators": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Forms"
+                ],
+                "summary": "List teachers who have shared monitoring access to a form",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Form ID",
+                        "name": "form_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/dto.CollaboratorDTO"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Forms"
+                ],
+                "summary": "Share monitoring access of a form to another teacher (by email)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Form ID",
+                        "name": "form_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.CollaboratorDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/forms/{form_id}/collaborators/{user_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Forms"
+                ],
+                "summary": "Revoke a teacher's shared monitoring access to a form",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Form ID",
+                        "name": "form_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Collaborator User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
             }
         },
         "/api/v1/forms/{form_id}/export": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "Responses"
                 ],
@@ -1092,16 +1641,16 @@ const docTemplate = `{
                             "type": "file"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/live-monitoring": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1140,16 +1689,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/questions": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1188,14 +1737,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "post": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1243,23 +1792,23 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/responses": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Responses"
                 ],
-                "summary": "Get all responses for a form",
+                "summary": "Get all responses for a form (paginated)",
                 "parameters": [
                     {
                         "type": "string",
@@ -1267,6 +1816,18 @@ const docTemplate = `{
                         "name": "form_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items to skip (default 0)",
+                        "name": "offset",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1281,26 +1842,23 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/dto.ResponseDetailDTO"
-                                            }
+                                            "$ref": "#/definitions/dto.PaginatedResponsesDTO"
                                         }
                                     }
                                 }
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/responses/{response_id}/restart": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1343,16 +1901,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/settings": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1400,12 +1958,7 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/forms/{form_id}/submit": {
@@ -1462,6 +2015,11 @@ const docTemplate = `{
         },
         "/api/v1/options/{option_id}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "tags": [
                     "Questions"
                 ],
@@ -1482,12 +2040,7 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/public/forms/{form_id}/verify-token": {
@@ -1770,8 +2323,251 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/question-bank": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "QuestionBank"
+                ],
+                "summary": "List questions in the bank",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by subject",
+                        "name": "subject",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by topic",
+                        "name": "topic",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "EASY|MEDIUM|HARD",
+                        "name": "difficulty",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by question type",
+                        "name": "question_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "default 25, max 100",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "default 0",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.PaginatedBankQuestionsDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "QuestionBank"
+                ],
+                "summary": "Add a new question directly to the bank",
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.BankQuestionDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/question-bank/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "QuestionBank"
+                ],
+                "summary": "Update a bank question",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bank Question ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.BankQuestionDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "QuestionBank"
+                ],
+                "summary": "Delete a bank question",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bank Question ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/question-bank/{id}/add-to-form": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "QuestionBank"
+                ],
+                "summary": "Copy a bank question into a form as a new Question",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bank Question ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.QuestionDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/questions/upload-image": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1810,16 +2606,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/questions/upload-media": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1858,16 +2654,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/questions/{question_id}": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -1915,14 +2711,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "delete": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "delete": {
+                ],
                 "tags": [
                     "Questions"
                 ],
@@ -1943,16 +2739,64 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
+                }
+            }
+        },
+        "/api/v1/questions/{question_id}/save-to-bank": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "QuestionBank"
+                ],
+                "summary": "Save an existing form question into the bank",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Question ID",
+                        "name": "question_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.BankQuestionDTO"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
             }
         },
         "/api/v1/responses/me": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1982,16 +2826,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/responses/{response_id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2027,16 +2871,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/responses/{response_id}/grade": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2072,16 +2916,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/superadmin/create-admin": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2122,16 +2966,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/superadmin/list-admin": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2161,16 +3005,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/users/me": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2197,14 +3041,14 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
+                }
+            },
+            "put": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ]
-            },
-            "put": {
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2245,16 +3089,16 @@ const docTemplate = `{
                             ]
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         },
         "/api/v1/users/students/import": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -2283,12 +3127,7 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.APIResponse"
                         }
                     }
-                },
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ]
+                }
             }
         }
     },
@@ -2382,11 +3221,18 @@ const docTemplate = `{
                 "logo_url": {
                     "type": "string"
                 },
+                "max_attempts": {
+                    "description": "FIX: field baru — pengganti IsOneTimeSubmission yang cuma on/off. 0 = tidak\ndibatasi. IsOneTimeSubmission TETAP ada untuk kompatibilitas mundur: kalau\nMaxAttempts diisi 0 tapi IsOneTimeSubmission true, tetap diperlakukan sebagai\nmaks 1 percobaan (lihat response_service.go).",
+                    "type": "integer"
+                },
                 "randomize_options": {
                     "type": "boolean"
                 },
                 "randomize_questions": {
                     "type": "boolean"
+                },
+                "result_visibility": {
+                    "type": "string"
                 },
                 "show_question_number": {
                     "type": "boolean"
@@ -2404,11 +3250,13 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "DRAFT",
+                "REVIEW",
                 "ACTIVE",
                 "CLOSED"
             ],
             "x-enum-varnames": [
                 "StatusDraft",
+                "StatusReview",
                 "StatusActive",
                 "StatusClosed"
             ]
@@ -2450,6 +3298,19 @@ const docTemplate = `{
                     "type": "integer"
                 }
             }
+        },
+        "domain.QuestionDifficulty": {
+            "type": "string",
+            "enum": [
+                "EASY",
+                "MEDIUM",
+                "HARD"
+            ],
+            "x-enum-varnames": [
+                "DifficultyEasy",
+                "DifficultyMedium",
+                "DifficultyHard"
+            ]
         },
         "domain.QuestionType": {
             "type": "string",
@@ -2493,6 +3354,156 @@ const docTemplate = `{
                 "RoleUser"
             ]
         },
+        "dto.AIAttachment": {
+            "type": "object",
+            "required": [
+                "media_type",
+                "url"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "media_type": {
+                    "type": "string",
+                    "enum": [
+                        "IMAGE",
+                        "AUDIO",
+                        "VIDEO"
+                    ]
+                },
+                "target": {
+                    "description": "Target opsional: \"QUESTION\" atau \"OPTION\". Kosong = AI yang menentukan.",
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AIGenerateFormRequest": {
+            "type": "object",
+            "properties": {
+                "attachments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AIAttachment"
+                    }
+                },
+                "auto_save": {
+                    "description": "Jika true, langsung simpan ke DB. Jika false (default), hanya kembalikan preview.",
+                    "type": "boolean"
+                },
+                "category": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "string"
+                },
+                "grade_level": {
+                    "type": "string"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "raw_prompt": {
+                    "description": "Cara 2 (bebas): prompt mentah / hasil speech-to-text. Jika diisi, digabung dengan field terstruktur.",
+                    "type": "string"
+                },
+                "specs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AIQuestionSpec"
+                    }
+                },
+                "subject": {
+                    "description": "Cara 1 (terstruktur): materi + spesifikasi soal.",
+                    "type": "string"
+                },
+                "topic": {
+                    "type": "string"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.AIGradeEssayRequest": {
+            "type": "object",
+            "required": [
+                "answer_key",
+                "answer_text",
+                "question_id"
+            ],
+            "properties": {
+                "answer_key": {
+                    "type": "string"
+                },
+                "answer_text": {
+                    "type": "string"
+                },
+                "auto_persist": {
+                    "type": "boolean"
+                },
+                "max_points": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "question_id": {
+                    "type": "string"
+                },
+                "response_id": {
+                    "type": "string"
+                },
+                "rubric": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AIGradeResponseRequest": {
+            "type": "object",
+            "required": [
+                "response_id"
+            ],
+            "properties": {
+                "answer_keys": {
+                    "description": "Jika kosong, pakai kunci dari AnswerKeyText hasil generate / field guru.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "auto_persist": {
+                    "type": "boolean"
+                },
+                "response_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AIQuestionSpec": {
+            "type": "object",
+            "required": [
+                "count",
+                "question_type"
+            ],
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 1
+                },
+                "option_count": {
+                    "type": "integer"
+                },
+                "points_each": {
+                    "type": "integer"
+                },
+                "question_type": {
+                    "$ref": "#/definitions/domain.QuestionType"
+                }
+            }
+        },
         "dto.AnswerDetailDTO": {
             "type": "object",
             "properties": {
@@ -2534,7 +3545,20 @@ const docTemplate = `{
         "dto.AuthResponse": {
             "type": "object",
             "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "description": "umur access token dalam detik",
+                    "type": "integer"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
                 "token": {
+                    "type": "string"
+                },
+                "token_type": {
                     "type": "string"
                 },
                 "user": {
@@ -2585,6 +3609,105 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "dto.BankQuestionDTO": {
+            "type": "object",
+            "properties": {
+                "audio_url": {
+                    "type": "string"
+                },
+                "code_language": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "$ref": "#/definitions/domain.QuestionDifficulty"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "img_url": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.BankQuestionOptionDTO"
+                    }
+                },
+                "points": {
+                    "type": "integer"
+                },
+                "question_text": {
+                    "type": "string"
+                },
+                "question_type": {
+                    "$ref": "#/definitions/domain.QuestionType"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "topic": {
+                    "type": "string"
+                },
+                "video_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.BankQuestionOptionDTO": {
+            "type": "object",
+            "properties": {
+                "audio_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "img_url": {
+                    "type": "string"
+                },
+                "is_correct": {
+                    "type": "boolean"
+                },
+                "match_key": {
+                    "type": "string"
+                },
+                "match_target_text": {
+                    "type": "string"
+                },
+                "option_text": {
+                    "type": "string"
+                },
+                "order_index": {
+                    "type": "integer"
+                },
+                "video_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.CollaboratorDTO": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },
@@ -2988,6 +4111,14 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.LogoutRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.MatchPairItem": {
             "type": "object",
             "properties": {
@@ -3045,6 +4176,46 @@ const docTemplate = `{
                 },
                 "video_url": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.PaginatedBankQuestionsDTO": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.BankQuestionDTO"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.PaginatedResponsesDTO": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ResponseDetailDTO"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -3127,6 +4298,10 @@ const docTemplate = `{
                 },
                 "randomize_questions": {
                     "type": "boolean"
+                },
+                "result_visibility": {
+                    "description": "Hasil penilaian: \"hidden\" | \"result_only\" | \"result_and_score\".\nTanpa field ini responden tidak pernah tahu hasil/form disembunyikan.",
+                    "type": "string"
                 },
                 "show_question_number": {
                     "type": "boolean"
@@ -3314,6 +4489,17 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "dto.RefreshRequest": {
+            "type": "object",
+            "required": [
+                "refresh_token"
+            ],
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
                 }
             }
         },
@@ -3699,6 +4885,7 @@ const docTemplate = `{
                 "status": {
                     "enum": [
                         "DRAFT",
+                        "REVIEW",
                         "ACTIVE",
                         "CLOSED"
                     ],
@@ -3766,11 +4953,17 @@ const docTemplate = `{
                 "logo_url": {
                     "type": "string"
                 },
+                "max_attempts": {
+                    "type": "integer"
+                },
                 "randomize_options": {
                     "type": "boolean"
                 },
                 "randomize_questions": {
                     "type": "boolean"
+                },
+                "result_visibility": {
+                    "type": "string"
                 },
                 "show_question_number": {
                     "type": "boolean"

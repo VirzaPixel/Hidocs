@@ -59,10 +59,19 @@ definitions:
         type: boolean
       logo_url:
         type: string
+      max_attempts:
+        description: |-
+          FIX: field baru — pengganti IsOneTimeSubmission yang cuma on/off. 0 = tidak
+          dibatasi. IsOneTimeSubmission TETAP ada untuk kompatibilitas mundur: kalau
+          MaxAttempts diisi 0 tapi IsOneTimeSubmission true, tetap diperlakukan sebagai
+          maks 1 percobaan (lihat response_service.go).
+        type: integer
       randomize_options:
         type: boolean
       randomize_questions:
         type: boolean
+      result_visibility:
+        type: string
       show_question_number:
         type: boolean
       start_time:
@@ -74,11 +83,13 @@ definitions:
   domain.FormStatus:
     enum:
     - DRAFT
+    - REVIEW
     - ACTIVE
     - CLOSED
     type: string
     x-enum-varnames:
     - StatusDraft
+    - StatusReview
     - StatusActive
     - StatusClosed
   domain.FormType:
@@ -107,6 +118,16 @@ definitions:
       total_answered:
         type: integer
     type: object
+  domain.QuestionDifficulty:
+    enum:
+    - EASY
+    - MEDIUM
+    - HARD
+    type: string
+    x-enum-varnames:
+    - DifficultyEasy
+    - DifficultyMedium
+    - DifficultyHard
   domain.QuestionType:
     enum:
     - SHORT_TEXT
@@ -143,6 +164,113 @@ definitions:
     - RoleSuperAdmin
     - RoleAdmin
     - RoleUser
+  dto.AIAttachment:
+    properties:
+      description:
+        type: string
+      media_type:
+        enum:
+        - IMAGE
+        - AUDIO
+        - VIDEO
+        type: string
+      target:
+        description: 'Target opsional: "QUESTION" atau "OPTION". Kosong = AI yang
+          menentukan.'
+        type: string
+      url:
+        type: string
+    required:
+    - media_type
+    - url
+    type: object
+  dto.AIGenerateFormRequest:
+    properties:
+      attachments:
+        items:
+          $ref: '#/definitions/dto.AIAttachment'
+        type: array
+      auto_save:
+        description: Jika true, langsung simpan ke DB. Jika false (default), hanya
+          kembalikan preview.
+        type: boolean
+      category:
+        type: string
+      difficulty:
+        type: string
+      grade_level:
+        type: string
+      language:
+        type: string
+      raw_prompt:
+        description: 'Cara 2 (bebas): prompt mentah / hasil speech-to-text. Jika diisi,
+          digabung dengan field terstruktur.'
+        type: string
+      specs:
+        items:
+          $ref: '#/definitions/dto.AIQuestionSpec'
+        type: array
+      subject:
+        description: 'Cara 1 (terstruktur): materi + spesifikasi soal.'
+        type: string
+      topic:
+        type: string
+      total_time_minutes:
+        type: integer
+    type: object
+  dto.AIGradeEssayRequest:
+    properties:
+      answer_key:
+        type: string
+      answer_text:
+        type: string
+      auto_persist:
+        type: boolean
+      max_points:
+        minimum: 0
+        type: number
+      question_id:
+        type: string
+      response_id:
+        type: string
+      rubric:
+        type: string
+    required:
+    - answer_key
+    - answer_text
+    - question_id
+    type: object
+  dto.AIGradeResponseRequest:
+    properties:
+      answer_keys:
+        additionalProperties:
+          type: string
+        description: Jika kosong, pakai kunci dari AnswerKeyText hasil generate /
+          field guru.
+        type: object
+      auto_persist:
+        type: boolean
+      response_id:
+        type: string
+    required:
+    - response_id
+    type: object
+  dto.AIQuestionSpec:
+    properties:
+      count:
+        maximum: 50
+        minimum: 1
+        type: integer
+      option_count:
+        type: integer
+      points_each:
+        type: integer
+      question_type:
+        $ref: '#/definitions/domain.QuestionType'
+    required:
+    - count
+    - question_type
+    type: object
   dto.AnswerDetailDTO:
     properties:
       answer_text:
@@ -170,7 +298,16 @@ definitions:
     type: object
   dto.AuthResponse:
     properties:
+      access_token:
+        type: string
+      expires_in:
+        description: umur access token dalam detik
+        type: integer
+      refresh_token:
+        type: string
       token:
+        type: string
+      token_type:
         type: string
       user:
         $ref: '#/definitions/dto.UserResponse'
@@ -204,6 +341,71 @@ definitions:
         type: string
       success:
         type: boolean
+    type: object
+  dto.BankQuestionDTO:
+    properties:
+      audio_url:
+        type: string
+      code_language:
+        type: string
+      created_at:
+        type: string
+      difficulty:
+        $ref: '#/definitions/domain.QuestionDifficulty'
+      id:
+        type: string
+      img_url:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/dto.BankQuestionOptionDTO'
+        type: array
+      points:
+        type: integer
+      question_text:
+        type: string
+      question_type:
+        $ref: '#/definitions/domain.QuestionType'
+      subject:
+        type: string
+      topic:
+        type: string
+      video_url:
+        type: string
+    type: object
+  dto.BankQuestionOptionDTO:
+    properties:
+      audio_url:
+        type: string
+      id:
+        type: string
+      img_url:
+        type: string
+      is_correct:
+        type: boolean
+      match_key:
+        type: string
+      match_target_text:
+        type: string
+      option_text:
+        type: string
+      order_index:
+        type: integer
+      video_url:
+        type: string
+    type: object
+  dto.CollaboratorDTO:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+      user_id:
+        type: string
     type: object
   dto.CpuMetrics:
     properties:
@@ -467,6 +669,11 @@ definitions:
     - email
     - password
     type: object
+  dto.LogoutRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
   dto.MatchPairItem:
     properties:
       match_key:
@@ -505,6 +712,32 @@ definitions:
         type: string
       video_url:
         type: string
+    type: object
+  dto.PaginatedBankQuestionsDTO:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/dto.BankQuestionDTO'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  dto.PaginatedResponsesDTO:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/dto.ResponseDetailDTO'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
     type: object
   dto.PublicFormDTO:
     properties:
@@ -559,6 +792,11 @@ definitions:
         type: boolean
       randomize_questions:
         type: boolean
+      result_visibility:
+        description: |-
+          Hasil penilaian: "hidden" | "result_only" | "result_and_score".
+          Tanpa field ini responden tidak pernah tahu hasil/form disembunyikan.
+        type: string
       show_question_number:
         type: boolean
       start_time:
@@ -682,6 +920,13 @@ definitions:
         type: string
       success:
         type: boolean
+    type: object
+  dto.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
     type: object
   dto.RegisterRequest:
     properties:
@@ -934,6 +1179,7 @@ definitions:
         - $ref: '#/definitions/domain.FormStatus'
         enum:
         - DRAFT
+        - REVIEW
         - ACTIVE
         - CLOSED
       title:
@@ -978,10 +1224,14 @@ definitions:
         type: boolean
       logo_url:
         type: string
+      max_attempts:
+        type: integer
       randomize_options:
         type: boolean
       randomize_questions:
         type: boolean
+      result_visibility:
+        type: string
       show_question_number:
         type: boolean
       start_time:
@@ -1338,6 +1588,165 @@ paths:
       summary: Get historical traffic time-series data for dashboard charts
       tags:
       - Telemetry & Monitoring
+  /api/v1/ai/extract-material:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Dipakai fitur "lampirkan materi" di form AI generate — BEDA dari
+      parameters:
+      - description: PDF atau Word (.pdf/.docx)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  properties:
+                    text:
+                      type: string
+                  type: object
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Ekstrak teks mentah dari PDF/Word untuk dipakai sebagai materi AI
+      tags:
+      - AI
+  /api/v1/ai/generate-form:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: AI Generate Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AIGenerateFormRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Generate + simpan form dengan AI
+      tags:
+      - AI
+  /api/v1/ai/generate-preview:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: AI Generate Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AIGenerateFormRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Generate preview form dengan AI (tanpa simpan)
+      tags:
+      - AI
+  /api/v1/ai/grade-essay:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Grade Essay Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AIGradeEssayRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Nilai satu jawaban essay dengan AI (semantik)
+      tags:
+      - AI
+  /api/v1/ai/grade-response:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Grade Response Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AIGradeResponseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Nilai semua essay dalam satu response (milik creator)
+      tags:
+      - AI
+  /api/v1/ai/template-prompt:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil template prompt pembuatan form dengan AI
+      tags:
+      - AI
+  /api/v1/ai/transcribe:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Audio (webm/mp3/wav/m4a, max 25MB)
+        in: formData
+        name: audio
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: 'Speech-to-text: ubah audio menjadi prompt pembuatan form'
+      tags:
+      - AI
   /api/v1/auth/forgot-password:
     post:
       consumes:
@@ -1389,6 +1798,69 @@ paths:
           schema:
             $ref: '#/definitions/response.APIResponse'
       summary: Login user
+      tags:
+      - Auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Mencabut refresh token aktif. Bila body berisi refresh_token, hanya
+        sesi/perangkat ini yang dicabut; bila body dikosongkan, seluruh sesi user
+        dicabut (logout dari semua perangkat).
+      parameters:
+      - description: Logout Payload (opsional)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/dto.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Logout & cabut refresh token
+      tags:
+      - Auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Menerbitkan access token baru dan refresh token baru (rotasi) dari
+        refresh token yang masih valid. Pemakaian ulang dalam 60 detik setelah rotasi
+        masih ditoleransi (balapan antar-klien sah); di luar rentang itu dianggap
+        pencurian token sehingga seluruh sesi user dicabut.
+      parameters:
+      - description: Refresh Token Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AuthResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Tukar refresh token dengan access token baru
       tags:
       - Auth
   /api/v1/auth/register:
@@ -1649,6 +2121,84 @@ paths:
         accuracy bar charts)
       tags:
       - Analytics
+  /api/v1/forms/{form_id}/collaborators:
+    get:
+      parameters:
+      - description: Form ID
+        in: path
+        name: form_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.CollaboratorDTO'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List teachers who have shared monitoring access to a form
+      tags:
+      - Forms
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Form ID
+        in: path
+        name: form_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CollaboratorDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Share monitoring access of a form to another teacher (by email)
+      tags:
+      - Forms
+  /api/v1/forms/{form_id}/collaborators/{user_id}:
+    delete:
+      parameters:
+      - description: Form ID
+        in: path
+        name: form_id
+        required: true
+        type: string
+      - description: Collaborator User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke a teacher's shared monitoring access to a form
+      tags:
+      - Forms
   /api/v1/forms/{form_id}/export:
     get:
       parameters:
@@ -1765,6 +2315,14 @@ paths:
         name: form_id
         required: true
         type: string
+      - description: Items per page (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Items to skip (default 0)
+        in: query
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
@@ -1775,13 +2333,11 @@ paths:
             - $ref: '#/definitions/response.APIResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/dto.ResponseDetailDTO'
-                  type: array
+                  $ref: '#/definitions/dto.PaginatedResponsesDTO'
               type: object
       security:
       - BearerAuth: []
-      summary: Get all responses for a form
+      summary: Get all responses for a form (paginated)
       tags:
       - Responses
   /api/v1/forms/{form_id}/responses/{response_id}/restart:
@@ -1954,6 +2510,33 @@ paths:
       security:
       - BearerAuth: []
       summary: Import form from Excel .xlsx or .csv file
+      tags:
+      - Forms
+  /api/v1/forms/import-pdf:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: PDF Document (.pdf)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.FormResponseDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Import form from PDF file
       tags:
       - Forms
   /api/v1/options/{option_id}:
@@ -2146,6 +2729,143 @@ paths:
         screenshot, split screen)
       tags:
       - Public
+  /api/v1/question-bank:
+    get:
+      parameters:
+      - description: Filter by subject
+        in: query
+        name: subject
+        type: string
+      - description: Filter by topic
+        in: query
+        name: topic
+        type: string
+      - description: EASY|MEDIUM|HARD
+        in: query
+        name: difficulty
+        type: string
+      - description: Filter by question type
+        in: query
+        name: question_type
+        type: string
+      - description: default 25, max 100
+        in: query
+        name: limit
+        type: integer
+      - description: default 0
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PaginatedBankQuestionsDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List questions in the bank
+      tags:
+      - QuestionBank
+    post:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BankQuestionDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Add a new question directly to the bank
+      tags:
+      - QuestionBank
+  /api/v1/question-bank/{id}:
+    delete:
+      parameters:
+      - description: Bank Question ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a bank question
+      tags:
+      - QuestionBank
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bank Question ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BankQuestionDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Update a bank question
+      tags:
+      - QuestionBank
+  /api/v1/question-bank/{id}/add-to-form:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bank Question ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.QuestionDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Copy a bank question into a form as a new Question
+      tags:
+      - QuestionBank
   /api/v1/questions/{question_id}:
     delete:
       parameters:
@@ -2196,6 +2916,33 @@ paths:
       summary: Update a question
       tags:
       - Questions
+  /api/v1/questions/{question_id}/save-to-bank:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Question ID
+        in: path
+        name: question_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BankQuestionDTO'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: Save an existing form question into the bank
+      tags:
+      - QuestionBank
   /api/v1/questions/upload-image:
     post:
       consumes:

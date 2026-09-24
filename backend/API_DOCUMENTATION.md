@@ -11,8 +11,13 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
 - **Content-Type**: `application/json` (kecuali upload file menggunakan `multipart/form-data`)
 - **Authentication**: Menggunakan **Bearer Token JWT** pada Header `Authorization`.
   ```http
-  Authorization: Bearer <JWT_TOKEN>
+  Authorization: Bearer <ACCESS_TOKEN>
   ```
+- **Pola Token (Access + Refresh)**:
+  - `access_token` — umur pendek (**default 60 menit**, `JWT_ACCESS_EXPIRE_MINUTES`), dipakai di **semua** endpoint protected.
+  - `refresh_token` — umur panjang (**default 336 jam = 14 hari**, `JWT_REFRESH_EXPIRE_HOURS`), **hanya** boleh dikirim ke `POST /api/v1/auth/refresh`.
+  - Saat access token kedaluwarsa, server membalas `401`. Klien cukup memanggil `/auth/refresh` dengan `refresh_token` untuk mendapat pasangan token baru (tanpa login ulang). Refresh token bersifat **sekali pakai** (dirotasi) dan bisa dicabut lewat `/auth/logout`.
+  - Field `token` (legacy) tetap dikirim dan isinya sama dengan `access_token`, supaya klien lama tetap kompatibel.
 - **ExamBro Compatibility Header** *(Opsional untuk Ujian Aman)*:
   ```http
   X-Exambro-Token: <SECURE_BROWSER_TOKEN>
@@ -91,6 +96,10 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
   "message": "Login successful",
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 3600,
     "user": {
       "id": "e3b8a1c9-7d8e-4f1a-9b2c-3d4e5f6a7b8c",
       "name": "Budi Santoso",
@@ -103,10 +112,63 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
   }
 }
 ```
+> `expires_in` adalah umur **access token** dalam detik. Respons `POST /api/v1/auth/verify-otp` memakai format `data` yang sama.
 
 ---
 
-### 2.3 Minta Token Lupa Password (Forgot Password)
+### 2.3 Refresh Access Token (Perpanjang Sesi Otomatis)
+- **Endpoint**: `POST /api/v1/auth/refresh`
+- **Auth**: Public (cukup bawa `refresh_token`)
+- **Request Body**:
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+- **Expected Response (200 OK)**: `data` berisi pasangan token baru (`token`, `access_token`, `refresh_token`, `token_type`, `expires_in`, `user`) — bentuknya sama seperti respons login.
+- **Catatan penting**:
+  - Refresh token **dirotasi**: setelah dipakai, token lama langsung tidak berlaku, klien **wajib** menyimpan `refresh_token` baru dari respons ini.
+  - **Jendela toleransi replay 60 detik**: kalau refresh token lama dipakai ulang **di dalam 60 detik** setelah rotasi, server menganggapnya balapan antar-klien sah (dua tab/perangkat memanggil endpoint ini hampir bersamaan) dan tetap menjawab dengan pasangan token baru — **tidak ada sesi yang dicabut**.
+  - Pemakaian ulang **di luar** 60 detik itu dianggap indikasi pencurian token → **seluruh sesi user dicabut** dan respons berisi `refresh token has been revoked or already used`.
+  - Kalau refresh token sudah kedaluwarsa / sudah di-logout → `401 invalid or expired refresh token` (tanpa mencabut sesi perangkat lain).
+  - Kegagalan infrastruktur (mis. Redis/DB mati) dijawab dengan **500**, bukan 401, supaya klien tidak salah mengira pengguna harus login ulang.
+- **Expected Response (401 Unauthorized)**:
+```json
+{
+  "success": false,
+  "message": "invalid or expired refresh token",
+  "errors": "invalid or expired refresh token"
+}
+```
+
+---
+
+### 2.4 Logout (Cabut Refresh Token)
+- **Endpoint**: `POST /api/v1/auth/logout`
+- **Auth**: Bearer Token (access token)
+- **Request Body** *(opsional)*:
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+- **Perilaku**:
+  - Body berisi `refresh_token` → hanya sesi/perangkat itu yang dicabut.
+  - Body dikosongkan / tanpa body → **seluruh sesi user dicabut** (logout dari semua perangkat).
+  - `refresh_token` yang tidak valid / sudah dirotasi → tetap dijawab `200`, tapi **seluruh sesi user dicabut** (perilaku aman: mencegah token hasil rotasi yang tersisa di server tetap hidup).
+- **Expected Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Logged out successfully. Refresh token has been revoked.",
+  "data": null
+}
+```
+> Catatan: `POST /api/v1/auth/reset-password` juga otomatis mencabut seluruh sesi user (semua perangkat harus login ulang dengan password baru).
+
+---
+
+### 2.5 Minta Token Lupa Password (Forgot Password)
 - **Endpoint**: `POST /api/v1/auth/forgot-password`
 - **Auth**: Public
 - **Request Body**:
@@ -128,7 +190,7 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
 
 ---
 
-### 2.4 Reset Password dengan Token
+### 2.6 Reset Password dengan Token
 - **Endpoint**: `POST /api/v1/auth/reset-password`
 - **Auth**: Public
 - **Request Body**:
@@ -149,7 +211,7 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
 
 ---
 
-### 2.5 Ambil Profil Saya (Get Current Profile)
+### 2.7 Ambil Profil Saya (Get Current Profile)
 - **Endpoint**: `GET /api/v1/users/me`
 - **Auth**: Bearer Token
 - **Expected Response (200 OK)**:
@@ -171,7 +233,7 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
 
 ---
 
-### 2.6 Update Profil Saya
+### 2.8 Update Profil Saya
 - **Endpoint**: `PUT /api/v1/users/me`
 - **Auth**: Bearer Token
 - **Request Body**:
@@ -200,7 +262,7 @@ Dokumen ini melampirkan detail **HTTP Method**, **Endpoint URL**, **Header**, **
 
 ---
 
-### 2.7 Import Banyak Siswa/User
+### 2.9 Import Banyak Siswa/User
 - **Endpoint**: `POST /api/v1/users/students/import`
 - **Auth**: Bearer Token
 - **Request Body**:

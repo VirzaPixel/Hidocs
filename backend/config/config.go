@@ -10,6 +10,16 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const (
+	// Nilai default durasi token JWT. Duplikasi kecil dari
+	// internal/infrastructure/security agar package config tidak bergantung ke
+	// layer infrastructure (aturan dependency DDD).
+	defaultAccessExpireMinutes = 60  // 1 jam
+	defaultRefreshExpireHours  = 336 // 14 hari
+	minAccessExpireMinutes     = 5
+	minRefreshExpireHours      = 24
+)
+
 type Config struct {
 	AppPort    string
 	AppEnv     string
@@ -37,8 +47,12 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 
-	JWTSecret   string
-	JWTExpireHr int
+	JWTSecret string
+	// JWTExpireHr adalah durasi sesi/refresh token (default 336 jam = 14 hari).
+	// Nilainya juga dipakai sebagai fallback bila JWT_REFRESH_EXPIRE_HOURS tidak
+	// diset, supaya env lama (JWT_EXPIRE_HOURS) tetap berfungsi.
+	JWTExpireHr        int
+	JWTAccessExpireMin int
 
 	// FIX: field ini sebelumnya TIDAK ADA di struct, padahal sudah dipakai di
 	// internal/application/service/ai_service.go (cfg.GeminiAPIKey, cfg.GeminiModel).
@@ -71,7 +85,32 @@ func LoadConfig() *Config {
 	}
 	geminiKey := envFirst("GEMINI_API_KEY", "GOOGLE_API_KEY", "GENAI_API_KEY", "AI_API_KEY")
 
-	jwtExpire, _ := strconv.Atoi(getEnv("JWT_EXPIRE_HOURS", "24"))
+	// JWT: access token berumur pendek (dipakai tiap request), refresh token
+	// berumur panjang (hanya untuk POST /auth/refresh). Total sesi pengguna
+	// ditentukan refresh token = JWT_REFRESH_EXPIRE_HOURS (default 14 hari).
+	legacyJWTExpireHr, _ := strconv.Atoi(getEnv("JWT_EXPIRE_HOURS", "0"))
+	jwtRefreshExpireHr, _ := strconv.Atoi(getEnv("JWT_REFRESH_EXPIRE_HOURS", "0"))
+	if jwtRefreshExpireHr <= 0 {
+		// Fallback ke env lama JWT_EXPIRE_HOURS bila variabel baru belum diset,
+		// supaya deployment lama tetap mendapat durasi sesi yang dimaksudkan.
+		jwtRefreshExpireHr = legacyJWTExpireHr
+	}
+	// FIX: refresh token di bawah 24 jam bikin pengguna sering login ulang;
+	// kunci minimal 24 jam dan default 336 jam (14 hari).
+	if jwtRefreshExpireHr < minRefreshExpireHours {
+		if legacyJWTExpireHr > 0 {
+			log.Printf("WARNING: JWT refresh expiry=%dh too short, forcing to %dh (14 days)",
+				legacyJWTExpireHr, defaultRefreshExpireHours)
+		}
+		jwtRefreshExpireHr = defaultRefreshExpireHours
+	}
+
+	jwtAccessExpireMin, _ := strconv.Atoi(getEnv("JWT_ACCESS_EXPIRE_MINUTES", "0"))
+	if jwtAccessExpireMin < minAccessExpireMinutes {
+		// Access token terlalu pendek memicu terlalu banyak refresh; terlalu
+		// panjang memperbesar dampak bila token bocor. Default 60 menit.
+		jwtAccessExpireMin = defaultAccessExpireMinutes
+	}
 	autoMigrate, _ := strconv.ParseBool(getEnv("AUTO_MIGRATE", "true"))
 	redisDB, _ := strconv.Atoi(getEnv("REDIS_DB", "0"))
 
@@ -118,8 +157,9 @@ func LoadConfig() *Config {
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 
-		JWTSecret:   getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
-		JWTExpireHr: jwtExpire,
+		JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
+		JWTExpireHr:        jwtRefreshExpireHr,
+		JWTAccessExpireMin: jwtAccessExpireMin,
 
 		GeminiAPIKey: geminiKey,
 		GeminiModel:  getEnv("GEMINI_MODEL", "gemini-2.5-flash"),

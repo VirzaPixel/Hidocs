@@ -30,7 +30,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login(values);
-      login(res.token, res.user);
+      // Simpan access token + refresh token (refresh dipakai otomatis saat 401).
+      login(res.token, res.user, res.refresh_token);
       toast.success('Berhasil masuk');
       if (res.user?.role === 'admin' || res.user?.role === 'superadmin') {
         navigate('/admin/dashboard');

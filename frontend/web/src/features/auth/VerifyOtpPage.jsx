@@ -43,7 +43,7 @@ export default function VerifyOtpPage() {
     setLoading(true);
     try {
       const res = await authApi.verifyOtp({ email, otp_code: otpCode });
-      login(res.token, res.user);
+      login(res.token, res.user, res.refresh_token);
       toast.success('Akun berhasil diverifikasi');
       navigate('/dashboard');
     } catch (err) {

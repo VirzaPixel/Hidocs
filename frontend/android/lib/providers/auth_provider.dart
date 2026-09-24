@@ -42,6 +42,10 @@ class AuthProvider extends ChangeNotifier {
   String get pendingEmail => _pendingEmail;
 
   AuthProvider() {
+    // Daftarkan jembatan auto-refresh: setiap request yang dibalas 401 oleh
+    // server akan memicu refreshSession() di bawah, lalu request itu diulang
+    // otomatis dengan access token baru (lihat ApiClient._sendWithAuthRetry).
+    ApiClient.onUnauthorized = refreshSession;
     _restoreSession();
     _loadMode();
   }
@@ -111,6 +115,12 @@ class AuthProvider extends ChangeNotifier {
     await _secure.write(key: _kAuthUserKey, value: jsonEncode(userJson));
   }
 
+  /// Menukar refresh token (umur 14 hari) dengan access token baru.
+  ///
+  /// Dipanggil otomatis oleh ApiClient saat server membalas 401; karena itu
+  /// pemakaian refresh token di backend bersifat sekali pakai (dirotasi),
+  /// ApiClient mengunci pemanggilan ini supaya hanya terjadi satu kali meski
+  /// banyak request gagal bersamaan.
   Future<bool> refreshSession() async {
     try {
       final refresh = await _secure.read(key: _kRefreshTokenKey);
@@ -121,7 +131,17 @@ class AuthProvider extends ChangeNotifier {
       );
       if (data is Map) {
         await _persistSession(Map<String, dynamic>.from(data));
+        notifyListeners();
         return true;
+      }
+      return false;
+    } on ApiException catch (e) {
+      // 401 = refresh token sudah mati (kedaluwarsa / logout / dicabut), jadi
+      // sesi lokal memang harus dibersihkan. Error jaringan tidak dianggap
+      // sesi mati supaya pengguna tidak logout saat koneksi bermasalah.
+      if (e.statusCode == 401) {
+        await _clearLocalSession();
+        notifyListeners();
       }
       return false;
     } catch (_) {
@@ -328,7 +348,16 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     try {
-      await ApiClient.post('/auth/logout');
+      // Kirim refresh token supaya server mencabutnya (token tidak bisa dipakai
+      // lagi walau sudah tersalin). Kalau request gagal karena jaringan, sesi
+      // lokal tetap dibersihkan di bawah.
+      final refresh = await _secure.read(key: _kRefreshTokenKey);
+      await ApiClient.post(
+        '/auth/logout',
+        body: refresh == null || refresh.isEmpty
+            ? <String, dynamic>{}
+            : {'refresh_token': refresh},
+      );
     } catch (_) {}
     await _clearLocalSession();
 

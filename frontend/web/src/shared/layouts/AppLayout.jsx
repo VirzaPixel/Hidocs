@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Library, UserCircle, Sun, Moon, LogOut, Menu, Users, FileText, Activity, ShieldCheck, Shield } from 'lucide-react';
 import hidocsLogo from '../../assets/images/logo.png';
 import { useAuthStore } from '../../store/authStore';
+import { authApi } from '../../lib/api';
 import { useTheme } from '../../lib/useTheme';
 import { cn, resolveMediaUrl } from '../../lib/utils';
 import { Badge } from '../ui';
@@ -25,12 +26,20 @@ const SUPERADMIN_NAV_ITEMS = [
 ];
 
 export default function AppLayout() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, refreshToken } = useAuthStore();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Cabut refresh token di server dulu (best-effort) supaya token yang
+    // tersimpan tidak bisa dipakai lagi walau sudah keluar aplikasi. Kalau
+    // request gagal (server down), sesi lokal tetap dibersihkan.
+    try {
+      if (refreshToken) await authApi.logout(refreshToken);
+    } catch {
+      // diabaikan: logout lokal tetap jalan
+    }
     logout();
     navigate('/login');
   };
