@@ -25,7 +25,7 @@ func NewGroqClient(apiKey, model string) *GroqClient {
 	return &GroqClient{
 		apiKey:     strings.TrimSpace(apiKey),
 		model:      model,
-		httpClient: &http.Client{Timeout: 90 * time.Second},
+		httpClient: &http.Client{Timeout: 300 * time.Second},
 		enabled:    strings.TrimSpace(apiKey) != "",
 	}
 }

@@ -73,8 +73,8 @@ export default function StudentPreviewPage() {
                     </button>
                   </div>
 
-                  <p
-                    className="mb-3 text-sm font-medium text-gray-900"
+                  <div
+                    className="mb-4 text-sm font-medium text-gray-900 leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: renderMixedText(current.question_text) }}
                   />
 
@@ -140,22 +140,19 @@ function QuestionAnswerArea({ question, value, onChange, accent }) {
   if (type === 'SHORT_TEXT') {
     return (
       <input
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         placeholder="Ketik jawabanmu..."
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
       />
     );
   }
-  if ((/code/i.test(question.code_language || '') || question.code_language) && value == null) {
-    return <CodeBlock value={question.question_text} codeLanguage={question.code_language} />;
-  }
   if (type === 'LONG_TEXT' || type === 'CODE') {
     return (
       <textarea
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         rows={5}
-        placeholder="Ketik jawabanmu..."
+        placeholder={type === 'CODE' ? 'Ketik kode program jawabanmu di sini...' : 'Ketik jawaban lengkapmu di sini...'}
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -165,24 +162,24 @@ function QuestionAnswerArea({ question, value, onChange, accent }) {
     return (
       <div className="flex flex-col gap-2 text-sm">
         {question.options?.map((o) => (
-          <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 p-2">
-            <span>{o.option_text}</span>
-            <span className="text-gray-400">&harr;</span>
-            <span className="text-gray-500">{o.match_target_text}</span>
+          <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 p-2.5 bg-gray-50/60">
+            <span className="font-medium text-gray-800">{o.option_text}</span>
+            <span className="text-gray-400 font-bold">&harr;</span>
+            <span className="text-gray-600">{o.match_target_text}</span>
           </div>
         ))}
-        <p className="text-xs text-gray-400">(di aplikasi siswa, pasangan ini akan diacak dan siswa menjodohkan sendiri)</p>
+        <p className="text-xs text-gray-400 mt-1">(di aplikasi siswa, pasangan ini akan diacak dan siswa menjodohkan sendiri)</p>
       </div>
     );
   }
   if (type === 'RATING') {
     return (
-      <div className="flex gap-2">
+      <div className="flex gap-2 justify-center py-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             onClick={() => onChange(n)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border text-sm"
+            className="flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold transition-all"
             style={value === n ? { backgroundColor: accent, color: '#fff', borderColor: accent } : { borderColor: '#d1d5db' }}
           >
             {n}
@@ -195,37 +192,82 @@ function QuestionAnswerArea({ question, value, onChange, accent }) {
     const selected = Array.isArray(value) ? value : [];
     return (
       <div className="flex flex-col gap-2">
-        {question.options?.map((o) => (
-          <label key={o.id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2.5 text-sm">
-            <input
-              type="checkbox"
-              checked={selected.includes(o.id)}
-              onChange={() =>
-                onChange(selected.includes(o.id) ? selected.filter((id) => id !== o.id) : [...selected, o.id])
-              }
-            />
-            <span dangerouslySetInnerHTML={{ __html: renderMixedText(o.option_text) }} />
-          </label>
-        ))}
+        {question.options?.map((o, idx) => {
+          const isSelected = selected.includes(o.id);
+          const letter = String.fromCharCode(65 + idx);
+          return (
+            <label
+              key={o.id}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-colors',
+                isSelected
+                  ? 'border-indigo-600 bg-indigo-50/60 font-medium'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              )}
+            >
+              <div className="flex items-center gap-2 pt-0.5">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() =>
+                    onChange(isSelected ? selected.filter((id) => id !== o.id) : [...selected, o.id])
+                  }
+                  className="rounded text-primary focus:ring-primary"
+                />
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-gray-700">
+                  {letter}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5 text-gray-900">
+                <span dangerouslySetInnerHTML={{ __html: renderMixedText(o.option_text) }} />
+              </div>
+            </label>
+          );
+        })}
       </div>
     );
   }
-  // MULTIPLE_CHOICE, DROPDOWN, YES_NO, MATH (opsi opsional), IMAGE, default
+  // MULTIPLE_CHOICE, DROPDOWN, YES_NO, MATH (dengan opsi), dll.
   if (question.options?.length) {
     return (
       <div className="flex flex-col gap-2">
-        {question.options.map((o) => (
-          <label key={o.id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2.5 text-sm">
-            <input type="radio" name={question.id} checked={value === o.id} onChange={() => onChange(o.id)} />
-            <span dangerouslySetInnerHTML={{ __html: renderMixedText(o.option_text) }} />
-          </label>
-        ))}
+        {question.options.map((o, idx) => {
+          const isSelected = value === o.id;
+          const letter = String.fromCharCode(65 + idx);
+          return (
+            <label
+              key={o.id}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-colors',
+                isSelected
+                  ? 'border-indigo-600 bg-indigo-50/60 font-medium'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              )}
+            >
+              <div className="flex items-center gap-2 pt-0.5">
+                <input
+                  type="radio"
+                  name={question.id}
+                  checked={isSelected}
+                  onChange={() => onChange(o.id)}
+                  className="text-primary focus:ring-primary"
+                />
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-gray-700">
+                  {letter}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5 text-gray-900">
+                <span dangerouslySetInnerHTML={{ __html: renderMixedText(o.option_text) }} />
+              </div>
+            </label>
+          );
+        })}
       </div>
     );
   }
   return (
     <input
-      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
       placeholder="Ketik jawabanmu..."
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}

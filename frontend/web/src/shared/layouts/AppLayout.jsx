@@ -6,6 +6,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useTheme } from '../../lib/useTheme';
 import { cn, resolveMediaUrl } from '../../lib/utils';
 import { Badge } from '../ui';
+import AIGenerateModal from '../../features/dashboard/AIGenerateModal';
+import AIGenerateFloatingWidget from '../../features/dashboard/AIGenerateFloatingWidget';
 
 const USER_NAV_ITEMS = [
   { to: '/dashboard', label: 'Form Saya', icon: LayoutDashboard },
@@ -98,6 +100,10 @@ export default function AppLayout() {
           </div>
         </main>
       </div>
+
+      {/* Global AI Modal and Background Progress Floating Card */}
+      <AIGenerateModal />
+      <AIGenerateFloatingWidget />
     </div>
   );
 }
@@ -212,4 +218,3 @@ function SidebarContent({ user, onNavigate }) {
     </>
   );
 }
-

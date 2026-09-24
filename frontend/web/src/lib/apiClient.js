@@ -11,12 +11,10 @@ const apiClient = axios.create({
   timeout: 45000,
 });
 
-// FIX: generate soal AI (Gemini) sering butuh 20-40+ detik, kadang lebih kalau
-// server AI sedang sibuk. Timeout default 45s masih terlalu pendek khusus untuk
-// endpoint ini — sebelumnya request AI yang SUKSES di backend (log Go: "200 |
-// 29.98s") tetap ditampilkan sebagai error di frontend karena axios sudah
-// membatalkan request duluan di detik ke-30.
-export const AI_TIMEOUT_MS = 120000;
+// FIX: generate soal AI (Gemini) untuk banyak soal (hingga 50 soal / materi panjang)
+// membutuhkan waktu hingga beberapa menit. Timeout AI dinaikkan ke 5 menit (300.000 ms)
+// agar sinkron dengan backend WriteTimeout 300s.
+export const AI_TIMEOUT_MS = 300000;
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);

@@ -34,20 +34,22 @@ function defaultOptions(type) {
   ];
 }
 
-const FENCE_BLOCK = /^```[a-zA-Z0-9+#-]*\n([\s\S]*?)\n```(?:\n([\s\S]*))?$/;
-
 function splitCodeBlock(raw) {
   const text = (raw || '').trim();
-  const match = text.match(FENCE_BLOCK);
+  const match = text.match(/```([a-zA-Z0-9+#-]*)\n?([\s\S]*?)\n?```/);
   if (match) {
-    return { snippet: (match[1] || '').trim(), prompt: (match[2] || '').trim() };
+    const lang = match[1]?.trim() || '';
+    const snippet = match[2]?.trim() || '';
+    const prompt = text.replace(match[0], '').trim();
+    return { snippet, prompt: prompt || text, language: lang };
   }
-  return { snippet: text, prompt: '' };
+  return { snippet: '', prompt: text, language: '' };
 }
 
 function initFromQuestion(question) {
   if (!question) {
     return {
+      question_type: 'MULTIPLE_CHOICE',
       question_text: '',
       code_snippet: '',
       code_language: 'javascript',
@@ -61,19 +63,31 @@ function initFromQuestion(question) {
       options: defaultOptions('MULTIPLE_CHOICE'),
     };
   }
-  const isCode = Boolean(question.code_language);
-  const split = isCode ? splitCodeBlock(question.question_text) : { snippet: '', prompt: '' };
+  const rawText = question.question_text || '';
+  const hasCodeFence = /```[\s\S]*?```/.test(rawText);
+  const isCode = Boolean(question.code_language) || hasCodeFence;
+  const isMath = question.question_type === 'MATH' || /(\$\$|\\\[|\\\(|\$|\\frac|\\sqrt)/.test(rawText);
+  const split = isCode ? splitCodeBlock(rawText) : { snippet: '', prompt: rawText, language: '' };
+
+  let qType = question.question_type || 'MULTIPLE_CHOICE';
+  if (qType === 'MATH' || qType === 'CODE') {
+    qType = (question.options && question.options.length > 0) ? 'MULTIPLE_CHOICE' : 'LONG_TEXT';
+  }
+
+  const promptText = split.prompt || rawText;
+
   return {
-    question_text: isCode ? split.prompt : (question.question_text || ''),
-    code_snippet: isCode ? split.snippet : '',
-    code_language: question.code_language || 'javascript',
-    content_mode: isCode ? 'code' : 'text',
+    question_type: qType,
+    question_text: promptText,
+    code_snippet: split.snippet || '',
+    code_language: question.code_language || split.language || 'javascript',
+    content_mode: isCode && split.snippet ? 'code' : (isMath ? 'math' : 'text'),
     img_url: question.img_url || null,
     audio_url: question.audio_url || null,
     video_url: question.video_url || null,
     points: question.points ?? 10,
     is_required: question.is_required ?? true,
-    is_auto_scored: question.is_auto_scored ?? questionTypeMeta(question.question_type).autoScored,
+    is_auto_scored: question.is_auto_scored ?? questionTypeMeta(qType).autoScored,
     options: (question.options || []).map((o, i) => ({
       option_text: o.option_text,
       match_target_text: o.match_target_text || '',
@@ -144,10 +158,12 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
     setSaving(true);
     try {
       const questionText =
-        form.content_mode === 'code'
-          ? `\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\`\n${form.question_text.trim()}`
+        form.content_mode === 'code' && form.code_snippet.trim()
+          ? (form.question_text.trim()
+              ? `${form.question_text.trim()}\n\n\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\``
+              : `\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\``)
           : form.question_text;
-      const codeLanguage = form.content_mode === 'code' ? form.code_language : '';
+      const codeLanguage = form.content_mode === 'code' && form.code_snippet.trim() ? (form.code_language || 'javascript') : '';
       const payload = {
         question_text: questionText,
         question_type: form.question_type,
@@ -203,6 +219,11 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
   };
 
   if (!expanded) {
+    const rawDisplay = form.question_text || form.code_snippet || question?.question_text || '';
+    const cleanDisplay = rawDisplay
+      ? rawDisplay.replace(/```[a-zA-Z0-9+#-]*\n?([\s\S]*?)\n?```/g, '$1').replace(/\n+/g, ' ').trim()
+      : '(Soal kosong)';
+
     return (
       <button
         type="button"
@@ -215,7 +236,7 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         <div className="min-w-0 flex-1">
           <p
             className="truncate text-sm text-text"
-            dangerouslySetInnerHTML={{ __html: renderMixedText(form.question_text || '(Soal kosong)') }}
+            dangerouslySetInnerHTML={{ __html: renderMixedText(cleanDisplay || '(Soal kosong)') }}
           />
         </div>
         <Badge>{questionTypeLabel(form.question_type)}</Badge>

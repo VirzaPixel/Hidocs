@@ -10,8 +10,7 @@ import { Input, Textarea, Select } from '../../shared/ui';
 import { useToast } from '../../shared/Toast';
 import { FORM_STATUS_META, displayFormStatus, formatDate, resolveMediaUrl } from '../../lib/utils';
 import ImportMenu from './ImportMenu';
-import AIGenerateModal from './AIGenerateModal';
-import FormAccessPanel from '../form-builder/FormAccessPanel';
+import { useAIGenerationStore } from '../../store/aiGenerationStore';
 
 const STATUS_TABS = [
   { value: '', label: 'Semua' },
@@ -23,7 +22,7 @@ const STATUS_TABS = [
 export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
+  const openAIModal = useAIGenerationStore((s) => s.openModal);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
   const navigate = useNavigate();
@@ -59,7 +58,7 @@ export default function DashboardPage() {
             Buat Form Baru
           </Button>
           <ImportMenu />
-          <Button variant="outline" onClick={() => setAiOpen(true)}>
+          <Button variant="outline" onClick={openAIModal}>
             <Sparkles size={16} />
             Buat dengan AI
           </Button>
@@ -154,7 +153,6 @@ export default function DashboardPage() {
       )}
 
       <CreateFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <AIGenerateModal open={aiOpen} onClose={() => setAiOpen(false)} />
       <Modal open={!!shareTarget} onClose={() => setShareTarget(null)} title="Bagikan akses aplikasi siswa">
         {shareTarget && <FormAccessPanel form={shareTarget} />}
       </Modal>
