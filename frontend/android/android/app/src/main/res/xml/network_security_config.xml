@@ -11,6 +11,15 @@
             <certificates src="system" />
         </trust-anchors>
     </domain-config>
+    <!-- Domain baru: hidocs.commandspes.tech (Cloudflare) — tanpa pin-set,
+         cukup trust system CA supaya tidak kena SSLPinning error saat
+         cert Cloudflare di-rotate. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">hidocs.commandspes.tech</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
