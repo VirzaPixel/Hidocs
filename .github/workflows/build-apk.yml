@@ -80,7 +80,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Release Build #${{ github.run_number }}
+          name: Release Build
           body: |
             Otomatis dibuat dari commit: ${{ github.sha }}
             Branch: ${{ github.ref_name }}
