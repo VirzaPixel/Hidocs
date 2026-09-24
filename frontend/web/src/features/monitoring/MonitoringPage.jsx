@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Share2, Loader2 } from 'lucide-react';
 import { formApi } from '../../lib/api';
 import { Tabs, Button, FullPageSpinner, Badge } from '../../shared/ui';
+import { Modal } from '../../shared/Modal';
+import FormAccessPanel from '../form-builder/FormAccessPanel';
 import { FORM_STATUS_META, downloadExport } from '../../lib/utils';
 import { useToast } from '../../shared/Toast';
 import { useAuthStore } from '../../store/authStore';
@@ -33,6 +35,7 @@ export default function MonitoringPage() {
   const currentUser = useAuthStore((s) => s.user);
   const [activeTab, setActiveTab] = useState('live');
   const [exporting, setExporting] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
 
   const { data: form, isLoading } = useQuery({
     queryKey: ['form', formId],
@@ -73,10 +76,16 @@ export default function MonitoringPage() {
             </div>
           </div>
         </div>
-        <Button variant="outline" onClick={handleExport} loading={exporting}>
-          <Download size={16} />
-          Ekspor Hasil
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setAccessOpen(true)} title="Bagikan akses ujian ke siswa">
+            <Share2 size={16} />
+            Bagikan
+          </Button>
+          <Button variant="outline" onClick={handleExport} loading={exporting}>
+            <Download size={16} />
+            Ekspor Hasil
+          </Button>
+        </div>
       </div>
 
       <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
@@ -86,6 +95,10 @@ export default function MonitoringPage() {
       {activeTab === 'analytics' && <AnalyticsTab formId={formId} />}
       {activeTab === 'grading' && <GradingTab formId={formId} />}
       {activeTab === 'collaborators' && isOwner && <CollaboratorsTab formId={formId} />}
+
+      <Modal open={accessOpen} onClose={() => setAccessOpen(false)} title="Bagikan akses aplikasi siswa">
+        <FormAccessPanel form={form} />
+      </Modal>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { Input, Textarea, Select } from '../../shared/ui';
 import { useToast } from '../../shared/Toast';
 import { FORM_STATUS_META, displayFormStatus, formatDate, resolveMediaUrl } from '../../lib/utils';
 import ImportMenu from './ImportMenu';
+import FormAccessPanel from '../form-builder/FormAccessPanel';
 import { useAIGenerationStore } from '../../store/aiGenerationStore';
 
 const STATUS_TABS = [
@@ -133,15 +134,15 @@ export default function DashboardPage() {
                 <p className="text-xs text-text-secondary">Dibuat {formatDate(form.created_at)}</p>
                 <div className="mt-1 grid grid-cols-3 gap-2">
                   <Button variant="outline" size="sm" onClick={() => navigate(`/forms/${form.id}`)}>
-                    <FileText size={14} />
+                    <FileText size={15} />
                     Edit
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setShareTarget(form)} title="Bagikan akses aplikasi siswa">
-                    <Share2 size={14} />
+                    <Share2 size={15} />
                     Bagikan
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => navigate(`/forms/${form.id}/monitoring`)}>
-                    <BarChart3 size={14} />
+                    <BarChart3 size={15} />
                     Monitoring
                   </Button>
                 </div>

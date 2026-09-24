@@ -24,13 +24,13 @@ export default function ProfilePage() {
   if (isLoading) return <FullPageSpinner />;
   if (!profile) return null;
 
-  const currentName = name || profile.name;
-  const currentAvatar = avatarUrl !== null ? avatarUrl : profile.avatar_url;
+  const currentName = name !== '' ? name : (profile.name || '');
+  const currentAvatar = avatarUrl !== null ? avatarUrl : (profile.avatar_url || '');
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updated = await userApi.updateMe({ name: currentName, avatar_url: currentAvatar || '' });
+      const updated = await userApi.updateMe({ name: currentName, avatar_url: currentAvatar });
       setUser(updated);
       toast.success('Profil diperbarui');
       refetch();

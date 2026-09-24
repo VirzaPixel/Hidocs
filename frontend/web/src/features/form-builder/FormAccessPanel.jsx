@@ -59,6 +59,23 @@ export default function FormAccessPanel({ form }) {
           <p className="mt-0.5 font-mono text-sm font-bold tracking-wider">{form.form_settings.exam_token}</p>
         </div>
       )}
+
+      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border bg-bg-secondary p-4">
+        <span className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+          <QrCode size={14} className="text-primary" />
+          QR Code Ujian Siswa
+        </span>
+        <div className="rounded-lg bg-white p-2 shadow-sm border border-border">
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(publicUrl)}`}
+            alt="QR Code Ujian"
+            className="h-32 w-32 object-contain"
+          />
+        </div>
+        <span className="text-[11px] text-text-secondary text-center">
+          Siswa dapat langsung memindai QR code ini di kelas menggunakan kamera HP.
+        </span>
+      </div>
     </div>
   );
 }

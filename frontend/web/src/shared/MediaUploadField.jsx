@@ -47,16 +47,24 @@ export default function MediaUploadField({ mediaType = 'IMAGE', value, onChange,
       {value ? (
         <div className="flex items-center gap-3 rounded-lg border border-border bg-bg-secondary p-2">
           {mediaType === 'IMAGE' && (
-            <img src={resolveMediaUrl(value)} alt="preview" className="h-16 w-16 rounded object-cover" />
+            <img
+              src={resolveMediaUrl(value)}
+              alt="preview"
+              className="h-16 w-16 rounded-lg object-cover border border-border bg-surface"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           )}
           {mediaType === 'AUDIO' && <audio src={resolveMediaUrl(value)} controls className="h-10 max-w-[200px]" />}
-          {mediaType === 'VIDEO' && <video src={resolveMediaUrl(value)} controls className="h-24 rounded" />}
+          {mediaType === 'VIDEO' && <video src={resolveMediaUrl(value)} controls className="h-24 rounded-lg" />}
           <button
             type="button"
-            onClick={() => onChange(null)}
-            className="ml-auto rounded p-1.5 text-text-secondary hover:bg-danger/10 hover:text-danger"
+            onClick={() => onChange('')}
+            className="ml-auto rounded-lg p-2 text-text-secondary hover:bg-danger/10 hover:text-danger cursor-pointer transition-colors"
+            title="Hapus media"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
       ) : (
