@@ -1,6 +1,7 @@
 package id.hidocs.app
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.NotificationManager
 import android.app.PictureInPictureParams
@@ -372,12 +373,12 @@ class SecurityBridge(
         val out = LinkedHashSet<String>()
         try {
             val am = activity.getSystemService(Context.ACTIVITY_SERVICE)
-                    as android.app.ActivityManager
-            val info = android.app.ActivityManager.RunningAppProcessInfo
+                    as ActivityManager
+            // NOTE: pakai konstanta resmi (bukan magic number).
             for (proc in am.runningAppProcesses ?: return out) {
-                val visible = proc.importance == info.IMPORTANCE_FOREGROUND ||
-                        proc.importance == info.IMPORTANCE_VISIBLE ||
-                        proc.importance == info.IMPORTANCE_PERCEPTIBLE
+                val visible = proc.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
+                        proc.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE ||
+                        proc.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_PERCEPTIBLE
                 if (!visible) continue
                 val names = proc.pkgList ?: continue
                 for (pkg in names) out.add(pkg)
