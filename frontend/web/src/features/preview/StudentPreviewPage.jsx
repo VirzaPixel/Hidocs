@@ -204,7 +204,7 @@ function QuestionAnswerArea({ question, value, onChange, accent }) {
                 onChange(selected.includes(o.id) ? selected.filter((id) => id !== o.id) : [...selected, o.id])
               }
             />
-            {o.option_text}
+            <span dangerouslySetInnerHTML={{ __html: renderMixedText(o.option_text) }} />
           </label>
         ))}
       </div>
@@ -217,7 +217,7 @@ function QuestionAnswerArea({ question, value, onChange, accent }) {
         {question.options.map((o) => (
           <label key={o.id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2.5 text-sm">
             <input type="radio" name={question.id} checked={value === o.id} onChange={() => onChange(o.id)} />
-            {o.option_text}
+            <span dangerouslySetInnerHTML={{ __html: renderMixedText(o.option_text) }} />
           </label>
         ))}
       </div>

@@ -77,37 +77,71 @@ Keluarkan HANYA JSON valid tanpa penjelasan, dengan skema:
 
 func (s *aiService) buildPrompt(req dto.AIGenerateFormRequest) string {
 	var sb strings.Builder
-	sb.WriteString("Kamu adalah generator soal HiDocs. Keluarkan HANYA JSON valid sesuai skema, tanpa markdown tambahan selain JSON.\n")
-	sb.WriteString("Skema: {\"title\":\"...\",\"description\":\"...\",\"questions\":[{\"question_text\":\"...\",\"question_type\":\"MULTIPLE_CHOICE|CHECKBOXES|DROPDOWN|YES_NO|SHORT_TEXT|LONG_TEXT|MATCHING|MATH|CODE|RATING\",\"points\":10,\"code_language\":\"...\",\"img_url\":\"...\",\"audio_url\":\"...\",\"video_url\":\"...\",\"options\":[{\"option_text\":\"...\",\"is_correct\":true,\"img_url\":\"...\",\"audio_url\":\"...\",\"video_url\":\"...\",\"match_key\":\"...\",\"match_target_text\":\"...\"}],\"answer_key_text\":\"...\"}]}\n")
-	sb.WriteString("Aturan tipe:\n")
-	sb.WriteString("- MULTIPLE_CHOICE/DROPDOWN/YES_NO: options wajib, tepat 1 is_correct=true.\n")
-	sb.WriteString("- CHECKBOXES: options wajib, minimal 1 is_correct=true (boleh lebih).\n")
-	sb.WriteString("- MATCHING: options wajib, tiap opsi punya match_key dan match_target_text.\n")
-	sb.WriteString("- SHORT_TEXT/LONG_TEXT/MATH/CODE: tanpa options, wajib ada answer_key_text.\n")
-	sb.WriteString("- RATING: tanpa options.\n")
+	sb.WriteString("Kamu adalah HiDocs Master Assessment Generator AI, sistem pembuat kuis, soal ujian, dan form evaluasi berstandar tinggi.\n")
+	sb.WriteString("Tugas utama Anda adalah membuat form ujian yang SANGAT AKURAT, BERKUALITAS TINGGI, LENGKAP, dan PRESISI sesuai dengan spesifikasi dan materi yang diminta user.\n\n")
+	sb.WriteString("PERATURAN UTAMA KELUARAN (STRICT JSON ONLY):\n")
+	sb.WriteString("1. Keluarkan HANYA JSON valid yang memenuhi skema tanpa teks pembuka, penjelasan, atau markdown tambahan di luar JSON.\n")
+	sb.WriteString("2. Skema JSON:\n")
+	sb.WriteString("{\n")
+	sb.WriteString("  \"title\": \"Judul Form Yang Menarik & Profesional\",\n")
+	sb.WriteString("  \"description\": \"Deskripsi / Petunjuk Pengerjaan Ujian\",\n")
+	sb.WriteString("  \"questions\": [\n")
+	sb.WriteString("    {\n")
+	sb.WriteString("      \"question_text\": \"Teks Soal / Pertanyaan\",\n")
+	sb.WriteString("      \"question_type\": \"MULTIPLE_CHOICE|CHECKBOXES|DROPDOWN|YES_NO|SHORT_TEXT|LONG_TEXT|MATCHING|MATH|CODE|RATING\",\n")
+	sb.WriteString("      \"points\": 10,\n")
+	sb.WriteString("      \"code_language\": \"javascript|python|java|cpp|sql|css|html (wajib jika type=CODE)\",\n")
+	sb.WriteString("      \"img_url\": \"...\", \"audio_url\": \"...\", \"video_url\": \"...\",\n")
+	sb.WriteString("      \"options\": [\n")
+	sb.WriteString("        {\"option_text\": \"Opsi A\", \"is_correct\": true, \"match_key\": \"K1\", \"match_target_text\": \"Target K1\"}\n")
+	sb.WriteString("      ],\n")
+	sb.WriteString("      \"answer_key_text\": \"Kunci jawaban / pembahasan lengkap\"\n")
+	sb.WriteString("    }\n")
+	sb.WriteString("  ]\n")
+	sb.WriteString("}\n\n")
+	sb.WriteString("ATURAN KHUSUS TIPE SOAL & KONTEN:\n")
+	sb.WriteString("1. SOAL MATEMATIKA (MATH):\n")
+	sb.WriteString("   - Tulis rumus Matematika/Fisika/Kimia menggunakan sintaks LaTeX standar `\\(...\\)` atau `$$...$$` pada `question_text`, `option_text`, maupun `answer_key_text`.\n")
+	sb.WriteString("   - Contoh: \"Hitunglah nilai dari \\(f(x) = x^2 + 3x - 5\\) untuk \\(x = 4\\)\".\n")
+	sb.WriteString("2. SOAL KODING PROGRAM (CODE):\n")
+	sb.WriteString("   - Tulis potongan kode program yang rapi di `question_text` atau `option_text` menggunakan blok kode ```language ... ```.\n")
+	sb.WriteString("   - Isi field `code_language` dengan bahasa pemrogramannya (misal: `python`, `javascript`, `cpp`, `sql`).\n")
+	sb.WriteString("3. PENGATURAN PILIHAN JAWABAN (OPTIONS):\n")
+	sb.WriteString("   - MULTIPLE_CHOICE / DROPDOWN / YES_NO: Wajib ada options, TEPAT 1 opsi `is_correct = true`, sisanya pengecoh (distractor) yang realistis.\n")
+	sb.WriteString("   - CHECKBOXES: Wajib ada options, MINIMAL 1 (bisa lebih) `is_correct = true`.\n")
+	sb.WriteString("   - MATCHING: Wajib ada options, sertakan `match_key` (misal K1, K2) dan `match_target_text` sebagai pasangan yang tepat.\n")
+	sb.WriteString("   - SHORT_TEXT / LONG_TEXT / MATH / CODE: Tanpa `options`, WAJIB isi `answer_key_text` dengan penjelasan & jawaban acuan.\n")
+	sb.WriteString("   - RATING: Tanpa options.\n")
+	sb.WriteString("4. SKALABILITAS (HINGGA 50 SOAL):\n")
+	sb.WriteString("   - Jika diminta hingga 50 soal, buat SELURUH 50 soal secara lancar, konsisten, berurutan dari nomor 1 sampai 50, dan pastikan JSON tidak terpotong di tengah jalan.\n\n")
+
 	if req.Subject != "" || req.Topic != "" {
-		fmt.Fprintf(&sb, "\nMateri: %s. Topik: %s. Jenjang: %s. Bahasa: %s. Kesulitan: %s.\n",
+		fmt.Fprintf(&sb, "MATERI & METADATA UJIAN:\n- Mata Pelajaran: %s\n- Topik/Bab: %s\n- Jenjang/Kelas: %s\n- Bahasa: %s\n- Tingkat Kesulitan: %s\n\n",
 			req.Subject, req.Topic, req.GradeLevel, defaultStr(req.Language, "Indonesia"), defaultStr(req.Difficulty, "Campuran"))
 	}
 	if len(req.Specs) > 0 {
-		sb.WriteString("Spesifikasi jumlah soal:\n")
+		sb.WriteString("KOMPOSISI & SPESIFIKASI SOAL:\n")
 		for _, sp := range req.Specs {
-			fmt.Fprintf(&sb, "- %s: %d soal, %d poin per soal", sp.QuestionType, sp.Count, sp.PointsEach)
+			fmt.Fprintf(&sb, "- Tipe %s: %d soal, %d poin per soal", sp.QuestionType, sp.Count, sp.PointsEach)
 			if sp.OptionCount > 0 {
 				fmt.Fprintf(&sb, ", %d opsi per soal", sp.OptionCount)
 			}
 			sb.WriteString("\n")
 		}
+		sb.WriteString("\n")
 	}
 	if len(req.Attachments) > 0 {
-		sb.WriteString("Attachment user (SEMATKAN URL persis ke soal/opsi yang relevan):\n")
+		sb.WriteString("ATTACHMENT MEDIA (Sematkan URL persis ke `img_url`/`audio_url`/`video_url` soal/opsi yang relevan):\n")
 		for _, a := range req.Attachments {
 			fmt.Fprintf(&sb, "- %s %s (%s) target=%s\n", a.MediaType, a.URL, a.Description, a.Target)
 		}
+		sb.WriteString("\n")
 	}
 	if strings.TrimSpace(req.RawPrompt) != "" {
-		sb.WriteString("\nInstruksi tambahan user:\n" + strings.TrimSpace(req.RawPrompt) + "\n")
+		sb.WriteString("INSTRUKSI KHUSUS & MATERI USER:\n" + strings.TrimSpace(req.RawPrompt) + "\n\n")
 	}
+
+	sb.WriteString("SEKARANG, HASILKAN JSON UTUH DAN VALID TERSEBUT:")
 	return sb.String()
 }
 
