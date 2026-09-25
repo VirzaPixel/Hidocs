@@ -209,7 +209,12 @@ export default function DashboardPage() {
 
       <CreateFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <Modal open={!!shareTarget} onClose={() => setShareTarget(null)} title="Bagikan akses aplikasi siswa">
-        {shareTarget && <FormAccessPanel form={shareTarget} />}
+        {shareTarget && (
+          <FormAccessPanel
+            form={shareTarget}
+            onActivated={() => queryClient.invalidateQueries({ queryKey: ['forms'] })}
+          />
+        )}
       </Modal>
 
       <ConfirmDialog

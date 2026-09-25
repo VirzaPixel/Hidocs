@@ -108,6 +108,7 @@ export default function ExamTakePage() {
     () => parseIdentityFields(settings?.identity_fields_json),
     [settings]
   );
+  const hasIdentityFields = identityFields.length > 0;
   const isTokenProtected = Boolean(settings?.is_token_protected);
   const isOneTimeSubmission = Boolean(settings?.is_one_time_submission);
 
@@ -199,6 +200,18 @@ export default function ExamTakePage() {
     }
   }, [form, stageInitialized]);
 
+  // Safeguard: If stage was set to IDENTITY but there are no identity fields, bypass immediately
+  useEffect(() => {
+    if (stageInitialized && currentStage === 'IDENTITY' && !hasIdentityFields) {
+      if (isTokenProtected) {
+        setCurrentStage('TOKEN');
+      } else {
+        setCurrentStage('EXAM');
+        ensureSessionActive('', {});
+      }
+    }
+  }, [stageInitialized, currentStage, hasIdentityFields, isTokenProtected]);
+
   // Identity Form State
   const [identityData, setIdentityData] = useState({});
   const [identityErrors, setIdentityErrors] = useState({});
@@ -235,6 +248,7 @@ export default function ExamTakePage() {
   guardActiveRef.current = showGuardOverlay;
 
   const enterFullscreen = () => {
+    if (!form?.form_settings?.fullscreen_mode) return;
     try {
       const elem = document.documentElement;
       if (elem.requestFullscreen) {
@@ -249,6 +263,7 @@ export default function ExamTakePage() {
   };
 
   const triggerViolation = (reason) => {
+    if (!form?.form_settings?.fullscreen_mode) return;
     if (currentStage !== 'EXAM' || isBlockedRef.current || showSubmitModal) return;
     if (guardActiveRef.current) return;
 
@@ -346,7 +361,7 @@ export default function ExamTakePage() {
 
   // Anti-cheat Listeners: Fullscreen, Tab Switch, and Floating App / Blur
   useEffect(() => {
-    if (currentStage !== 'EXAM') return;
+    if (currentStage !== 'EXAM' || !form?.form_settings?.fullscreen_mode) return;
 
     const handleFullscreenChange = () => {
       const isFS = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
@@ -379,7 +394,7 @@ export default function ExamTakePage() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [currentStage]);
+  }, [currentStage, form?.form_settings?.fullscreen_mode]);
 
   // Periodic polling & operator unlock check when student is blocked
   const handleCheckOperatorUnlock = async () => {
@@ -879,7 +894,7 @@ export default function ExamTakePage() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col justify-center">
         {/* ================= STAGE 1: IDENTITY DATA ================= */}
-        {currentStage === 'IDENTITY' && (
+        {currentStage === 'IDENTITY' && hasIdentityFields && (
           <div className="max-w-xl w-full mx-auto my-auto animate-fadeIn">
             <Card className="flex flex-col gap-5 p-6 sm:p-8 border-primary/20 shadow-md">
               <div className="flex items-center gap-3">

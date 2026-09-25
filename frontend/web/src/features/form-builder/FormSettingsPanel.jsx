@@ -97,7 +97,7 @@ export default function FormSettingsPanel({ formId, formData, settings, onSaved,
     cover_image_url: settings?.cover_image_url || null,
     allow_backtrack: settings?.allow_backtrack ?? true,
     show_question_number: settings?.show_question_number ?? true,
-    fullscreen_mode: settings?.fullscreen_mode ?? true,
+    fullscreen_mode: settings?.fullscreen_mode ?? false,
     exam_token: settings?.exam_token || '',
     is_token_protected: settings?.is_token_protected ?? false,
   }));
@@ -771,11 +771,16 @@ export default function FormSettingsPanel({ formId, formData, settings, onSaved,
           onChange={(v) => patch({ show_question_number: v })}
           label={t('settings.showQuestionNumber', 'Tampilkan nomor soal ke siswa')}
         />
-        <Toggle
-          checked={form.fullscreen_mode}
-          onChange={(v) => patch({ fullscreen_mode: v })}
-          label={t('settings.fullscreenMode', 'Wajibkan mode kunci layar (pinned) di aplikasi mobile')}
-        />
+        <div className="pt-2 border-t border-border">
+          <Toggle
+            checked={form.fullscreen_mode}
+            onChange={(v) => patch({ fullscreen_mode: v })}
+            label="Aktifkan Fitur Anti-Cheat Layar Penuh (Fullscreen Mode)"
+          />
+          <p className="mt-1 text-xs text-text-secondary pl-7">
+            Wajibkan siswa mengerjakan ujian dalam mode layar penuh (fullscreen). Sistem akan memberikan peringatan 3 kali (Strike 1, 2, dan 3 Kunci Total) jika siswa keluar dari fullscreen, berpindah tab, atau membuka aplikasi lain.
+          </p>
+        </div>
       </Card>
 
       {/* 8. Banner Form */}

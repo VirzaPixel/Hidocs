@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, Share2, Loader2 } from 'lucide-react';
 import { formApi } from '../../lib/api';
 import { Tabs, Button, FullPageSpinner, Badge } from '../../shared/ui';
@@ -32,6 +32,7 @@ export default function MonitoringPage() {
   const { formId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const [activeTab, setActiveTab] = useState('live');
   const [exporting, setExporting] = useState(false);
@@ -97,7 +98,7 @@ export default function MonitoringPage() {
       {activeTab === 'collaborators' && isOwner && <CollaboratorsTab formId={formId} />}
 
       <Modal open={accessOpen} onClose={() => setAccessOpen(false)} title="Bagikan akses aplikasi siswa">
-        <FormAccessPanel form={form} />
+        <FormAccessPanel form={form} onActivated={() => queryClient.invalidateQueries({ queryKey: ['form', formId] })} />
       </Modal>
     </div>
   );

@@ -1,13 +1,73 @@
-import { useState } from 'react';
-import { Copy, Check, QrCode, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Copy, Check, QrCode, Download, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Button, Input } from '../../shared/ui';
 import { useToast } from '../../shared/Toast';
+import { formApi } from '../../lib/api';
 
-export default function FormAccessPanel({ form }) {
+export default function FormAccessPanel({ form, onActivated }) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [downloadingQR, setDownloadingQR] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(form?.status || 'DRAFT');
   const toast = useToast();
+
+  useEffect(() => {
+    if (form?.status) {
+      setCurrentStatus(form.status);
+    }
+  }, [form?.status]);
+
+  const handleActivateForm = async () => {
+    if (!form?.id) return;
+    setActivating(true);
+    try {
+      await formApi.update(form.id, {
+        title: form.title,
+        description: form.description || '',
+        category: form.category || '',
+        type: form.type,
+        custom_url: form.custom_url,
+        status: 'ACTIVE',
+        is_template: form.is_template,
+      });
+      setCurrentStatus('ACTIVE');
+      toast.success('Form berhasil diaktifkan! Tautan & QR Code kini siap dibagikan ke siswa.');
+      onActivated?.();
+    } catch (err) {
+      toast.error(err.message || 'Gagal mengaktifkan form');
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  if (currentStatus === 'DRAFT') {
+    return (
+      <div className="flex flex-col items-center text-center p-2 sm:p-4 gap-4">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20 shadow-inner">
+          <AlertTriangle size={32} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-lg font-bold text-text">Form Masih Berstatus Draft</h3>
+          <p className="text-sm text-text-secondary max-w-sm">
+            Form ini belum diaktifkan sehingga siswa belum dapat mengakses soal ujian. Aktifkan form sekarang untuk membuka akses dan membagikan tautan.
+          </p>
+        </div>
+        <div className="w-full rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 p-3 text-xs text-amber-800 dark:text-amber-300 text-left flex items-start gap-2">
+          <span className="font-bold">•</span>
+          <span>Setelah diaktifkan, status berubah menjadi <strong>Aktif</strong> dan siswa dapat langsung mengakses sesi ujian via link atau QR Code.</span>
+        </div>
+        <Button
+          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 mt-2"
+          onClick={handleActivateForm}
+          loading={activating}
+        >
+          <CheckCircle2 size={16} />
+          Aktifkan Form Sekarang
+        </Button>
+      </div>
+    );
+  }
 
   const publicUrl = form?.custom_url
     ? `${window.location.origin}/exam/${form.custom_url}`

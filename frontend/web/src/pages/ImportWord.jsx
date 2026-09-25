@@ -4531,32 +4531,72 @@ function ImportWord() {
           </div>
           <div className="import-template-example">
             <pre>
-{`Judul: Ulangan Tengah Semester
-1. Ibukota Indonesia adalah?
-A. Bandung
-B. Jakarta
-C. Surabaya
+{`1. Apa ibu kota negara Indonesia?
+A. Surabaya
+*B. Nusantara
+C. Bandung
 D. Medan
-Kunci: B
-Poin: 2
-2. Siapakah presiden pertama Indonesia?
-A. Soekarno
-B. Soeharto
-C. Habibie
-Kunci: A
-Poin: 2
-[SHORT] Sebutkan semboyan negara Indonesia.
-Kunci: Bhinneka Tunggal Ika
-Poin: 3
-[LONG] Jelaskan makna gotong royong.
-[YESNO] Apakah Jakarta merupakan ibu kota Indonesia?
-[RATING] Berikan nilai 1-5 untuk materi ini.`}
+
+2. Pilih hewan mamalia berikut! (boleh lebih dari satu jawaban)
+[Checkbox]
+*A. Paus
+B. Hiu
+*C. Kelelawar
+D. Buaya
+
+3. Jelaskan pengertian dari fotosintesis!
+[Essay]
+
+4. Air mendidih pada suhu .... derajat Celsius.
+[Isian]
+
+5. Apakah air mendidih pada suhu 100 derajat Celsius?
+*A. Ya
+B. Tidak
+
+6. Seberapa puas Anda dengan materi ujian ini?
+[Rating 5]
+
+7. Tuliskan rumus luas lingkaran!
+[Math]
+
+8. Tuliskan fungsi untuk menjumlahkan dua bilangan!
+[Code]
+
+9. Jelaskan isi gambar berikut! (soal dengan gambar)
+[Image]
+
+10. Jodohkan negara dengan ibu kotanya!
+[Matching]
+Indonesia | Jakarta
+Jepang | Tokyo
+Prancis | Paris
+Jerman | Berlin`}
             </pre>
           </div>
-          <p className="import-template-note">
-            Pertanyaan pilihan ganda akan otomatis dikenali dari pilihan A, B, C, D.
-            Kunci dan poin bersifat opsional jika form tidak menggunakan scoring.
-          </p>
+          <div style={{ marginTop: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <a
+              href="/templates/template_import.docx"
+              download="template-import-hidocs.docx"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 16px',
+                backgroundColor: '#2563eb',
+                color: '#ffffff',
+                borderRadius: '10px',
+                fontWeight: '600',
+                fontSize: '13px',
+                textDecoration: 'none',
+              }}
+            >
+              <FaFileWord /> Unduh Template Resmi (.docx)
+            </a>
+            <span style={{ fontSize: '13px', color: '#64748b' }}>
+              Tanda * di depan opsi (contoh: *B.) menandakan kunci jawaban otomatis.
+            </span>
+          </div>
         </section>
       </div>
   );
