@@ -38,26 +38,57 @@ export default function StudentPreviewPage() {
   const settings = form?.form_settings;
 
   const identityFields = parseIdentityFields(settings?.identity_fields_json);
+  const hasIdentityFields = identityFields.length > 0;
   const isTokenProtected = Boolean(settings?.is_token_protected);
 
   // Stages: 'IDENTITY' -> 'TOKEN' -> 'EXAM'
-  const [currentStage, setCurrentStage] = useState('EXAM');
+  const [currentStage, setCurrentStage] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(`preview_stage_${formId}`);
+      return saved === 'EXAM' ? 'EXAM' : 'EXAM';
+    } catch {
+      return 'EXAM';
+    }
+  });
   const [stageInitialized, setStageInitialized] = useState(false);
 
   useEffect(() => {
     if (form && !stageInitialized) {
+      const savedStage = sessionStorage.getItem(`preview_stage_${formId}`);
+      if (savedStage === 'EXAM') {
+        setCurrentStage('EXAM');
+        setStageInitialized(true);
+        return;
+      }
+
       const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
       const isProt = Boolean(form.form_settings?.is_token_protected);
       if (fields.length > 0) {
         setCurrentStage('IDENTITY');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'IDENTITY');
       } else if (isProt) {
         setCurrentStage('TOKEN');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'TOKEN');
       } else {
         setCurrentStage('EXAM');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
       }
       setStageInitialized(true);
     }
-  }, [form, stageInitialized]);
+  }, [form, stageInitialized, formId]);
+
+  // Safeguard: If stage was set to IDENTITY but there are no identity fields, bypass immediately
+  useEffect(() => {
+    if (stageInitialized && currentStage === 'IDENTITY' && !hasIdentityFields) {
+      if (isTokenProtected) {
+        setCurrentStage('TOKEN');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'TOKEN');
+      } else {
+        setCurrentStage('EXAM');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
+      }
+    }
+  }, [stageInitialized, currentStage, hasIdentityFields, isTokenProtected, formId]);
 
   // Identity Form State
   const [identityData, setIdentityData] = useState({});
@@ -95,8 +126,10 @@ export default function StudentPreviewPage() {
 
     setIdentityErrors({});
     if (isTokenProtected) {
+      sessionStorage.setItem(`preview_stage_${formId}`, 'TOKEN');
       setCurrentStage('TOKEN');
     } else {
+      sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
       setCurrentStage('EXAM');
     }
   };
@@ -117,12 +150,14 @@ export default function StudentPreviewPage() {
       return;
     }
 
+    sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
     setTokenError('');
     setCurrentStage('EXAM');
   };
 
   const handleResetSimulation = () => {
-    if (identityFields.length > 0) {
+    sessionStorage.removeItem(`preview_stage_${formId}`);
+    if (hasIdentityFields) {
       setCurrentStage('IDENTITY');
     } else if (isTokenProtected) {
       setCurrentStage('TOKEN');
@@ -180,21 +215,25 @@ export default function StudentPreviewPage() {
 
             {/* Stepper Wizard Bar */}
             <div className="flex items-center justify-around border-b border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500">
-              <button
-                type="button"
-                onClick={() => setCurrentStage('IDENTITY')}
-                className={cn(
-                  'flex items-center gap-1 transition-colors',
-                  currentStage === 'IDENTITY' ? 'font-bold text-indigo-600' : 'hover:text-gray-800'
-                )}
-              >
-                <UserCheck size={13} />
-                <span>1. Data Diri</span>
-              </button>
+              {hasIdentityFields && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStage('IDENTITY')}
+                    className={cn(
+                      'flex items-center gap-1 transition-colors',
+                      currentStage === 'IDENTITY' ? 'font-bold text-indigo-600' : 'hover:text-gray-800'
+                    )}
+                  >
+                    <UserCheck size={13} />
+                    <span>1. Data Diri</span>
+                  </button>
+                  <span className="text-gray-300">&rarr;</span>
+                </>
+              )}
 
               {isTokenProtected && (
                 <>
-                  <span className="text-gray-300">&rarr;</span>
                   <button
                     type="button"
                     onClick={() => setCurrentStage('TOKEN')}
@@ -204,12 +243,12 @@ export default function StudentPreviewPage() {
                     )}
                   >
                     <KeyRound size={13} />
-                    <span>2. Token</span>
+                    <span>{hasIdentityFields ? '2. Token' : '1. Token'}</span>
                   </button>
+                  <span className="text-gray-300">&rarr;</span>
                 </>
               )}
 
-              <span className="text-gray-300">&rarr;</span>
               <button
                 type="button"
                 onClick={() => setCurrentStage('EXAM')}
@@ -219,12 +258,18 @@ export default function StudentPreviewPage() {
                 )}
               >
                 <CheckCircle2 size={13} />
-                <span>{isTokenProtected ? '3. Soal' : '2. Soal'}</span>
+                <span>
+                  {hasIdentityFields && isTokenProtected
+                    ? '3. Soal'
+                    : hasIdentityFields || isTokenProtected
+                    ? '2. Soal'
+                    : '1. Soal'}
+                </span>
               </button>
             </div>
 
             {/* STAGE 1: IDENTITY DATA COLLECTION */}
-            {currentStage === 'IDENTITY' && (
+            {currentStage === 'IDENTITY' && hasIdentityFields && (
               <div className="flex flex-1 flex-col overflow-y-auto p-4">
                 <div className="mb-4">
                   <h2 className="text-base font-bold text-gray-900">Data Peserta Ujian</h2>

@@ -290,6 +290,7 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 	optionRegex := regexp.MustCompile(`(?i)^(\*?\s*)(?:[\(\[]?([A-Ea-e])[\.\)\]]|\b([A-Ea-e])[\.\)])(?:\s*(.*))`)
 	answerKeyRegex := regexp.MustCompile(`(?i)^(?:Kunci\s*Jawaban|Kunci|Jawaban|Answer|Key)\s*[:=]?\s*[\(\[]?([A-Ea-e])[\.\)\]]?`)
 	separatorRegex := regexp.MustCompile(`^[\_\-\*\=\#\s]{3,}$`)
+	noteRegex := regexp.MustCompile(`(?i)^(?:Catatan|Note|NB|Petunjuk)\s*[:\-]`)
 	sectionRegex := regexp.MustCompile(`(?i)^\s*(?:[A-Z]\.|B\.)?\s*(?:Bagian)?\s*(Pilihan\s*Ganda|Pilihan\s+Ganda|PG|Multiple\s*Choice|Essai|Esai|Essay|Uraian|LONG_TEXT)\s*[:]?\s*$`)
 
 	startIndex := 0
@@ -345,7 +346,7 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 				q.Options[0].IsCorrect = true
 			}
 		} else {
-			if q.QuestionType == domain.TypeMultipleChoice || q.QuestionType == domain.TypeCheckboxes {
+			if (q.QuestionType == domain.TypeMultipleChoice || q.QuestionType == domain.TypeCheckboxes) && defaultType == "" {
 				q.QuestionType = domain.TypeLongText
 				q.IsAutoScored = false
 			}
@@ -357,7 +358,7 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 		para := paragraphs[i]
 		line := strings.TrimSpace(para.Text)
 
-		if separatorRegex.MatchString(line) {
+		if separatorRegex.MatchString(line) || noteRegex.MatchString(line) {
 			continue
 		}
 
@@ -466,6 +467,9 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 				if split := strings.SplitN(optText, "->", 2); len(split) == 2 {
 					left, right := strings.TrimSpace(split[0]), strings.TrimSpace(split[1])
 					optText, matchKey, matchTarget = left, &left, &right
+				} else if split := strings.SplitN(optText, "|", 2); len(split) == 2 {
+					left, right := strings.TrimSpace(split[0]), strings.TrimSpace(split[1])
+					optText, matchKey, matchTarget = left, &left, &right
 				}
 			}
 			currentOptions = append(currentOptions, domain.QuestionOption{
@@ -478,6 +482,38 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 				IsCorrect:       isCorrect,
 				OrderIndex:      len(currentOptions) + 1,
 			})
+			continue
+		}
+
+		// Handle Matching lines without letter prefix: "Left | Right" or "Left -> Right"
+		if currentQuestion != nil && currentQuestion.QuestionType == domain.TypeMatching && (strings.Contains(line, "|") || strings.Contains(line, "->")) {
+			var left, right string
+			if strings.Contains(line, "|") {
+				split := strings.SplitN(line, "|", 2)
+				left, right = strings.TrimSpace(split[0]), strings.TrimSpace(split[1])
+			} else {
+				split := strings.SplitN(line, "->", 2)
+				left, right = strings.TrimSpace(split[0]), strings.TrimSpace(split[1])
+			}
+			if left != "" && right != "" {
+				currentOptions = append(currentOptions, domain.QuestionOption{
+					ID:              uuid.New(),
+					QuestionID:      currentQuestion.ID,
+					OptionText:      left,
+					MatchKey:        &left,
+					MatchTargetText: &right,
+					IsCorrect:       true,
+					OrderIndex:      len(currentOptions) + 1,
+				})
+				continue
+			}
+		}
+
+		// Handle standalone question type markers on their own line under question text (e.g. [Checkbox], [Essay], [Matching])
+		if currentQuestion != nil && len(currentOptions) == 0 && questionMarkerPattern.MatchString(line) {
+			newType, isAuto := normalizeQuestionType(line)
+			currentQuestion.QuestionType = newType
+			currentQuestion.IsAutoScored = isAuto
 			continue
 		}
 

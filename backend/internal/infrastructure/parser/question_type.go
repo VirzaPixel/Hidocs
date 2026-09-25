@@ -38,13 +38,13 @@ func normalizeQuestionType(raw string) (domain.QuestionType, bool) {
 	if strings.Contains(value, "CODE") || strings.Contains(value, "KODE") {
 		return domain.TypeCode, false
 	}
-	if strings.Contains(value, "SHORT_TEXT") || strings.Contains(value, "JAWABAN_SINGKAT") {
+	if strings.Contains(value, "SHORT_TEXT") || strings.Contains(value, "SHORT_ANSWER") || strings.Contains(value, "ISIAN") || strings.Contains(value, "JAWABAN_SINGKAT") {
 		return domain.TypeShortText, true
 	}
 	return domain.TypeMultipleChoice, true
 }
 
-var questionMarkerPattern = regexp.MustCompile(`(?i)\[(esai|essay|long_text|matching|menjodohkan|gambar|image|checkboxes|dropdown|ya_tidak|rating|math|code|short_text)\]`)
+var questionMarkerPattern = regexp.MustCompile(`(?i)\[(esai|essay|long_text|matching|menjodohkan|gambar|image|checkbox(?:es)?|kotak_centang|dropdown|ya_tidak|yes_no|true_false|rating(?:\s*\d+)?|math|matematika|code|kode|short_text|short_answer|isian|jawaban_singkat)\]`)
 
 func stripQuestionMarkers(text string) string {
 	return strings.TrimSpace(questionMarkerPattern.ReplaceAllString(text, ""))

@@ -106,6 +106,9 @@ func (s *docxService) buildFormFromExtracted(ctx context.Context, userID uuid.UU
 		IsOneTimeSubmission: false,
 		RandomizeQuestions:  false,
 		RandomizeOptions:    false,
+		AllowBacktrack:      true,
+		ShowQuestionNumber:  true,
+		FullscreenMode:      false,
 		ThemeColor:          "#4F46E5",
 		FontFamily:          "Inter",
 	}

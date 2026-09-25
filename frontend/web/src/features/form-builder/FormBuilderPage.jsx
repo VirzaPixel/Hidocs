@@ -249,7 +249,7 @@ export default function FormBuilderPage() {
       </div>
 
       <Modal open={accessOpen} onClose={() => setAccessOpen(false)} title="Bagikan akses aplikasi siswa">
-        <FormAccessPanel form={form} />
+        <FormAccessPanel form={form} onActivated={invalidateForm} />
       </Modal>
 
       <AddFromBankModal

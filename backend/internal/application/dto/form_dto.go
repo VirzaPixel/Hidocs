@@ -133,7 +133,7 @@ type PublicOptionDTO struct {
 }
 
 type VerifyExamTokenRequest struct {
-	Token           string `json:"token" binding:"required"`
+	Token           string `json:"token"`
 	RespondentEmail string `json:"respondent_email" binding:"omitempty"`
 }
 

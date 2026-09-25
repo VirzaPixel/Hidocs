@@ -4,39 +4,76 @@ import { Button } from '../../shared/ui';
 
 const TEMPLATES = {
   docx: {
-    title: 'Format Dokumen Word (.docx)',
+    title: 'Format Dokumen Word (.docx) - Template Terbaru',
     intro:
-      'Tulis tiap soal dengan pola berikut di dalam dokumen Word. Sistem membaca urutan baris, jadi ikuti pola persis (nomor soal, opsi A-E, lalu baris "Kunci Jawaban").',
-    example: `Soal 1. Ibu kota Indonesia adalah?
-A. Bandung
-B. Jakarta
-C. Surabaya
+      'Gunakan format template terbaru di bawah ini atau unduh file template resmi .docx. Sistem secara otomatis mendeteksi 10 tipe soal, opsi jawaban, dan kunci jawaban bertanda bintang (*).',
+    example: `1. Apa ibu kota negara Indonesia?
+A. Surabaya
+*B. Nusantara
+C. Bandung
 D. Medan
-Kunci Jawaban: B
 
-Soal 2. Sebutkan 3 penyebab pemanasan global.
-(kosongkan opsi A-D dan baris Kunci Jawaban untuk soal esai)`,
+2. Pilih hewan mamalia berikut! (boleh lebih dari satu jawaban)
+[Checkbox]
+*A. Paus
+B. Hiu
+*C. Kelelawar
+D. Buaya
+
+3. Jelaskan pengertian dari fotosintesis!
+[Essay]
+
+4. Air mendidih pada suhu .... derajat Celsius.
+[Isian]
+
+5. Apakah air mendidih pada suhu 100 derajat Celsius?
+*A. Ya
+B. Tidak
+
+6. Seberapa puas Anda dengan materi ujian ini?
+[Rating 5]
+
+7. Tuliskan rumus luas lingkaran!
+[Math]
+
+8. Tuliskan fungsi untuk menjumlahkan dua bilangan!
+[Code]
+
+9. Jelaskan makna yang terkandung pada diagram berikut!
+[Image]
+
+10. Jodohkan negara dengan ibu kotanya!
+[Matching]
+Indonesia | Jakarta
+Jepang | Tokyo
+Prancis | Paris
+Jerman | Berlin`,
     notes: [
-      'Nomor soal boleh "Soal 1", "1.", "Question 1", dll — yang penting diakhiri titik/titik dua.',
-      'Opsi jawaban ditulis "A.", "B.", "C.", dst (maksimal E).',
-      'Baris "Kunci Jawaban: <huruf>" WAJIB ada untuk soal pilihan ganda — tanpa ini, soal tetap masuk tapi tanpa kunci jawaban.',
-      'Untuk soal esai (tanpa opsi), cukup tulis pertanyaannya saja tanpa baris A-E dan Kunci Jawaban.',
-      'Gambar yang ditempel langsung di dalam dokumen Word akan ikut terbawa otomatis.',
+      'Nomor soal diawali angka titik: "1.", "1)", "Soal 1."',
+      'Pilihan Ganda (PG): Tambahkan tanda bintang (*) di depan huruf opsi yang benar (contoh: *B. Nusantara) atau tulis "Kunci Jawaban: B".',
+      'Checkbox: Beri tag [Checkbox] di bawah soal. Opsi benar dapat lebih dari satu menggunakan tanda (*).',
+      'Essay / Isian Singkat: Gunakan tag [Essay] atau [Isian].',
+      'Ya / Tidak: Buat opsi *A. Ya dan B. Tidak, atau gunakan tag [Ya/Tidak].',
+      'Menjodohkan: Gunakan tag [Matching] lalu tulis pasangan "Kiri | Kanan" di tiap baris.',
+      'Gambar: Tempelkan gambar langsung di dokumen Word Anda, sistem akan mengekstraknya otomatis.',
     ],
-    fileName: 'template-soal.txt',
+    fileUrl: '/templates/template_import.docx',
+    fileName: 'template-import-hidocs.docx',
   },
   pdf: {
     title: 'Format Dokumen PDF',
     intro: 'Pola yang sama persis dengan format Word di atas — PDF dibaca sebagai teks biasa.',
-    example: `Soal 1. Ibu kota Indonesia adalah?
+    example: `1. Apa ibu kota negara Indonesia?
 A. Bandung
-B. Jakarta
+*B. Nusantara
 C. Surabaya
 D. Medan
-Kunci Jawaban: B`,
+
+2. Jelaskan pengertian dari fotosintesis!
+[Essay]`,
     notes: [
-      'PDF harus berupa teks asli (bukan hasil scan/foto) — kalau PDF hasil scan, tidak ada teks yang bisa dibaca sama sekali.',
-      'Gambar di dalam PDF TIDAK ikut terbawa otomatis (beda dari Word) — tambahkan manual lewat editor soal setelah form dibuat.',
+      'PDF harus berupa teks asli (bukan hasil scan/foto) agar dapat dibaca sistem.',
+      'Gambar di dalam PDF tidak dapat diekstrak otomatis — dapat diunggah manual di form builder.',
     ],
     fileName: 'template-soal.txt',
   },
@@ -60,6 +97,15 @@ export default function ImportTemplateModal({ open, onClose, type, onContinue })
   if (!tpl) return null;
 
   const downloadTemplate = () => {
+    if (tpl.fileUrl) {
+      const a = document.createElement('a');
+      a.href = tpl.fileUrl;
+      a.download = tpl.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
     const blob = new Blob([tpl.example], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

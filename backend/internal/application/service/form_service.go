@@ -557,7 +557,9 @@ func (s *formService) VerifyExamToken(ctx context.Context, identifier string, re
 			AllowBacktrack:      form.FormSettings.AllowBacktrack,
 			ShowQuestionNumber:  form.FormSettings.ShowQuestionNumber,
 			FullscreenMode:      form.FormSettings.FullscreenMode,
-			IsTokenProtected:    true,
+			IsTokenProtected:    form.FormSettings.IsTokenProtected && form.FormSettings.ExamToken != nil && *form.FormSettings.ExamToken != "",
+			IdentityFieldsJSON:  form.FormSettings.IdentityFieldsJSON,
+			ResultVisibility:    form.FormSettings.ResultVisibility,
 		},
 		Questions: publicQuestions,
 	}
