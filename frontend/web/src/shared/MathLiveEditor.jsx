@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import 'mathlive';
-import { Keyboard, Calculator, Plus, Eye, Type, ChevronDown, ChevronUp } from 'lucide-react';
+import { Keyboard, Calculator, Plus, Eye, Type, ChevronDown, ChevronUp, ClipboardPaste, Sparkles, X } from 'lucide-react';
 import { renderMixedText } from './MathField';
+import { parseClipboardMath, mathmlToLatex } from '../lib/mathmlToLatex';
+import { useToast } from './Toast';
 
 const QUICK_SYMBOLS = [
   { label: '½', insert: '\\frac{#?}{#?}', title: 'Pecahan' },
@@ -29,6 +31,9 @@ export default function MathLiveEditor({ value = '', onChange, placeholder = 'Ke
   const textareaRef = useRef(null);
   const [showMathBuilder, setShowMathBuilder] = useState(false);
   const [formulaInput, setFormulaInput] = useState('');
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteRawInput, setPasteRawInput] = useState('');
+  const toast = useToast();
 
   const preview = useMemo(() => renderMixedText(value || ''), [value]);
 
@@ -65,6 +70,34 @@ export default function MathLiveEditor({ value = '', onChange, placeholder = 'Ke
       const newCursor = start + formatted.length;
       textarea?.setSelectionRange(newCursor, newCursor);
     });
+  };
+
+  const handlePaste = (e) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    const html = clipboardData.getData('text/html') || '';
+    const text = clipboardData.getData('text/plain') || '';
+
+    const convertedLatex = parseClipboardMath(html, text);
+    if (convertedLatex) {
+      e.preventDefault();
+      insertSnippetToMainText(convertedLatex, false);
+      toast.success('Rumus matematika berhasil disalin & dikonversi dari MathML / Word!');
+    }
+  };
+
+  const handleConfirmPasteModal = () => {
+    if (!pasteRawInput.trim()) return;
+    const converted = parseClipboardMath(pasteRawInput, pasteRawInput) || mathmlToLatex(pasteRawInput);
+    if (converted) {
+      insertSnippetToMainText(converted, false);
+      toast.success('Rumus MathML berhasil dikonversi ke soal!');
+      setPasteRawInput('');
+      setShowPasteModal(false);
+    } else {
+      toast.error('Tidak menemukan struktur MathML atau rumus yang valid pada teks yang ditempel.');
+    }
   };
 
   const insertSymbolToMathLiveField = (snippet) => {
@@ -106,7 +139,7 @@ export default function MathLiveEditor({ value = '', onChange, placeholder = 'Ke
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="flex items-center gap-1 text-xs font-semibold text-text-secondary mr-1">
-            <Calculator size={14} className="text-primary" /> Sisip Rumus Cepat:
+            <Calculator size={14} className="text-primary" /> Sisip Rumus:
           </span>
           {QUICK_SYMBOLS.map((s) => (
             <button
@@ -121,19 +154,31 @@ export default function MathLiveEditor({ value = '', onChange, placeholder = 'Ke
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowMathBuilder(!showMathBuilder);
-            if (!showMathBuilder) toggleVirtualKeyboard();
-          }}
-          className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20 active:scale-95 transition-all shadow-2xs"
-          title="Buka Papan Ketik Visual MathLive untuk menyusun rumus rumit"
-        >
-          <Keyboard size={14} />
-          <span>Keyboard Visual MathLive</span>
-          {showMathBuilder ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowPasteModal(true)}
+            className="flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all shadow-2xs"
+            title="Tempel kode MathML / XML rumus dari Word atau web luar"
+          >
+            <ClipboardPaste size={14} />
+            <span>Tempel Rumus (Word / MathML)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowMathBuilder(!showMathBuilder);
+              if (!showMathBuilder) toggleVirtualKeyboard();
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/20 active:scale-95 transition-all shadow-2xs"
+            title="Buka Papan Ketik Visual MathLive untuk menyusun rumus rumit"
+          >
+            <Keyboard size={14} />
+            <span>Keyboard Visual MathLive</span>
+            {showMathBuilder ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
       </div>
 
       {/* Optional Popover Visual MathLive Builder (opens when Keyboard Visual clicked) */}
@@ -210,6 +255,7 @@ export default function MathLiveEditor({ value = '', onChange, placeholder = 'Ke
           ref={textareaRef}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
+          onPaste={handlePaste}
           placeholder={placeholder || 'Ketik narasi soal di sini, tekan enter untuk baris baru, dan sisipkan rumus matematika...\n\nContoh:\nPerhatikan soal di bawah ini:\n\\(\\frac{1}{2} + \\frac{1}{3}\\)\nBerapakah hasil dari soal ini?'}
           rows={5}
           className="w-full rounded-lg border border-border bg-surface p-3 font-sans text-sm text-text placeholder:text-text-secondary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 leading-relaxed"
@@ -234,6 +280,68 @@ export default function MathLiveEditor({ value = '', onChange, placeholder = 'Ke
           </div>
         )}
       </div>
+
+      {/* MODAL / DIALOG TEMPEL RUMUS (WORD / GOOGLE / MATHML) */}
+      {showPasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+                  <ClipboardPaste size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-text text-sm">Tempel Rumus dari Word / Web Luar</h3>
+                  <p className="text-[11px] text-text-secondary">Mendukung salinan persamaan Word, MathML XML, dan LaTeX</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasteModal(false)}
+                className="rounded-lg p-1.5 text-text-secondary hover:bg-bg-secondary hover:text-text"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2 text-xs">
+              <label className="font-semibold text-text">
+                Tempel teks atau kode MathML rumus di sini (Ctrl+V):
+              </label>
+              <textarea
+                rows={5}
+                value={pasteRawInput}
+                onChange={(e) => setPasteRawInput(e.target.value)}
+                placeholder="Contoh: <math xmlns='http://www.w3.org/1998/Math/MathML'><mfrac><mn>1</mn><mn>2</mn></mfrac></math> atau salin langsung dari Word..."
+                className="w-full rounded-xl border border-border bg-bg-secondary p-3 font-mono text-xs text-text focus:border-primary focus:bg-surface focus:outline-none"
+                autoFocus
+              />
+              <p className="text-[11px] text-text-secondary leading-relaxed">
+                <Sparkles size={12} className="inline text-emerald-500 mr-1" />
+                Tips: Kamu juga bisa <strong>langsung menekan tombol Ctrl+V (Paste)</strong> di dalam kotak soal utama tanpa membuka dialog ini!
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowPasteModal(false)}
+                className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-text hover:bg-bg-secondary"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPasteModal}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-md active:scale-95"
+              >
+                <Sparkles size={14} />
+                Konversi & Masukkan Rumus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

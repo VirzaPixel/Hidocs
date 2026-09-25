@@ -3,9 +3,29 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { responseApi } from '../../lib/api';
 import { Card, EmptyState, FullPageSpinner, Pagination, Badge } from '../../shared/ui';
-import { formatDate } from '../../lib/utils';
+import { formatDate, cn } from '../../lib/utils';
 
 const LIMIT = 25;
+
+function formatStudentAnswer(a) {
+  if (a.selected_option || a.selected_option_text) {
+    return a.selected_option || a.selected_option_text;
+  }
+  if (a.match_pair_json) {
+    try {
+      const pairs = JSON.parse(a.match_pair_json);
+      if (Array.isArray(pairs) && pairs.length > 0) {
+        return pairs.map((p) => `${p.match_key} ↔ ${p.match_target_text}`).join(', ');
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (a.answer_text && String(a.answer_text).trim() !== '') {
+    return a.answer_text;
+  }
+  return '(tidak dijawab)';
+}
 
 export default function ResponsesTab({ formId }) {
   const [offset, setOffset] = useState(0);
@@ -47,19 +67,33 @@ export default function ResponsesTab({ formId }) {
                   {r.answers?.map((a, i) => (
                     <div key={a.id} className="rounded-lg bg-bg-secondary p-3">
                       <p className="text-sm font-medium text-text">
-                        {i + 1}. {a.question_text}
+                        {i + 1}. {a.question_text || `Soal ${i + 1}`}
                       </p>
                       <p className="mt-1 text-sm text-text-secondary">
-                        Jawaban: {a.selected_option || a.answer_text || '(tidak dijawab)'}
+                        <strong className="text-text font-semibold">Jawaban:</strong>{' '}
+                        <span className="text-text">{formatStudentAnswer(a)}</span>
                       </p>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
+                      <div className="mt-2 flex items-center gap-2 text-xs">
                         {a.is_correct != null && (
-                          <span className={a.is_correct ? 'text-success' : 'text-danger'}>
+                          <span
+                            className={cn(
+                              'font-bold px-2 py-0.5 rounded-md',
+                              a.is_correct
+                                ? 'bg-success/15 text-success'
+                                : 'bg-danger/15 text-danger'
+                            )}
+                          >
                             {a.is_correct ? 'Benar' : 'Salah'}
                           </span>
                         )}
-                        <span className="text-text-secondary">{a.points_earned} poin</span>
-                        {a.is_flagged && <span className="text-warning">Ditandai ragu-ragu</span>}
+                        <span className="font-semibold text-text-secondary">
+                          {a.points_earned ?? a.score_given ?? 0} poin
+                        </span>
+                        {a.is_flagged && (
+                          <span className="text-amber-500 font-medium">
+                            &middot; Ditandai ragu-ragu
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}

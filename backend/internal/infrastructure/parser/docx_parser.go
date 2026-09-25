@@ -58,10 +58,6 @@ type parsedParagraph struct {
 	ImageURL string
 }
 
-// FIX: baru — ExtractRawText mengekstrak teks polos dari .docx (dipakai untuk
-// fitur "lampirkan materi PDF/Word ke AI"), TANPA mencoba mem-parsing jadi
-// struktur soal (beda dari ParseDocx di atas). Memakai ulang logic parsing
-// word/document.xml yang sama supaya konsisten.
 func (p *DocxParser) ExtractRawText(fileBytes []byte) (string, error) {
 	reader, err := zip.NewReader(bytes.NewReader(fileBytes), int64(len(fileBytes)))
 	if err != nil {
@@ -165,7 +161,6 @@ func (p *DocxParser) ParseDocx(fileBytes []byte, formID uuid.UUID) (*ExtractedFo
 			relID := m[1]
 			targetPath, exists := relMap[relID]
 			if !exists {
-				// Maybe relID is direct path
 				targetPath = relID
 			}
 
@@ -174,7 +169,6 @@ func (p *DocxParser) ParseDocx(fileBytes []byte, formID uuid.UUID) (*ExtractedFo
 				continue
 			}
 
-			// Normalize target path
 			fullPath := targetPath
 			if !strings.HasPrefix(fullPath, "word/") {
 				fullPath = "word/" + strings.TrimPrefix(targetPath, "/")
@@ -182,7 +176,6 @@ func (p *DocxParser) ParseDocx(fileBytes []byte, formID uuid.UUID) (*ExtractedFo
 
 			zf, found := zipFileMap[fullPath]
 			if !found {
-				// Try without word/
 				zf, found = zipFileMap[strings.TrimPrefix(fullPath, "word/")]
 			}
 			if !found {
@@ -200,7 +193,6 @@ func (p *DocxParser) ParseDocx(fileBytes []byte, formID uuid.UUID) (*ExtractedFo
 				continue
 			}
 
-			// Save image to ./uploads/questions/
 			uploadDir := "./uploads/questions"
 			_ = os.MkdirAll(uploadDir, 0755)
 
@@ -302,7 +294,6 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 
 	startIndex := 0
 
-	// Check if document starts directly with a question
 	firstIsQuestion := qNumRegex.MatchString(paragraphs[0].Text) || optionRegex.MatchString(paragraphs[0].Text)
 
 	isSectionLine := func(i int) bool {
@@ -311,8 +302,6 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 
 	if !firstIsQuestion {
 		if isSectionLine(0) {
-			// Dokumen dimulai langsung dengan seksi ("Pilihan Ganda"/"Essai"),
-			// tidak ada judul. Seksi diproses oleh loop dibawah.
 			extracted.Title = ""
 			startIndex = 0
 		} else {
@@ -325,8 +314,6 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 				extracted.Description = paragraphs[1].Text
 				startIndex = 2
 			} else if isSectionLine(1) {
-				// "Judul" langsung lalu "Pilihan Ganda" tanpa blank baris:
-				// seksi tetap diproses oleh loop dibawah, judul sudah set.
 				extracted.Description = ""
 			}
 		}
@@ -340,17 +327,40 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 	var defaultAutoScored bool = true
 	orderIdx := 1
 
+	finalizeQuestion := func(q *domain.Question, opts []domain.QuestionOption) domain.Question {
+		q.Options = opts
+		if len(opts) > 0 {
+			if q.QuestionType == domain.TypeLongText || q.QuestionType == domain.TypeShortText || q.QuestionType == "" {
+				q.QuestionType = domain.TypeMultipleChoice
+				q.IsAutoScored = true
+			}
+			hasCorrect := false
+			for _, o := range opts {
+				if o.IsCorrect {
+					hasCorrect = true
+					break
+				}
+			}
+			if !hasCorrect && len(opts) > 0 {
+				q.Options[0].IsCorrect = true
+			}
+		} else {
+			if q.QuestionType == domain.TypeMultipleChoice || q.QuestionType == domain.TypeCheckboxes {
+				q.QuestionType = domain.TypeLongText
+				q.IsAutoScored = false
+			}
+		}
+		return *q
+	}
+
 	for i := startIndex; i < len(paragraphs); i++ {
 		para := paragraphs[i]
 		line := strings.TrimSpace(para.Text)
 
-		// Skip separator / divider lines
 		if separatorRegex.MatchString(line) {
 			continue
 		}
 
-		// 0. Section header (Pilihan Ganda / Essai / Essay / Uraian) determines
-		// the default type for the questions right after it.
 		if smatch := sectionRegex.FindStringSubmatch(line); len(smatch) > 0 {
 			sectionType, sectionAuto := normalizeQuestionType(smatch[1])
 			if sectionType == domain.TypeMultipleChoice || sectionType == domain.TypeLongText {
@@ -359,11 +369,9 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			continue
 		}
 
-		// 1. Check if it's a question number line
 		if match := qNumRegex.FindStringSubmatch(line); len(match) > 0 {
 			if currentQuestion != nil {
-				currentQuestion.Options = currentOptions
-				extracted.Questions = append(extracted.Questions, *currentQuestion)
+				extracted.Questions = append(extracted.Questions, finalizeQuestion(currentQuestion, currentOptions))
 			}
 
 			qText := strings.TrimSpace(match[1])
@@ -394,12 +402,10 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			continue
 		}
 
-		// 2. Check if it's an Answer Key line (e.g. Kunci Jawaban: B)
 		if match := answerKeyRegex.FindStringSubmatch(line); len(match) > 1 && currentQuestion != nil {
 			correctLetter := strings.ToUpper(strings.TrimSpace(match[1]))
 			pendingCorrectLetter = correctLetter
 
-			// Apply correct status to already parsed option if available
 			letterIdx := int(correctLetter[0] - 'A')
 			if letterIdx >= 0 && letterIdx < len(currentOptions) {
 				currentOptions[letterIdx].IsCorrect = true
@@ -414,7 +420,6 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			continue
 		}
 
-		// 3. Check if it's an Option line (e.g. (a) text, A. text, *A. text, or standalone A.)
 		if match := optionRegex.FindStringSubmatch(line); len(match) > 0 && currentQuestion != nil {
 			prefixAsterisk := match[1]
 			optLetter := match[2]
@@ -438,7 +443,6 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 				isCorrect = true
 			}
 
-			// Clean option text from markers
 			optText = strings.ReplaceAll(optText, "[correct]", "")
 			optText = strings.ReplaceAll(optText, "(correct)", "")
 			optText = strings.ReplaceAll(optText, "(v)", "")
@@ -450,7 +454,6 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			if para.ImageURL != "" {
 				optImg = &para.ImageURL
 			} else if pendingImage != "" {
-				// Image was placed immediately above this option label
 				optImg = &pendingImage
 				if currentQuestion.ImgURL == pendingImage {
 					currentQuestion.ImgURL = ""
@@ -478,17 +481,14 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 			continue
 		}
 
-		// 4. Multi-line body text / standalone image for question or option
 		if currentQuestion != nil {
 			if para.ImageURL != "" {
 				if len(currentOptions) == 0 {
-					// Image below question before any options
 					if currentQuestion.ImgURL == "" {
 						currentQuestion.ImgURL = para.ImageURL
 					}
 					pendingImage = para.ImageURL
 				} else {
-					// Image below the last option
 					lastIdx := len(currentOptions) - 1
 					if currentOptions[lastIdx].ImgURL == nil {
 						currentOptions[lastIdx].ImgURL = &para.ImageURL
@@ -513,9 +513,9 @@ func parseParagraphsToForm(paragraphs []parsedParagraph, formID uuid.UUID) (*Ext
 	}
 
 	if currentQuestion != nil {
-		currentQuestion.Options = currentOptions
-		extracted.Questions = append(extracted.Questions, *currentQuestion)
+		extracted.Questions = append(extracted.Questions, finalizeQuestion(currentQuestion, currentOptions))
 	}
 
 	return extracted, nil
 }
+

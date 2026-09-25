@@ -77,6 +77,8 @@ func (s *questionService) AddQuestion(ctx context.Context, userID uuid.UUID, for
 		ImgURL:        req.ImgURL,
 		AudioURL:      req.AudioURL,
 		VideoURL:      req.VideoURL,
+		AnswerKey:     req.AnswerKey,
+		Rubric:        req.Rubric,
 		IsAutoScored:  req.IsAutoScored,
 		Points:        req.Points,
 		OrderIndex:    req.OrderIndex,
@@ -113,6 +115,8 @@ func (s *questionService) UpdateQuestion(ctx context.Context, userID uuid.UUID, 
 	q.ImgURL = req.ImgURL
 	q.AudioURL = req.AudioURL
 	q.VideoURL = req.VideoURL
+	q.AnswerKey = req.AnswerKey
+	q.Rubric = req.Rubric
 	q.IsAutoScored = req.IsAutoScored
 	q.Points = req.Points
 	q.OrderIndex = req.OrderIndex
@@ -295,6 +299,8 @@ func (s *questionService) mapQuestionToDTO(q *domain.Question) *dto.QuestionDTO 
 		ImgURL:       q.ImgURL,
 		AudioURL:     q.AudioURL,
 		VideoURL:     q.VideoURL,
+		AnswerKey:    q.AnswerKey,
+		Rubric:       q.Rubric,
 		IsAutoScored: q.IsAutoScored,
 		Points:       q.Points,
 		OrderIndex:   q.OrderIndex,

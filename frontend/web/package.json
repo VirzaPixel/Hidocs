@@ -33,6 +33,7 @@
     "@tiptap/starter-kit": "^3.31.3",
     "axios": "^1.20.0",
     "codemirror": "^6.0.2",
+    "html5-qrcode": "^2.3.8",
     "katex": "^0.18.7",
     "lucide-react": "^1.47.0",
     "mathlive": "^0.110.0",

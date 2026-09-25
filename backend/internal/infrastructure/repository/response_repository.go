@@ -46,6 +46,8 @@ func (r *responseRepository) GetResponsesByFormID(ctx context.Context, formID uu
 	var responses []domain.FormResponse
 	err := r.db.WithContext(ctx).
 		Preload("Answers").
+		Preload("Answers.Question").
+		Preload("Answers.Question.Options").
 		Preload("Answers.SelectedOption").
 		Where("form_id = ?", formID).
 		Order("submitted_at desc").
@@ -68,6 +70,8 @@ func (r *responseRepository) GetResponsesByFormIDPaginated(ctx context.Context, 
 	var responses []domain.FormResponse
 	err := r.db.WithContext(ctx).
 		Preload("Answers").
+		Preload("Answers.Question").
+		Preload("Answers.Question.Options").
 		Preload("Answers.SelectedOption").
 		Where("form_id = ?", formID).
 		Order("submitted_at desc").
@@ -96,7 +100,7 @@ func (r *responseRepository) GetActiveResponseSession(ctx context.Context, formI
 	var resp domain.FormResponse
 	err := r.db.WithContext(ctx).
 		Preload("Answers").
-		Where("form_id = ? AND respondent_email = ? AND status IN ?", formID, email, []domain.ResponseStatus{domain.ResponseStatusInProgress, domain.ResponseStatusRestarted}).
+		Where("form_id = ? AND respondent_email = ? AND status IN ?", formID, email, []domain.ResponseStatus{domain.ResponseStatusInProgress, domain.ResponseStatusRestarted, domain.ResponseStatusBlocked}).
 		Order("started_at desc").
 		First(&resp).Error
 
@@ -192,8 +196,10 @@ func (r *responseRepository) UpdateTelemetry(ctx context.Context, responseID uui
 	switch eventType {
 	case "TAB_SWITCH", "APP_BACKGROUNDED":
 		updates["tab_switch_count"] = gorm.Expr("tab_switch_count + 1")
-	case "WINDOW_BLUR", "FULLSCREEN_EXIT", "SPLIT_SCREEN", "FLOATING_WINDOW":
+	case "WINDOW_BLUR", "BLUR", "FULLSCREEN_EXIT", "SPLIT_SCREEN", "FLOATING_WINDOW":
 		updates["blur_count"] = gorm.Expr("blur_count + 1")
+	case "SESSION_BLOCKED":
+		updates["status"] = domain.ResponseStatusBlocked
 	}
 
 	return r.db.WithContext(ctx).Model(&domain.FormResponse{}).Where("id = ?", responseID).Updates(updates).Error
@@ -275,9 +281,6 @@ func (r *responseRepository) GetLiveMonitoringByFormID(ctx context.Context, form
 }
 
 func (r *responseRepository) RestartStudentResponse(ctx context.Context, responseID uuid.UUID, warningMsg string) error {
-	// Reset draft answers and set status to RESTARTED with the warning message
-	_ = r.db.WithContext(ctx).Where("response_id = ?", responseID).Delete(&domain.ResponseAnswer{}).Error
-
 	return r.db.WithContext(ctx).Model(&domain.FormResponse{}).
 		Where("id = ?", responseID).
 		Updates(map[string]interface{}{
@@ -285,6 +288,8 @@ func (r *responseRepository) RestartStudentResponse(ctx context.Context, respons
 			"warning_message":          warningMsg,
 			"is_warning_acknowledged":  false,
 			"current_question_index":   1,
+			"tab_switch_count":         0,
+			"blur_count":               0,
 			"last_heartbeat":           gorm.Expr("NOW()"),
 		}).Error
 }

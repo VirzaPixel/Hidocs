@@ -13,6 +13,7 @@ import (
 	"backend/internal/application/dto"
 	"backend/internal/domain"
 	"backend/internal/infrastructure/cache"
+	infraWS "backend/internal/infrastructure/websocket"
 	"backend/pkg/utils"
 	"github.com/google/uuid"
 )
@@ -27,7 +28,7 @@ type FormService interface {
 	UpdateFormSettings(ctx context.Context, userID uuid.UUID, formID uuid.UUID, req dto.UpdateFormSettingsRequest) (*domain.FormSettings, error)
 	GetPublicForm(ctx context.Context, identifier string) (*dto.PublicFormDTO, error)
 	GetFormQRCode(ctx context.Context, identifier string) (string, error)
-	VerifyExamToken(ctx context.Context, formID uuid.UUID, req dto.VerifyExamTokenRequest) (*dto.VerifyExamTokenResponse, error)
+	VerifyExamToken(ctx context.Context, identifier string, req dto.VerifyExamTokenRequest) (*dto.VerifyExamTokenResponse, error)
 
 	// FIX: Share Monitoring — tiga method baru untuk mengelola guru lain yang diberi
 	// akses monitoring (read-only) ke sebuah form.
@@ -269,6 +270,11 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 	if req.ResultVisibility != nil {
 		settings.ResultVisibility = *req.ResultVisibility
 	}
+	if req.IdentityFieldsJSON != nil {
+		settings.IdentityFieldsJSON = req.IdentityFieldsJSON
+	} else if existingSettings != nil {
+		settings.IdentityFieldsJSON = existingSettings.IdentityFieldsJSON
+	}
 	if req.MaxAttempts != nil {
 		settings.MaxAttempts = *req.MaxAttempts
 	} else if existingSettings != nil {
@@ -364,6 +370,7 @@ func (s *formService) GetPublicForm(ctx context.Context, identifier string) (*dt
 			FullscreenMode:      form.FormSettings.FullscreenMode,
 			IsTokenProtected:    isProtected,
 			ResultVisibility:    form.FormSettings.ResultVisibility,
+			IdentityFieldsJSON:  form.FormSettings.IdentityFieldsJSON,
 		}
 	}
 
@@ -427,36 +434,53 @@ func (s *formService) GetPublicForm(ctx context.Context, identifier string) (*dt
 	return publicDTO, nil
 }
 
-func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req dto.VerifyExamTokenRequest) (*dto.VerifyExamTokenResponse, error) {
-	form, err := s.formRepo.GetByID(ctx, formID)
+func (s *formService) VerifyExamToken(ctx context.Context, identifier string, req dto.VerifyExamTokenRequest) (*dto.VerifyExamTokenResponse, error) {
+	var form *domain.Form
+	var err error
+	if formID, parseErr := uuid.Parse(identifier); parseErr == nil {
+		form, err = s.formRepo.GetByID(ctx, formID)
+	} else {
+		form, err = s.formRepo.GetByCustomURL(ctx, identifier)
+	}
+
 	if err != nil {
 		return nil, domain.ErrFormNotFound
 	}
 
-	if form.FormSettings == nil || !form.FormSettings.IsTokenProtected || form.FormSettings.ExamToken == nil {
-		return nil, errors.New("this form is not protected by an exam token")
-	}
+	if form.FormSettings != nil && form.FormSettings.IsTokenProtected && form.FormSettings.ExamToken != nil && strings.TrimSpace(*form.FormSettings.ExamToken) != "" {
+		savedToken := strings.ToUpper(strings.TrimSpace(*form.FormSettings.ExamToken))
+		inputToken := strings.ToUpper(strings.TrimSpace(req.Token))
 
-	if *form.FormSettings.ExamToken != req.Token {
-		return nil, errors.New("invalid exam token. Please check with your exam proctor/teacher")
+		if savedToken != inputToken {
+			return nil, errors.New("kode token ujian salah atau tidak cocok")
+		}
 	}
 
 	// Check if student already submitted
-	if form.FormSettings.IsOneTimeSubmission && s.responseRepo != nil {
-		alreadySubmitted, _ := s.responseRepo.CheckUserAlreadySubmitted(ctx, formID, req.RespondentEmail)
-		if alreadySubmitted {
-			return nil, errors.New("you have already completed and submitted this exam")
+	if form.FormSettings != nil && (form.FormSettings.IsOneTimeSubmission || form.FormSettings.MaxAttempts > 0) && req.RespondentEmail != "" {
+		maxAttempts := form.FormSettings.MaxAttempts
+		if maxAttempts <= 0 && form.FormSettings.IsOneTimeSubmission {
+			maxAttempts = 1
+		}
+		if maxAttempts > 0 && s.responseRepo != nil {
+			count, _ := s.responseRepo.CountSubmissionsByEmail(ctx, form.ID, req.RespondentEmail)
+			if count >= int64(maxAttempts) {
+				return nil, errors.New("kamu sudah pernah menyelesaikan dan mengumpulkan ujian ini")
+			}
 		}
 	}
 
 	// Fetch or initialize active session
 	var session *domain.FormResponse
-	if s.responseRepo != nil {
-		session, _ = s.responseRepo.GetActiveResponseSession(ctx, formID, req.RespondentEmail)
+	if s.responseRepo != nil && req.RespondentEmail != "" {
+		session, _ = s.responseRepo.GetActiveResponseSession(ctx, form.ID, req.RespondentEmail)
+		if session != nil && session.Status == domain.ResponseStatusBlocked {
+			return nil, errors.New("izin pengerjaan ujian kamu dicabut (BLOCKED) karena terindikasi kecurangan. Silakan hubungi pengawas/operator untuk membuka kunci sesi")
+		}
 		if session == nil {
 			session = &domain.FormResponse{
 				ID:                   uuid.New(),
-				FormID:               formID,
+				FormID:               form.ID,
 				RespondentEmail:      req.RespondentEmail,
 				Status:               domain.ResponseStatusInProgress,
 				CurrentQuestionIndex: 1,
@@ -465,6 +489,13 @@ func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req
 				LastHeartbeat:        time.Now(),
 			}
 			_ = s.responseRepo.CreateResponse(ctx, session)
+
+			infraWS.GlobalHub.BroadcastToForm(form.ID, "STUDENT_JOIN", map[string]any{
+				"response_id":      session.ID,
+				"respondent_email": req.RespondentEmail,
+				"status":           domain.ResponseStatusInProgress,
+				"started_at":       session.StartedAt,
+			})
 		}
 	}
 
@@ -566,19 +597,25 @@ func (s *formService) VerifyExamToken(ctx context.Context, formID uuid.UUID, req
 	}
 
 	sessionState := &dto.SessionStateDTO{
-		ResponseID:            session.ID,
-		FormID:                formID,
-		Status:                string(session.Status),
-		CurrentQuestionIndex:  session.CurrentQuestionIndex,
-		WarningMessage:        session.WarningMessage,
-		IsWarningAcknowledged: session.IsWarningAcknowledged,
-		StartedAt:             session.StartedAt,
-		DurationMinutes:       form.FormSettings.DurationMinutes,
-		Questions:             sessionQuestions,
+		FormID:          form.ID,
+		Status:          "IN_PROGRESS",
+		CurrentQuestionIndex: 1,
+		DurationMinutes: form.FormSettings.DurationMinutes,
+		Questions:       sessionQuestions,
+	}
+	var respID uuid.UUID
+	if session != nil {
+		respID = session.ID
+		sessionState.ResponseID = session.ID
+		sessionState.Status = string(session.Status)
+		sessionState.CurrentQuestionIndex = session.CurrentQuestionIndex
+		sessionState.WarningMessage = session.WarningMessage
+		sessionState.IsWarningAcknowledged = session.IsWarningAcknowledged
+		sessionState.StartedAt = session.StartedAt
 	}
 
 	return &dto.VerifyExamTokenResponse{
-		ResponseID:   session.ID,
+		ResponseID:   respID,
 		Form:         publicForm,
 		SessionState: sessionState,
 	}, nil
@@ -631,6 +668,8 @@ func (s *formService) mapFormToDTOWithCount(ctx context.Context, form *domain.Fo
 			ImgURL:       q.ImgURL,
 			AudioURL:     q.AudioURL,
 			VideoURL:     q.VideoURL,
+			AnswerKey:    q.AnswerKey,
+			Rubric:       q.Rubric,
 			IsAutoScored: q.IsAutoScored,
 			Points:       q.Points,
 			OrderIndex:   q.OrderIndex,

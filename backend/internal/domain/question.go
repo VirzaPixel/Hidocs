@@ -31,6 +31,8 @@ type Question struct {
 	ImgURL        string           `gorm:"type:varchar(255)" json:"img_url,omitempty"`
 	AudioURL      *string          `gorm:"type:varchar(255)" json:"audio_url,omitempty"`
 	VideoURL      *string          `gorm:"type:varchar(255)" json:"video_url,omitempty"`
+	AnswerKey     *string          `gorm:"type:text" json:"answer_key,omitempty"`
+	Rubric        *string          `gorm:"type:text" json:"rubric,omitempty"`
 	IsAutoScored  bool             `gorm:"type:boolean;default:true" json:"is_auto_scored"`
 	Points        int              `gorm:"type:int;default:1" json:"points"`
 	OrderIndex    int              `gorm:"type:int;not null;default:0" json:"order_index"`

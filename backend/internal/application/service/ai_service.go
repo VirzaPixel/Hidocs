@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -81,39 +82,45 @@ func (s *aiService) buildPrompt(req dto.AIGenerateFormRequest) string {
 	sb.WriteString("Tugas utama Anda adalah membuat form ujian yang SANGAT AKURAT, BERKUALITAS TINGGI, LENGKAP, dan PRESISI sesuai dengan spesifikasi dan materi yang diminta user.\n\n")
 	sb.WriteString("PERATURAN UTAMA KELUARAN (STRICT JSON ONLY):\n")
 	sb.WriteString("1. Keluarkan HANYA JSON valid yang memenuhi skema tanpa teks pembuka, penjelasan, atau markdown tambahan di luar JSON.\n")
-	sb.WriteString("2. Skema JSON:\n")
+	sb.WriteString("2. Pastikan karakter khusus di dalam string JSON di-escape dengan benar (misal `\\n` untuk baris baru, `\\\"` untuk tanda kutip dua, terutama pada potongan kode program).\n")
+	sb.WriteString("3. Skema JSON:\n")
 	sb.WriteString("{\n")
 	sb.WriteString("  \"title\": \"Judul Form Yang Menarik & Profesional\",\n")
 	sb.WriteString("  \"description\": \"Deskripsi / Petunjuk Pengerjaan Ujian\",\n")
 	sb.WriteString("  \"questions\": [\n")
 	sb.WriteString("    {\n")
 	sb.WriteString("      \"question_text\": \"Teks Soal / Pertanyaan\",\n")
-	sb.WriteString("      \"question_type\": \"MULTIPLE_CHOICE|CHECKBOXES|DROPDOWN|YES_NO|SHORT_TEXT|LONG_TEXT|MATCHING|MATH|CODE|RATING\",\n")
+	sb.WriteString("      \"question_type\": \"MULTIPLE_CHOICE|CHECKBOXES|DROPDOWN|YES_NO|SHORT_TEXT|LONG_TEXT|MATCHING|RATING\",\n")
 	sb.WriteString("      \"points\": 10,\n")
-	sb.WriteString("      \"code_language\": \"javascript|python|java|cpp|sql|css|html (wajib jika type=CODE)\",\n")
+	sb.WriteString("      \"code_language\": \"javascript|python|java|cpp|sql|css|html (opsional, jika mengandung kode)\",\n")
 	sb.WriteString("      \"img_url\": \"...\", \"audio_url\": \"...\", \"video_url\": \"...\",\n")
 	sb.WriteString("      \"options\": [\n")
 	sb.WriteString("        {\"option_text\": \"Opsi A\", \"is_correct\": true, \"match_key\": \"K1\", \"match_target_text\": \"Target K1\"}\n")
 	sb.WriteString("      ],\n")
-	sb.WriteString("      \"answer_key_text\": \"Kunci jawaban / pembahasan lengkap\"\n")
+	sb.WriteString("      \"answer_key_text\": \"Kunci jawaban / pembahasan lengkap (wajib untuk LONG_TEXT/SHORT_TEXT)\"\n")
 	sb.WriteString("    }\n")
 	sb.WriteString("  ]\n")
 	sb.WriteString("}\n\n")
-	sb.WriteString("ATURAN KHUSUS TIPE SOAL & KONTEN:\n")
-	sb.WriteString("1. SOAL MATEMATIKA (MATH):\n")
-	sb.WriteString("   - Tulis rumus Matematika/Fisika/Kimia menggunakan sintaks LaTeX standar `\\(...\\)` atau `$$...$$` pada `question_text`, `option_text`, maupun `answer_key_text`.\n")
-	sb.WriteString("   - Contoh: \"Hitunglah nilai dari \\(f(x) = x^2 + 3x - 5\\) untuk \\(x = 4\\)\".\n")
-	sb.WriteString("2. SOAL KODING PROGRAM (CODE):\n")
-	sb.WriteString("   - Tulis potongan kode program yang rapi di `question_text` atau `option_text` menggunakan blok kode ```language ... ```.\n")
-	sb.WriteString("   - Isi field `code_language` dengan bahasa pemrogramannya (misal: `python`, `javascript`, `cpp`, `sql`).\n")
-	sb.WriteString("3. PENGATURAN PILIHAN JAWABAN (OPTIONS):\n")
-	sb.WriteString("   - MULTIPLE_CHOICE / DROPDOWN / YES_NO: Wajib ada options, TEPAT 1 opsi `is_correct = true`, sisanya pengecoh (distractor) yang realistis.\n")
-	sb.WriteString("   - CHECKBOXES: Wajib ada options, MINIMAL 1 (bisa lebih) `is_correct = true`.\n")
-	sb.WriteString("   - MATCHING: Wajib ada options, sertakan `match_key` (misal K1, K2) dan `match_target_text` sebagai pasangan yang tepat.\n")
-	sb.WriteString("   - SHORT_TEXT / LONG_TEXT / MATH / CODE: Tanpa `options`, WAJIB isi `answer_key_text` dengan penjelasan & jawaban acuan.\n")
-	sb.WriteString("   - RATING: Tanpa options.\n")
-	sb.WriteString("4. SKALABILITAS (HINGGA 50 SOAL):\n")
-	sb.WriteString("   - Jika diminta hingga 50 soal, buat SELURUH 50 soal secara lancar, konsisten, berurutan dari nomor 1 sampai 50, dan pastikan JSON tidak terpotong di tengah jalan.\n\n")
+	sb.WriteString("ATURAN STRICT TIPE SOAL (QUESTION_TYPE):\n")
+	sb.WriteString("1. PILIHAN GANDA (PG / Multiple Choice, termasuk soal Matematika PG & Koding PG):\n")
+	sb.WriteString("   - WAJIB gunakan question_type=\"MULTIPLE_CHOICE\".\n")
+	sb.WriteString("   - WAJIB sertakan 4 opsi jawaban di array options (A, B, C, D) dengan TEPAT 1 opsi is_correct=true.\n")
+	sb.WriteString("2. ESAI / URAIAN (Essay, termasuk soal Matematika Esai & Koding Esai):\n")
+	sb.WriteString("   - WAJIB gunakan question_type=\"LONG_TEXT\".\n")
+	sb.WriteString("   - array options WAJIB kosong [].\n")
+	sb.WriteString("   - WAJIB isi answer_key_text dengan pembahasan dan kunci jawaban yang lengkap.\n")
+	sb.WriteString("3. ISIAN SINGKAT:\n")
+	sb.WriteString("   - gunakan question_type=\"SHORT_TEXT\", options kosong [], isi answer_key_text.\n")
+	sb.WriteString("4. KOTAK CENTANG (CHECKBOXES):\n")
+	sb.WriteString("   - gunakan question_type=\"CHECKBOXES\", sertakan options dengan >= 1 is_correct=true.\n")
+	sb.WriteString("5. MENJODOHKAN (MATCHING):\n")
+	sb.WriteString("   - gunakan question_type=\"MATCHING\", sertakan options dengan match_key dan match_target_text.\n")
+	sb.WriteString("6. SOAL MATEMATIKA:\n")
+	sb.WriteString("   - Tulis rumus Matematika menggunakan sintaks LaTeX standar `\\(...\\)` atau `$$...$$` pada `question_text`, `option_text`, maupun `answer_key_text`.\n")
+	sb.WriteString("7. SOAL KODING:\n")
+	sb.WriteString("   - Tulis potongan kode program yang rapi di `question_text` menggunakan blok kode ```language ... ``` dan set code_language.\n")
+	sb.WriteString("8. EFISIENSI OUTPUT UNTUK JUMLAH SOAL BANYAK:\n")
+	sb.WriteString("   - Jika diminta membuat banyak soal (misal 20-50 soal), buat teks soal, opsi jawaban, dan penjelasan secara to the point, padat, dan jelas agar seluruh butir soal selesai lengkap dalam batas token.\n\n")
 
 	if req.Subject != "" || req.Topic != "" {
 		fmt.Fprintf(&sb, "MATERI & METADATA UJIAN:\n- Mata Pelajaran: %s\n- Topik/Bab: %s\n- Jenjang/Kelas: %s\n- Bahasa: %s\n- Tingkat Kesulitan: %s\n\n",
@@ -183,7 +190,7 @@ func (s *aiService) GeneratePreview(ctx context.Context, req dto.AIGenerateFormR
 	if generateErr != nil || strings.TrimSpace(raw) == "" {
 		return nil, fmt.Errorf("gagal generate AI (gemini): %v", generateErr)
 	}
-	preview, err := parsePreview(infraAI.HealJSON(raw))
+	preview, err := parsePreview(raw)
 	if err != nil {
 		return nil, fmt.Errorf("gagal memparse output AI (%v). Raw: %q", err, truncateAI(raw, 700))
 	}
@@ -229,10 +236,16 @@ func (s *aiService) CreateFormFromAI(ctx context.Context, userID uuid.UUID, req 
 	var questions []domain.Question
 	for i, q := range preview.Questions {
 		qID := uuid.New()
+		var answerKey *string
+		if strings.TrimSpace(q.AnswerKeyText) != "" {
+			ak := strings.TrimSpace(q.AnswerKeyText)
+			answerKey = &ak
+		}
 		dq := domain.Question{
 			ID: qID, FormID: form.ID, QuestionText: q.QuestionText,
 			QuestionType: q.QuestionType, CodeLanguage: q.CodeLanguage,
 			ImgURL: q.ImgURL, AudioURL: strPtr(q.AudioURL), VideoURL: strPtr(q.VideoURL),
+			AnswerKey:    answerKey,
 			IsAutoScored: q.QuestionType != domain.TypeLongText && q.QuestionType != domain.TypeShortText &&
 				q.QuestionType != domain.TypeCode && q.QuestionType != domain.TypeMath,
 			Points: q.Points, OrderIndex: i + 1, IsRequired: true,
@@ -270,28 +283,70 @@ func (s *aiService) GradeEssay(ctx context.Context, req dto.AIGradeEssayRequest)
 	if req.MaxPoints < 0 {
 		return nil, fmt.Errorf("max_points must be >= 0")
 	}
-	if !s.gemini.IsEnabled() {
-		return nil, fmt.Errorf("GEMINI_API_KEY belum diisi — grading tidak tersedia")
+
+	ansText := strings.TrimSpace(req.AnswerText)
+	ansKey := strings.TrimSpace(req.AnswerKey)
+
+	// TOKEN SAVING 1: Jawaban kosong langsung 0 tanpa panggil API AI
+	if ansText == "" {
+		res := &dto.AIGradeEssayResponse{
+			Score:      0,
+			MaxPoints:  req.MaxPoints,
+			Similarity: 0,
+			Feedback:   "Jawaban tidak diisi / kosong.",
+		}
+		if req.AutoPersist && req.ResponseID != nil {
+			_ = s.persistEssayScore(ctx, *req.ResponseID, req.QuestionID, 0)
+		}
+		return res, nil
 	}
-	prompt := fmt.Sprintf(`Kamu adalah penilai essay yang adil. Nilai jawaban murid terhadap kunci jawaban secara semantik (makna sama dengan susunan kata berbeda tetap dinilai tinggi).
-Kunci jawaban: %s
-Jawaban murid: %s
-Rubrik (opsional): %s
-Skor maksimum: %.2f
-Keluarkan HANYA JSON: {"score": <0..maks>, "similarity": <0..1>, "feedback": "<1-2 kalimat bahasa Indonesia>"}.
-Aturan: semakin dekat makna dengan kunci, semakin mendekati skor penuh. Jawaban kosong => score 0.`,
-		req.AnswerKey, req.AnswerText, req.Rubric, req.MaxPoints)
+
+	// TOKEN SAVING 2: Jawaban persis sama dengan kunci langsung poin penuh tanpa panggil API AI
+	if ansKey != "" && strings.EqualFold(ansKey, ansText) {
+		res := &dto.AIGradeEssayResponse{
+			Score:      req.MaxPoints,
+			MaxPoints:  req.MaxPoints,
+			Similarity: 1.0,
+			Feedback:   "Jawaban tepat dan sangat lengkap sesuai kunci jawaban.",
+		}
+		if req.AutoPersist && req.ResponseID != nil {
+			_ = s.persistEssayScore(ctx, *req.ResponseID, req.QuestionID, req.MaxPoints)
+		}
+		return res, nil
+	}
+
+	if !s.gemini.IsEnabled() {
+		return s.mockGrade(req)
+	}
+
+	prompt := fmt.Sprintf(`Peran: Penilai esai akademik yang adil, proporsional, dan bijaksana.
+Tugas: Evaluasi kemiripan makna (semantik) antara Jawaban Murid dengan Kunci Jawaban & Rubrik acuan.
+
+Kunci Jawaban: %s
+Rubrik (Opsional): %s
+Jawaban Murid: %s
+Skor Maksimal: %.1f
+
+Pedoman Penilaian:
+- Nilai kesesuaian makna & konsep inti, jangan terpaku pada urutan kata.
+- Berikan nilai proporsional / parsial (misal 50%%-85%%) jika murid menjawab sebagian poin penting dengan benar.
+- Hanya berikan 0 jika jawaban murid benar-benar ngawur, menyimpang total, atau tidak relevan.
+- Feedback maksimal 1 kalimat bahasa Indonesia yang ramah dan konstruktif.
+
+Keluarkan HANYA JSON: {"score": <angka 0..%.1f>, "similarity": <0.0..1.0>, "feedback": "<penjelasan 1 kalimat>"}`,
+		ansKey, req.Rubric, ansText, req.MaxPoints, req.MaxPoints)
+
 	raw, err := s.gemini.GenerateJSON(ctx, prompt)
 	if err != nil {
-		return nil, err
+		return s.mockGrade(req)
 	}
+
 	var parsed struct {
 		Score      float64 `json:"score"`
 		Similarity float64 `json:"similarity"`
 		Feedback   string  `json:"feedback"`
 	}
 	if err := json.Unmarshal([]byte(infraAI.HealJSON(raw)), &parsed); err != nil {
-		// Fallback to mock evaluation instead of erroring
 		return s.mockGrade(req)
 	}
 	if parsed.Score < 0 {
@@ -306,6 +361,7 @@ Aturan: semakin dekat makna dengan kunci, semakin mendekati skor penuh. Jawaban 
 	if parsed.Similarity > 1 {
 		parsed.Similarity = 1
 	}
+
 	res := &dto.AIGradeEssayResponse{Score: parsed.Score, MaxPoints: req.MaxPoints, Similarity: parsed.Similarity, Feedback: parsed.Feedback}
 	if req.AutoPersist && req.ResponseID != nil {
 		_ = s.persistEssayScore(ctx, *req.ResponseID, req.QuestionID, parsed.Score)
@@ -340,8 +396,14 @@ func (s *aiService) GradeResponseEssays(ctx context.Context, userID uuid.UUID, r
 			continue
 		}
 		key := ""
-		if req.AnswerKeys != nil {
-			key = req.AnswerKeys[ans.QuestionID]
+		if req.AnswerKeys != nil && strings.TrimSpace(req.AnswerKeys[ans.QuestionID]) != "" {
+			key = strings.TrimSpace(req.AnswerKeys[ans.QuestionID])
+		} else if q.AnswerKey != nil && strings.TrimSpace(*q.AnswerKey) != "" {
+			key = strings.TrimSpace(*q.AnswerKey)
+		}
+		rubric := ""
+		if q.Rubric != nil && strings.TrimSpace(*q.Rubric) != "" {
+			rubric = strings.TrimSpace(*q.Rubric)
 		}
 		if strings.TrimSpace(ans.AnswerText) == "" {
 			continue
@@ -352,7 +414,7 @@ func (s *aiService) GradeResponseEssays(ctx context.Context, userID uuid.UUID, r
 		if s.gemini.IsEnabled() && strings.TrimSpace(key) != "" {
 			g, err := s.GradeEssay(ctx, dto.AIGradeEssayRequest{
 				QuestionID: ans.QuestionID, AnswerText: ans.AnswerText,
-				AnswerKey: key, MaxPoints: max,
+				AnswerKey: key, Rubric: rubric, MaxPoints: max,
 			})
 			if err == nil {
 				score, feedback = g.Score, g.Feedback
@@ -426,22 +488,329 @@ func validQuestionType(t domain.QuestionType) bool {
 }
 
 func parsePreview(raw string) (*dto.AIGenerateFormPreview, error) {
+	t := strings.TrimSpace(raw)
+	if t == "" {
+		return nil, fmt.Errorf("output AI kosong")
+	}
+
+	// 1. Coba unmarshal langsung
 	var p dto.AIGenerateFormPreview
-	if err := json.Unmarshal([]byte(raw), &p); err != nil {
-		return nil, err
+	if err := json.Unmarshal([]byte(t), &p); err == nil && len(p.Questions) > 0 {
+		ensurePreviewDefaults(&p)
+		return &p, nil
 	}
+
+	// 2. Coba sanitize dan heal JSON
+	sanitized := infraAI.SanitizeJSON(t)
+	healed := infraAI.HealJSON(sanitized)
+	if err := json.Unmarshal([]byte(healed), &p); err == nil && len(p.Questions) > 0 {
+		ensurePreviewDefaults(&p)
+		return &p, nil
+	}
+
+	// 3. Coba unmarshal ke dynamic generic map / slice
+	if dynPreview := parseDynamicPreview(healed); dynPreview != nil && len(dynPreview.Questions) > 0 {
+		ensurePreviewDefaults(dynPreview)
+		return dynPreview, nil
+	}
+	if dynPreview := parseDynamicPreview(sanitized); dynPreview != nil && len(dynPreview.Questions) > 0 {
+		ensurePreviewDefaults(dynPreview)
+		return dynPreview, nil
+	}
+
+	// 4. Fallback: Ekstraksi blok soal satu per satu (Question Block Scanner)
+	// Jika JSON terpotong di tengah atau memiliki error sintaks lokal, strategi ini menyelamatkan semua soal yang valid
+	if extractedPreview := extractQuestionsFromRaw(raw); extractedPreview != nil && len(extractedPreview.Questions) > 0 {
+		ensurePreviewDefaults(extractedPreview)
+		return extractedPreview, nil
+	}
+
+	if p.Title != "" || p.Description != "" {
+		return &p, nil
+	}
+
+	return nil, fmt.Errorf("tidak dapat memparse struktur JSON soal")
+}
+
+func ensurePreviewDefaults(p *dto.AIGenerateFormPreview) {
 	if strings.TrimSpace(p.Title) == "" {
-		p.Title = "Form Buatan AI"
+		p.Title = "Asesmen Hasil AI"
 	}
-	return &p, nil
+	if strings.TrimSpace(p.Description) == "" {
+		p.Description = "Form evaluasi yang dibuat secara otomatis oleh AIDoc."
+	}
+}
+
+func parseDynamicPreview(jsonStr string) *dto.AIGenerateFormPreview {
+	var root any
+	if err := json.Unmarshal([]byte(jsonStr), &root); err != nil {
+		return nil
+	}
+
+	p := &dto.AIGenerateFormPreview{}
+
+	switch v := root.(type) {
+	case []any:
+		for _, item := range v {
+			if qMap, ok := item.(map[string]any); ok {
+				if q := parseDynamicQuestion(qMap); q != nil {
+					p.Questions = append(p.Questions, *q)
+				}
+			}
+		}
+	case map[string]any:
+		p.Title = anyToString(v["title"], anyToString(v["judul"], "Asesmen Hasil AI"))
+		p.Description = anyToString(v["description"], anyToString(v["deskripsi"], ""))
+
+		var rawQuestions []any
+		for _, k := range []string{"questions", "soal", "items", "data", "quiz", "daftar_soal", "pertanyaan"} {
+			if arr, ok := v[k].([]any); ok && len(arr) > 0 {
+				rawQuestions = arr
+				break
+			}
+		}
+
+		if len(rawQuestions) == 0 {
+			if fMap, ok := v["form"].(map[string]any); ok {
+				if arr, ok := fMap["questions"].([]any); ok {
+					rawQuestions = arr
+				}
+			}
+		}
+
+		for _, item := range rawQuestions {
+			if qMap, ok := item.(map[string]any); ok {
+				if q := parseDynamicQuestion(qMap); q != nil {
+					p.Questions = append(p.Questions, *q)
+				}
+			}
+		}
+	}
+
+	if len(p.Questions) > 0 {
+		return p
+	}
+	return nil
+}
+
+func parseDynamicQuestion(m map[string]any) *dto.AIGeneratedQuestion {
+	qText := anyToString(m["question_text"], anyToString(m["soal"], anyToString(m["pertanyaan"], anyToString(m["text"], ""))))
+	if strings.TrimSpace(qText) == "" {
+		return nil
+	}
+
+	qTypeStr := strings.ToUpper(strings.TrimSpace(anyToString(m["question_type"], anyToString(m["tipe"], "MULTIPLE_CHOICE"))))
+	points := anyToInt(m["points"], anyToInt(m["poin"], anyToInt(m["score"], 10)))
+	if points <= 0 {
+		points = 10
+	}
+
+	q := &dto.AIGeneratedQuestion{
+		QuestionText:  qText,
+		QuestionType:  domain.QuestionType(qTypeStr),
+		Points:        points,
+		CodeLanguage:  anyToString(m["code_language"], anyToString(m["language"], "")),
+		ImgURL:        anyToString(m["img_url"], ""),
+		AudioURL:      anyToString(m["audio_url"], ""),
+		VideoURL:      anyToString(m["video_url"], ""),
+		AnswerKeyText: anyToString(m["answer_key_text"], anyToString(m["kunci_jawaban"], anyToString(m["explanation"], anyToString(m["pembahasan"], "")))),
+	}
+
+	var rawOpts []any
+	for _, k := range []string{"options", "opsi", "pilihan", "choices", "answers"} {
+		if arr, ok := m[k].([]any); ok && len(arr) > 0 {
+			rawOpts = arr
+			break
+		}
+	}
+
+	for _, optItem := range rawOpts {
+		switch opt := optItem.(type) {
+		case string:
+			if strings.TrimSpace(opt) != "" {
+				q.Options = append(q.Options, dto.AIGeneratedOption{
+					OptionText: strings.TrimSpace(opt),
+					IsCorrect:  false,
+				})
+			}
+		case map[string]any:
+			optText := anyToString(opt["option_text"], anyToString(opt["text"], anyToString(opt["jawaban"], anyToString(opt["opsi"], ""))))
+			isCorrect := anyToBool(opt["is_correct"], anyToBool(opt["benar"], false))
+			if strings.TrimSpace(optText) != "" {
+				q.Options = append(q.Options, dto.AIGeneratedOption{
+					OptionText: optText,
+					IsCorrect:  isCorrect,
+					ImgURL:     anyToString(opt["img_url"], ""),
+					AudioURL:   anyToString(opt["audio_url"], ""),
+					VideoURL:   anyToString(opt["video_url"], ""),
+				})
+			}
+		}
+	}
+
+	return q
+}
+
+func anyToString(val any, fallback string) string {
+	if val == nil {
+		return fallback
+	}
+	switch v := val.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		s := fmt.Sprintf("%v", v)
+		if s == "" {
+			return fallback
+		}
+		return s
+	}
+}
+
+func anyToInt(val any, fallback int) int {
+	if val == nil {
+		return fallback
+	}
+	switch v := val.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case string:
+		var i int
+		if _, err := fmt.Sscanf(v, "%d", &i); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func anyToBool(val any, fallback bool) bool {
+	if val == nil {
+		return fallback
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		s := strings.ToLower(strings.TrimSpace(v))
+		return s == "true" || s == "1" || s == "yes" || s == "benar"
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	}
+	return fallback
+}
+
+func extractQuestionsFromRaw(raw string) *dto.AIGenerateFormPreview {
+	p := &dto.AIGenerateFormPreview{
+		Title: "Asesmen Hasil AI",
+	}
+
+	if titleMatch := regexp.MustCompile(`"(?:title|judul)"\s*:\s*"([^"]+)"`).FindStringSubmatch(raw); len(titleMatch) > 1 {
+		p.Title = strings.TrimSpace(titleMatch[1])
+	}
+	if descMatch := regexp.MustCompile(`"(?:description|deskripsi)"\s*:\s*"([^"]+)"`).FindStringSubmatch(raw); len(descMatch) > 1 {
+		p.Description = strings.TrimSpace(descMatch[1])
+	}
+
+	target := `"question_text"`
+	altTarget := `"pertanyaan"`
+	idx := 0
+	for {
+		pos := strings.Index(raw[idx:], target)
+		if pos < 0 {
+			pos = strings.Index(raw[idx:], altTarget)
+			if pos < 0 {
+				break
+			}
+		}
+		absPos := idx + pos
+
+		openBrace := strings.LastIndex(raw[:absPos], "{")
+		if openBrace >= 0 {
+			closeBrace := findMatchingBrace(raw[openBrace:])
+			if closeBrace > 0 {
+				block := raw[openBrace : openBrace+closeBrace+1]
+				sanitizedBlock := infraAI.SanitizeJSON(block)
+				var q dto.AIGeneratedQuestion
+				if err := json.Unmarshal([]byte(sanitizedBlock), &q); err == nil && strings.TrimSpace(q.QuestionText) != "" {
+					p.Questions = append(p.Questions, q)
+				} else {
+					var qMap map[string]any
+					if err := json.Unmarshal([]byte(sanitizedBlock), &qMap); err == nil {
+						if dq := parseDynamicQuestion(qMap); dq != nil {
+							p.Questions = append(p.Questions, *dq)
+						}
+					}
+				}
+				idx = openBrace + closeBrace + 1
+				continue
+			}
+		}
+		idx = absPos + len(target)
+	}
+
+	if len(p.Questions) > 0 {
+		return p
+	}
+	return nil
+}
+
+func findMatchingBrace(s string) int {
+	if len(s) == 0 || s[0] != '{' {
+		return -1
+	}
+	depth := 0
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			if inString {
+				escaped = true
+			}
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		if ch == '{' {
+			depth++
+		} else if ch == '}' {
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func normalizePreview(p *dto.AIGenerateFormPreview, req dto.AIGenerateFormRequest) {
 	attachImg, attachAud, attachVid := collectAttachments(req.Attachments)
 	for i := range p.Questions {
 		q := &p.Questions[i]
-		if !validQuestionType(q.QuestionType) {
-			q.QuestionType = domain.TypeMultipleChoice
+		if q.QuestionType == "MATH" || q.QuestionType == "CODE" || !validQuestionType(q.QuestionType) {
+			if len(q.Options) > 0 {
+				q.QuestionType = domain.TypeMultipleChoice
+			} else {
+				q.QuestionType = domain.TypeLongText
+			}
 		}
 		if q.Points <= 0 {
 			q.Points = 10

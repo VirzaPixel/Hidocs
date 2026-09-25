@@ -239,7 +239,13 @@ export default function FormBuilderPage() {
           </div>
         </div>
       <div className={activeTab === 'settings' ? 'block' : 'hidden'}>
-        <FormSettingsPanel formId={formId} formData={form} settings={form.form_settings} onSaved={invalidateForm} />
+        <FormSettingsPanel
+          formId={formId}
+          formData={form}
+          settings={form.form_settings}
+          onSaved={invalidateForm}
+          isActive={activeTab === 'settings'}
+        />
       </div>
 
       <Modal open={accessOpen} onClose={() => setAccessOpen(false)} title="Bagikan akses aplikasi siswa">

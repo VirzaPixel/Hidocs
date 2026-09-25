@@ -7,6 +7,7 @@ import (
 
 	"backend/internal/application/dto"
 	"backend/internal/domain"
+	infraWS "backend/internal/infrastructure/websocket"
 	"github.com/google/uuid"
 )
 
@@ -220,16 +221,12 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		answers = append(answers, ans)
 	}
 
-	// Bulk upsert all answers in a single high-performance query
-	if len(answers) > 0 {
-		_ = s.responseRepo.UpsertAnswersBatch(ctx, answers)
-	}
-
 	platform := req.DevicePlatform
 	if platform == "" {
 		platform = "WEB"
 	}
 
+	now := time.Now()
 	// Update existing session or create fresh response
 	formResponse := &domain.FormResponse{
 		ID:              responseID,
@@ -239,8 +236,9 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 		DevicePlatform:  platform,
 		TotalScore:      &totalScore,
 		IsAutoSubmitted: req.IsAutoSubmitted,
-		SubmittedAt:     time.Now(),
-		LastHeartbeat:   time.Now(),
+		StartedAt:       now,
+		LastHeartbeat:   now,
+		SubmittedAt:     now,
 	}
 
 	if req.ResponseID != nil && *req.ResponseID != uuid.Nil {
@@ -251,6 +249,19 @@ func (s *responseService) SubmitResponse(ctx context.Context, formID uuid.UUID, 
 			return nil, err
 		}
 	}
+
+	// Bulk upsert all answers in a single high-performance query AFTER formResponse exists
+	if len(answers) > 0 {
+		_ = s.responseRepo.UpsertAnswersBatch(ctx, answers)
+	}
+
+	infraWS.GlobalHub.BroadcastToForm(formID, "STUDENT_SUBMIT", map[string]any{
+		"response_id":      responseID,
+		"respondent_email": req.RespondentEmail,
+		"status":           domain.ResponseStatusSubmitted,
+		"total_score":      totalScore,
+		"submitted_at":     formResponse.SubmittedAt,
+	})
 
 	return &dto.SubmitResponseResult{
 		ResponseID:      responseID,
@@ -284,6 +295,14 @@ func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UU
 		return nil, err
 	}
 
+	if resp, err := s.responseRepo.GetResponseByID(ctx, responseID); err == nil && resp != nil {
+		infraWS.GlobalHub.BroadcastToForm(resp.FormID, "STUDENT_UPDATE", map[string]any{
+			"response_id": responseID,
+			"question_id": req.QuestionID,
+			"is_flagged":  req.IsFlagged,
+		})
+	}
+
 	return &dto.AutosaveResponse{
 		Success:    true,
 		Message:    "Answer autosaved successfully",
@@ -294,7 +313,18 @@ func (s *responseService) AutosaveAnswer(ctx context.Context, responseID uuid.UU
 }
 
 func (s *responseService) SendTelemetry(ctx context.Context, responseID uuid.UUID, req dto.TelemetryEventRequest) error {
-	return s.responseRepo.UpdateTelemetry(ctx, responseID, req.EventType, req.EventMessage, req.CurrentQuestionIndex, req.Metadata)
+	err := s.responseRepo.UpdateTelemetry(ctx, responseID, req.EventType, req.EventMessage, req.CurrentQuestionIndex, req.Metadata)
+	if err == nil {
+		if resp, err2 := s.responseRepo.GetResponseByID(ctx, responseID); err2 == nil && resp != nil {
+			infraWS.GlobalHub.BroadcastToForm(resp.FormID, "TELEMETRY", map[string]any{
+				"response_id":            responseID,
+				"event_type":             req.EventType,
+				"event_message":          req.EventMessage,
+				"current_question_index": req.CurrentQuestionIndex,
+			})
+		}
+	}
+	return err
 }
 
 func (s *responseService) GetSessionState(ctx context.Context, responseID uuid.UUID) (*dto.SessionStateDTO, error) {
@@ -410,7 +440,15 @@ func (s *responseService) RestartStudentSession(ctx context.Context, userID uuid
 		return domain.ErrForbidden
 	}
 
-	return s.responseRepo.RestartStudentResponse(ctx, responseID, req.WarningMessage)
+	err = s.responseRepo.RestartStudentResponse(ctx, responseID, req.WarningMessage)
+	if err == nil {
+		infraWS.GlobalHub.BroadcastToForm(formID, "STUDENT_RESTART", map[string]any{
+			"response_id":     responseID,
+			"warning_message": req.WarningMessage,
+			"status":          domain.ResponseStatusRestarted,
+		})
+	}
+	return err
 }
 
 func (s *responseService) GetFormResponses(ctx context.Context, userID uuid.UUID, formID uuid.UUID, pg domain.Pagination) ([]dto.ResponseDetailDTO, int64, error) {
@@ -504,13 +542,13 @@ func (s *responseService) mapResponseToDTO(resp *domain.FormResponse) *dto.Respo
 	var answers []dto.AnswerDetailDTO
 	for _, a := range resp.Answers {
 		detail := dto.AnswerDetailDTO{
-			ID:               a.ID,
-			QuestionID:       a.QuestionID,
-			SelectedOptionID: a.SelectedOptionID,
-			AnswerText:       a.AnswerText,
-			IsFlagged:        a.IsFlagged,
-			MatchPairJSON:    a.MatchPairJSON,
-			ScoreGiven:       a.ScoreGiven,
+			ID:                 a.ID,
+			QuestionID:         a.QuestionID,
+			SelectedOptionID:   a.SelectedOptionID,
+			AnswerText:         a.AnswerText,
+			IsFlagged:          a.IsFlagged,
+			MatchPairJSON:      a.MatchPairJSON,
+			ScoreGiven:         a.ScoreGiven,
 		}
 
 		if a.Question != nil {
@@ -518,10 +556,23 @@ func (s *responseService) mapResponseToDTO(resp *domain.FormResponse) *dto.Respo
 		}
 		if a.SelectedOption != nil {
 			detail.SelectedOption = a.SelectedOption.OptionText
+			detail.SelectedOptionText = a.SelectedOption.OptionText
 			isCorrect := a.SelectedOption.IsCorrect
 			detail.IsCorrect = &isCorrect
-			if isCorrect && a.Question != nil {
-				detail.PointsEarned = float64(a.Question.Points)
+			if isCorrect {
+				if a.Question != nil && a.Question.Points > 0 {
+					detail.PointsEarned = float64(a.Question.Points)
+				} else if a.ScoreGiven != nil {
+					detail.PointsEarned = *a.ScoreGiven
+				}
+			} else {
+				detail.PointsEarned = 0
+			}
+		} else if a.ScoreGiven != nil {
+			detail.PointsEarned = *a.ScoreGiven
+			if a.Question != nil && a.Question.Points > 0 {
+				isCorrect := *a.ScoreGiven >= float64(a.Question.Points)
+				detail.IsCorrect = &isCorrect
 			}
 		}
 

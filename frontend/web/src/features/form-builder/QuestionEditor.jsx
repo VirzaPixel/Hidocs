@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, X, Trash2, Library, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, X, Trash2, Library, ChevronDown, ChevronUp, KeyRound, Sparkles } from 'lucide-react';
 import { questionApi } from '../../lib/api';
 import { Input, Textarea, Select, Checkbox, Toggle, Button, Badge } from '../../shared/ui';
 import { ConfirmDialog } from '../../shared/Modal';
@@ -34,20 +34,22 @@ function defaultOptions(type) {
   ];
 }
 
-const FENCE_BLOCK = /^```[a-zA-Z0-9+#-]*\n([\s\S]*?)\n```(?:\n([\s\S]*))?$/;
-
 function splitCodeBlock(raw) {
   const text = (raw || '').trim();
-  const match = text.match(FENCE_BLOCK);
+  const match = text.match(/```([a-zA-Z0-9+#-]*)\n?([\s\S]*?)\n?```/);
   if (match) {
-    return { snippet: (match[1] || '').trim(), prompt: (match[2] || '').trim() };
+    const lang = match[1]?.trim() || '';
+    const snippet = match[2]?.trim() || '';
+    const prompt = text.replace(match[0], '').trim();
+    return { snippet, prompt: prompt || text, language: lang };
   }
-  return { snippet: text, prompt: '' };
+  return { snippet: '', prompt: text, language: '' };
 }
 
 function initFromQuestion(question) {
   if (!question) {
     return {
+      question_type: 'MULTIPLE_CHOICE',
       question_text: '',
       code_snippet: '',
       code_language: 'javascript',
@@ -55,25 +57,41 @@ function initFromQuestion(question) {
       img_url: null,
       audio_url: null,
       video_url: null,
+      answer_key: '',
+      rubric: '',
       points: 10,
       is_required: true,
       is_auto_scored: questionTypeMeta('MULTIPLE_CHOICE').autoScored,
       options: defaultOptions('MULTIPLE_CHOICE'),
     };
   }
-  const isCode = Boolean(question.code_language);
-  const split = isCode ? splitCodeBlock(question.question_text) : { snippet: '', prompt: '' };
+  const rawText = question.question_text || '';
+  const hasCodeFence = /```[\s\S]*?```/.test(rawText);
+  const isCode = Boolean(question.code_language) || hasCodeFence;
+  const isMath = question.question_type === 'MATH' || /(\$\$|\\\[|\\\(|\$|\\frac|\\sqrt)/.test(rawText);
+  const split = isCode ? splitCodeBlock(rawText) : { snippet: '', prompt: rawText, language: '' };
+
+  let qType = question.question_type || 'MULTIPLE_CHOICE';
+  if (qType === 'MATH' || qType === 'CODE') {
+    qType = (question.options && question.options.length > 0) ? 'MULTIPLE_CHOICE' : 'LONG_TEXT';
+  }
+
+  const promptText = split.prompt || rawText;
+
   return {
-    question_text: isCode ? split.prompt : (question.question_text || ''),
-    code_snippet: isCode ? split.snippet : '',
-    code_language: question.code_language || 'javascript',
-    content_mode: isCode ? 'code' : 'text',
+    question_type: qType,
+    question_text: promptText,
+    code_snippet: split.snippet || '',
+    code_language: question.code_language || split.language || 'javascript',
+    content_mode: isCode && split.snippet ? 'code' : (isMath ? 'math' : 'text'),
     img_url: question.img_url || null,
     audio_url: question.audio_url || null,
     video_url: question.video_url || null,
+    answer_key: question.answer_key || '',
+    rubric: question.rubric || '',
     points: question.points ?? 10,
     is_required: question.is_required ?? true,
-    is_auto_scored: question.is_auto_scored ?? questionTypeMeta(question.question_type).autoScored,
+    is_auto_scored: question.is_auto_scored ?? questionTypeMeta(qType).autoScored,
     options: (question.options || []).map((o, i) => ({
       option_text: o.option_text,
       match_target_text: o.match_target_text || '',
@@ -144,10 +162,12 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
     setSaving(true);
     try {
       const questionText =
-        form.content_mode === 'code'
-          ? `\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\`\n${form.question_text.trim()}`
+        form.content_mode === 'code' && form.code_snippet.trim()
+          ? (form.question_text.trim()
+              ? `${form.question_text.trim()}\n\n\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\``
+              : `\`\`\`${form.code_language || 'text'}\n${form.code_snippet.trim()}\n\`\`\``)
           : form.question_text;
-      const codeLanguage = form.content_mode === 'code' ? form.code_language : '';
+      const codeLanguage = form.content_mode === 'code' && form.code_snippet.trim() ? (form.code_language || 'javascript') : '';
       const payload = {
         question_text: questionText,
         question_type: form.question_type,
@@ -155,6 +175,8 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         img_url: form.img_url || '',
         audio_url: form.audio_url || null,
         video_url: form.video_url || null,
+        answer_key: form.answer_key?.trim() ? form.answer_key.trim() : null,
+        rubric: form.rubric?.trim() ? form.rubric.trim() : null,
         is_auto_scored: form.is_auto_scored,
         points: Number(form.points) || 0,
         order_index: question?.order_index ?? index + 1,
@@ -203,6 +225,11 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
   };
 
   if (!expanded) {
+    const rawDisplay = form.question_text || form.code_snippet || question?.question_text || '';
+    const cleanDisplay = rawDisplay
+      ? rawDisplay.replace(/```[a-zA-Z0-9+#-]*\n?([\s\S]*?)\n?```/g, '$1').replace(/\n+/g, ' ').trim()
+      : '(Soal kosong)';
+
     return (
       <button
         type="button"
@@ -215,7 +242,7 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
         <div className="min-w-0 flex-1">
           <p
             className="truncate text-sm text-text"
-            dangerouslySetInnerHTML={{ __html: renderMixedText(form.question_text || '(Soal kosong)') }}
+            dangerouslySetInnerHTML={{ __html: renderMixedText(cleanDisplay || '(Soal kosong)') }}
           />
         </div>
         <Badge>{questionTypeLabel(form.question_type)}</Badge>
@@ -322,18 +349,44 @@ export default function QuestionEditor({ formId, question, index, defaultExpande
           />
         ))}
 
-      {form.question_type === 'LONG_TEXT' && (
-        <div className="rounded-lg border border-border bg-bg-secondary p-3">
-          <Toggle
-            checked={form.is_auto_scored}
-            onChange={(v) => patch({ is_auto_scored: v })}
-            label="Nilai otomatis dengan AI"
-          />
-          <p className="mt-1.5 pl-[52px] text-xs text-text-secondary">
-            {form.is_auto_scored
-              ? 'AI akan menilai jawaban siswa otomatis (bandingkan makna dengan kunci jawaban), guru tetap bisa timpa manual.'
-              : 'Jawaban harus dinilai manual satu-satu oleh guru di halaman Monitoring.'}
+      {!meta.hasOptions && (
+        <div className="flex flex-col gap-3.5 rounded-xl border border-primary/25 bg-primary/5 p-4">
+          <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+            <KeyRound size={17} />
+            <span>Kunci Jawaban & Acuan Penilaian AI</span>
+          </div>
+          <p className="text-xs text-text-secondary">
+            Tuliskan contoh jawaban ideal, poin-poin penting, atau kata kunci. Gemini AI akan membandingkan kesamaan makna (semantik) jawaban murid dengan teks acuan ini.
           </p>
+
+          <Textarea
+            label="Kunci Jawaban / Contoh Jawaban Ideal (Acuan AI)"
+            value={form.answer_key}
+            onChange={(e) => patch({ answer_key: e.target.value })}
+            placeholder="Contoh: Fotosintesis adalah proses pembentukan zat makanan oleh tumbuhan hijau dengan bantuan cahaya matahari, menyerap air dan CO2 menghasilkan glukosa dan oksigen."
+            rows={3}
+            className="bg-surface font-sans"
+          />
+
+          <Textarea
+            label="Rubrik / Kriteria Penilaian Tambahan (Opsional)"
+            value={form.rubric}
+            onChange={(e) => patch({ rubric: e.target.value })}
+            placeholder="Contoh: Berikan poin penuh jika menyebutkan 3 bahan utama dan 2 hasil reaksi. Kurangi poin jika ada konsep penting yang terlewat."
+            rows={2}
+            className="bg-surface text-xs"
+          />
+
+          <div className="flex items-center justify-between pt-2 border-t border-primary/10">
+            <Toggle
+              checked={form.is_auto_scored}
+              onChange={(v) => patch({ is_auto_scored: v })}
+              label="Aktifkan Penilaian Otomatis dengan AI"
+            />
+            <span className="text-[11px] text-text-secondary font-medium">
+              {form.is_auto_scored ? '✨ AI Otomatis Aktif' : 'Dinilai Manual'}
+            </span>
+          </div>
         </div>
       )}
 

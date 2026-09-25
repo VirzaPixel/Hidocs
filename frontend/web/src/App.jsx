@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './shared/Toast';
 import ProtectedRoute from './routes/ProtectedRoute';
+import PublicRoute from './routes/PublicRoute';
 import AppLayout from './shared/layouts/AppLayout';
 
 import LoginPage from './features/auth/LoginPage';
@@ -16,6 +17,8 @@ import QuestionBankPage from './features/question-bank/QuestionBankPage';
 import MonitoringPage from './features/monitoring/MonitoringPage';
 import StudentPreviewPage from './features/preview/StudentPreviewPage';
 import ProfilePage from './features/profile/ProfilePage';
+import TakeFormPortalPage from './features/take/TakeFormPortalPage';
+import ExamTakePage from './features/take/ExamTakePage';
 
 import AdminDashboardPage from './features/admin/AdminDashboardPage';
 import CreatorManagementPage from './features/admin/CreatorManagementPage';
@@ -39,17 +42,23 @@ export default function App() {
       <ToastProvider>
         <BrowserRouter>
           <Routes>
-            {/* Auth */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/verify-otp" element={<VerifyOtpPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* Public Exam Taker Route */}
+            <Route path="/exam/:identifier" element={<ExamTakePage />} />
+
+            {/* Public Auth Routes */}
+            <Route element={<PublicRoute />}>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/verify-otp" element={<VerifyOtpPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+            </Route>
 
             {/* Protected app - All Logged In Users */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/take" element={<TakeFormPortalPage />} />
                 <Route path="/question-bank" element={<QuestionBankPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/forms/:formId" element={<FormBuilderPage />} />

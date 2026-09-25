@@ -56,6 +56,24 @@ export const formApi = {
     apiClient.delete(`/forms/${formId}/collaborators/${userId}`),
 };
 
+/* ============================= PUBLIC EXAM ============================= */
+export const publicApi = {
+  getForm: (codeOrSlug) => apiClient.get(`/public/forms/${codeOrSlug}`),
+  verifyToken: (formId, token, respondentEmail = '') =>
+    apiClient.post(`/public/forms/${formId}/verify-token`, {
+      token,
+      respondent_email: respondentEmail || undefined,
+    }),
+  autosave: (responseId, payload) =>
+    apiClient.post(`/public/responses/${responseId}/autosave`, payload),
+  telemetry: (responseId, payload) =>
+    apiClient.post(`/public/responses/${responseId}/telemetry`, payload),
+  submit: (formId, payload) => apiClient.post(`/forms/${formId}/submit`, payload),
+  getSessionState: (responseId) => apiClient.get(`/public/responses/${responseId}/session`),
+  acknowledgeWarning: (responseId) =>
+    apiClient.post(`/public/responses/${responseId}/acknowledge-warning`),
+};
+
 /* ============================= QUESTIONS ============================= */
 export const questionApi = {
   listByForm: (formId) => apiClient.get(`/forms/${formId}/questions`),
