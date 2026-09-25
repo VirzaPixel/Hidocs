@@ -45,21 +45,24 @@ jobs:
 
       # decode release keystore for APK signing (debug fallback if secrets missing)
       - name: Setup Release Keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         working-directory: ./frontend/android
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
         run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "⚠️ No keystore secret found — APK will be debug-signed"
+            exit 0
+          fi
+          
           mkdir -p /tmp/keystores
           echo "$KEYSTORE_BASE64" | base64 --decode > /tmp/keystores/hidocs-release.jks
           printf 'storeFile=/tmp/keystores/hidocs-release.jks\n' > android/keystore.properties
-          printf 'storePassword=%s\n' "${{ secrets.KEYSTORE_STORE_PASSWORD }}" >> android/keystore.properties
-          printf 'keyAlias=%s\n' "${{ secrets.KEYSTORE_KEY_ALIAS }}" >> android/keystore.properties
-          printf 'keyPassword=%s\n' "${{ secrets.KEYSTORE_KEY_PASSWORD }}" >> android/keystore.properties
-
-      - name: Keystore signing info
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
-        run: echo "⚠️ No keystore secret found — APK will be debug-signed"
+          printf 'storePassword=%s\n' "$STORE_PASSWORD" >> android/keystore.properties
+          printf 'keyAlias=%s\n' "$KEY_ALIAS" >> android/keystore.properties
+          printf 'keyPassword=%s\n' "$KEY_PASSWORD" >> android/keystore.properties
 
       # go to /frontend & install dependencies
       - name: Install Dependencies
