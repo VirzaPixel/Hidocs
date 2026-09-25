@@ -471,6 +471,19 @@ func (s *responseService) GradeResponse(ctx context.Context, userID uuid.UUID, r
 		return domain.ErrForbidden
 	}
 
+	// Per-question essay scores (bulk grading)
+	if len(req.EssayScores) > 0 {
+		for qidStr, score := range req.EssayScores {
+			qid, err := uuid.Parse(qidStr)
+			if err != nil {
+				continue
+			}
+			if err := s.responseRepo.UpdateAnswerScore(ctx, responseID, qid, score); err != nil {
+				continue
+			}
+		}
+	}
+
 	return s.responseRepo.UpdateResponseGrade(ctx, responseID, req.TotalScore)
 }
 

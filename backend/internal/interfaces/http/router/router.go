@@ -145,6 +145,7 @@ func SetupRouter(cfg *RouterConfig) *gin.Engine {
 				// Creator Live Proctoring & Anti-Cheat Monitoring
 				forms.GET("/:form_id/live-monitoring", cfg.ResponseHandler.GetLiveMonitoring)
 				forms.POST("/:form_id/responses/:response_id/restart", cfg.ResponseHandler.RestartStudentSession)
+				forms.POST("/:form_id/responses/:response_id/grade", cfg.ResponseHandler.GradeResponse)
 
 				// Questions under form
 				forms.GET("/:form_id/questions", cfg.QuestionHandler.GetQuestionsByFormID)

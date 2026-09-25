@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS form_settings (
     show_question_number BOOLEAN DEFAULT TRUE,
     fullscreen_mode BOOLEAN DEFAULT FALSE,
     exam_token VARCHAR(50) DEFAULT NULL,
-    is_token_protected BOOLEAN DEFAULT FALSE
+    is_token_protected BOOLEAN DEFAULT FALSE,
+    result_visibility VARCHAR(30) DEFAULT 'hidden',
+    access_mode VARCHAR(20) DEFAULT 'qr-only'
 );
 
 -- 4. Questions Table
@@ -69,6 +71,7 @@ CREATE TABLE IF NOT EXISTS questions (
     points INT DEFAULT 1,
     order_index INT NOT NULL DEFAULT 0,
     is_required BOOLEAN DEFAULT FALSE,
+    correct_rating INT DEFAULT NULL,
     is_autosaved_at TIMESTAMP DEFAULT NULL
 );
 

@@ -71,6 +71,7 @@ type ResponseRepository interface {
 	// CheckUserAlreadySubmitted yang cuma bisa on/off (1x atau tidak dibatasi).
 	CountSubmissionsByEmail(ctx context.Context, formID uuid.UUID, email string) (int64, error)
 	UpdateResponseGrade(ctx context.Context, responseID uuid.UUID, totalScore float64) error
+	UpdateAnswerScore(ctx context.Context, responseID uuid.UUID, questionID uuid.UUID, scoreGiven float64) error
 	UpdateResponseStatus(ctx context.Context, responseID uuid.UUID, status ResponseStatus) error
 	
 	// Autosave & Incremental Answers
