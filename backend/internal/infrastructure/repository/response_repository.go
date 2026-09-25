@@ -141,6 +141,13 @@ func (r *responseRepository) UpdateResponseGrade(ctx context.Context, responseID
 		Update("total_score", totalScore).Error
 }
 
+func (r *responseRepository) UpdateAnswerScore(ctx context.Context, responseID uuid.UUID, questionID uuid.UUID, scoreGiven float64) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.ResponseAnswer{}).
+		Where("response_id = ? AND question_id = ?", responseID, questionID).
+		Update("score_given", scoreGiven).Error
+}
+
 func (r *responseRepository) UpdateResponseStatus(ctx context.Context, responseID uuid.UUID, status domain.ResponseStatus) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.FormResponse{}).

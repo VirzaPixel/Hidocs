@@ -83,7 +83,9 @@ CREATE TABLE IF NOT EXISTS form_settings (
     show_question_number   BOOLEAN NOT NULL DEFAULT true,
     fullscreen_mode        BOOLEAN NOT NULL DEFAULT false,
     exam_token             VARCHAR(50),
-    is_token_protected     BOOLEAN NOT NULL DEFAULT false
+    is_token_protected     BOOLEAN NOT NULL DEFAULT false,
+    result_visibility      VARCHAR(30) NOT NULL DEFAULT 'hidden',
+    access_mode            VARCHAR(20) NOT NULL DEFAULT 'qr-only'
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_form_settings_form_id ON form_settings (form_id);
 
@@ -104,6 +106,7 @@ CREATE TABLE IF NOT EXISTS questions (
     points          INT       NOT NULL DEFAULT 1,
     order_index     INT       NOT NULL DEFAULT 0,
     is_required     BOOLEAN   NOT NULL DEFAULT false,
+    correct_rating  INT,
     is_autosaved_at TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_questions_form_id ON questions (form_id);

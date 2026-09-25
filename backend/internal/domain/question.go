@@ -37,6 +37,7 @@ type Question struct {
 	Points        int              `gorm:"type:int;default:1" json:"points"`
 	OrderIndex    int              `gorm:"type:int;not null;default:0" json:"order_index"`
 	IsRequired    bool             `gorm:"type:boolean;default:false" json:"is_required"`
+	CorrectRating *int             `gorm:"type:int" json:"correct_rating,omitempty"`
 	IsAutosavedAt *time.Time       `gorm:"type:timestamp" json:"is_autosaved_at,omitempty"`
 	
 	// Relations

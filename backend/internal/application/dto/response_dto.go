@@ -86,7 +86,8 @@ type SubmitResponseResult struct {
 }
 
 type GradeResponseRequest struct {
-	TotalScore float64 `json:"total_score" binding:"gte=0"`
+	TotalScore  float64            `json:"total_score" binding:"gte=0"`
+	EssayScores map[string]float64 `json:"essay_scores,omitempty"`
 }
 
 type ResponseDetailDTO struct {

@@ -236,6 +236,8 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 		settings.FullscreenMode = existingSettings.FullscreenMode
 		settings.ExamToken = existingSettings.ExamToken
 		settings.IsTokenProtected = existingSettings.IsTokenProtected
+		settings.ResultVisibility = existingSettings.ResultVisibility
+		settings.AccessMode = existingSettings.AccessMode
 	}
 
 	if req.ThemeColor != nil {
@@ -277,6 +279,9 @@ func (s *formService) UpdateFormSettings(ctx context.Context, userID uuid.UUID, 
 		settings.MaxAttempts = *req.MaxAttempts
 	} else if existingSettings != nil {
 		settings.MaxAttempts = existingSettings.MaxAttempts
+	}
+	if req.AccessMode != nil {
+		settings.AccessMode = *req.AccessMode
 	}
 
 	if err := s.formRepo.UpsertFormSettings(ctx, settings); err != nil {
