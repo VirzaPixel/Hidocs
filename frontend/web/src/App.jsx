@@ -25,6 +25,7 @@ import CreatorManagementPage from './features/admin/CreatorManagementPage';
 import AdminFormsPage from './features/admin/AdminFormsPage';
 import AdminMetricsPage from './features/admin/AdminMetricsPage';
 import SuperadminAdminsPage from './features/admin/SuperadminAdminsPage';
+import { useTheme } from './lib/useTheme';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,8 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
+  useTheme();
+
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>

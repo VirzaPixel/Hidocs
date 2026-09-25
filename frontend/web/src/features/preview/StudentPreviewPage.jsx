@@ -42,34 +42,53 @@ export default function StudentPreviewPage() {
   const isTokenProtected = Boolean(settings?.is_token_protected);
 
   // Stages: 'IDENTITY' -> 'TOKEN' -> 'EXAM'
-  const [currentStage, setCurrentStage] = useState('EXAM');
+  const [currentStage, setCurrentStage] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(`preview_stage_${formId}`);
+      return saved === 'EXAM' ? 'EXAM' : 'EXAM';
+    } catch {
+      return 'EXAM';
+    }
+  });
   const [stageInitialized, setStageInitialized] = useState(false);
 
   useEffect(() => {
     if (form && !stageInitialized) {
+      const savedStage = sessionStorage.getItem(`preview_stage_${formId}`);
+      if (savedStage === 'EXAM') {
+        setCurrentStage('EXAM');
+        setStageInitialized(true);
+        return;
+      }
+
       const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
       const isProt = Boolean(form.form_settings?.is_token_protected);
       if (fields.length > 0) {
         setCurrentStage('IDENTITY');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'IDENTITY');
       } else if (isProt) {
         setCurrentStage('TOKEN');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'TOKEN');
       } else {
         setCurrentStage('EXAM');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
       }
       setStageInitialized(true);
     }
-  }, [form, stageInitialized]);
+  }, [form, stageInitialized, formId]);
 
   // Safeguard: If stage was set to IDENTITY but there are no identity fields, bypass immediately
   useEffect(() => {
     if (stageInitialized && currentStage === 'IDENTITY' && !hasIdentityFields) {
       if (isTokenProtected) {
         setCurrentStage('TOKEN');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'TOKEN');
       } else {
         setCurrentStage('EXAM');
+        sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
       }
     }
-  }, [stageInitialized, currentStage, hasIdentityFields, isTokenProtected]);
+  }, [stageInitialized, currentStage, hasIdentityFields, isTokenProtected, formId]);
 
   // Identity Form State
   const [identityData, setIdentityData] = useState({});
@@ -107,8 +126,10 @@ export default function StudentPreviewPage() {
 
     setIdentityErrors({});
     if (isTokenProtected) {
+      sessionStorage.setItem(`preview_stage_${formId}`, 'TOKEN');
       setCurrentStage('TOKEN');
     } else {
+      sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
       setCurrentStage('EXAM');
     }
   };
@@ -129,11 +150,13 @@ export default function StudentPreviewPage() {
       return;
     }
 
+    sessionStorage.setItem(`preview_stage_${formId}`, 'EXAM');
     setTokenError('');
     setCurrentStage('EXAM');
   };
 
   const handleResetSimulation = () => {
+    sessionStorage.removeItem(`preview_stage_${formId}`);
     if (hasIdentityFields) {
       setCurrentStage('IDENTITY');
     } else if (isTokenProtected) {

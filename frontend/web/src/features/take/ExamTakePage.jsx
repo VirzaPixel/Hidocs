@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { Component, useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -31,6 +31,7 @@ import { renderMixedText } from '../../shared/MathField';
 import { cn, questionTypeLabel, resolveMediaUrl } from '../../lib/utils';
 import { useToast } from '../../shared/Toast';
 import { useAuthStore } from '../../store/authStore';
+import { useTheme } from '../../lib/useTheme';
 
 function parseIdentityFields(jsonStr) {
   if (!jsonStr) return [];
@@ -84,7 +85,69 @@ function getRespondentIdentifier(identityData, currentUser, formId) {
   return `device-${deviceId}@student.hidocs.local`;
 }
 
+class ExamErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ExamTakePage render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-bg text-text">
+          <Card className="max-w-md w-full p-6 text-center space-y-4 border-amber-500/20 shadow-lg">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500 mx-auto">
+              <AlertCircle size={28} />
+            </div>
+            <h2 className="text-lg font-bold text-text">Terjadi Kendala Memuat Soal</h2>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Sesi ujian kamu tetap aman tersimpan. Silakan klik muat ulang untuk melanjutkan sesi pengerjaan.
+            </p>
+            {this.state.error && (
+              <div className="text-left bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-xs text-red-500 font-mono overflow-auto max-h-36 select-text">
+                <div className="font-bold">{this.state.error?.message || String(this.state.error)}</div>
+                {this.state.error?.stack && (
+                  <pre className="text-[10px] mt-1 text-red-400 whitespace-pre-wrap">{this.state.error.stack}</pre>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2 justify-center pt-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.reload();
+                }}
+              >
+                Muat Ulang Halaman
+              </Button>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function ExamTakePage() {
+  return (
+    <ExamErrorBoundary>
+      <ExamTakePageContent />
+    </ExamErrorBoundary>
+  );
+}
+
+function ExamTakePageContent() {
+  useTheme();
   const { identifier } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -118,22 +181,50 @@ export default function ExamTakePage() {
     return localStorage.getItem(submittedKey) === 'true';
   }, [form?.id, isOneTimeSubmission]);
 
-  const durationMinutes = settings?.duration_minutes || 0;
-  const durationSeconds = durationMinutes * 60;
-  const [timeLeft, setTimeLeft] = useState(durationSeconds);
-
-  useEffect(() => {
-    if (settings?.duration_minutes) {
-      setTimeLeft(settings.duration_minutes * 60);
-    }
-  }, [settings?.duration_minutes]);
-
   // Stages: 'IDENTITY' | 'TOKEN' | 'EXAM' | 'COMPLETED'
-  const [currentStage, setCurrentStage] = useState('EXAM');
+  const [currentStage, setCurrentStage] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`hidocs_stage_${identifier}`);
+      if (saved === 'EXAM' || saved === 'COMPLETED' || saved === 'TOKEN' || saved === 'IDENTITY') {
+        return saved;
+      }
+    } catch {}
+    return 'IDENTITY';
+  });
   const [stageInitialized, setStageInitialized] = useState(false);
   const [sessionId, setSessionId] = useState(
     () => localStorage.getItem(`hidocs_session_${identifier}`) || null
   );
+
+  const durationMinutes = settings?.duration_minutes || 0;
+  const durationSeconds = durationMinutes * 60;
+  const [timeLeft, setTimeLeft] = useState(() => {
+    try {
+      const savedEnd = localStorage.getItem(`hidocs_end_timestamp_${identifier}`);
+      if (savedEnd) {
+        return Math.max(0, Math.floor((parseInt(savedEnd, 10) - Date.now()) / 1000));
+      }
+    } catch {}
+    return durationSeconds;
+  });
+
+  const initExamTimer = (durationMins) => {
+    if (!durationMins || durationMins <= 0) return;
+    const key = `hidocs_end_timestamp_${identifier}`;
+    let endTs = localStorage.getItem(key);
+    if (!endTs) {
+      endTs = String(Date.now() + durationMins * 60 * 1000);
+      localStorage.setItem(key, endTs);
+    }
+    const remaining = Math.max(0, Math.floor((parseInt(endTs, 10) - Date.now()) / 1000));
+    setTimeLeft(remaining);
+  };
+
+  useEffect(() => {
+    if (settings?.duration_minutes && currentStage === 'EXAM') {
+      initExamTimer(settings.duration_minutes);
+    }
+  }, [settings?.duration_minutes, currentStage]);
 
   const restoreAnswersFromQuestions = (questionItems) => {
     if (!Array.isArray(questionItems) || questionItems.length === 0) return;
@@ -185,49 +276,114 @@ export default function ExamTakePage() {
 
   useEffect(() => {
     if (form && !stageInitialized) {
+      const savedStage = localStorage.getItem(`hidocs_stage_${identifier}`);
+      const isAlreadySubmitted = localStorage.getItem(`hidocs_submitted_${form.id}`) === 'true';
+
+      if (isAlreadySubmitted || savedStage === 'COMPLETED') {
+        setCurrentStage('COMPLETED');
+        setStageInitialized(true);
+        return;
+      }
+
+      // If respondent was already working on the exam, STAY IN EXAM STAGE on reload!
+      if (savedStage === 'EXAM') {
+        setCurrentStage('EXAM');
+        initExamTimer(form.form_settings?.duration_minutes);
+        const savedToken = localStorage.getItem(`hidocs_token_${identifier}`) || '';
+        const savedIdentity = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(`hidocs_identity_${identifier}`)) || {};
+          } catch {
+            return {};
+          }
+        })();
+        ensureSessionActive(savedToken, savedIdentity);
+        enterFullscreen();
+        setStageInitialized(true);
+        return;
+      }
+
       const fields = parseIdentityFields(form.form_settings?.identity_fields_json);
       const isProt = Boolean(form.form_settings?.is_token_protected);
 
       if (fields.length > 0) {
         setCurrentStage('IDENTITY');
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'IDENTITY');
       } else if (isProt) {
         setCurrentStage('TOKEN');
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'TOKEN');
       } else {
         setCurrentStage('EXAM');
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'EXAM');
+        initExamTimer(form.form_settings?.duration_minutes);
         ensureSessionActive('', {});
+        enterFullscreen();
       }
       setStageInitialized(true);
     }
-  }, [form, stageInitialized]);
+  }, [form, stageInitialized, identifier]);
 
   // Safeguard: If stage was set to IDENTITY but there are no identity fields, bypass immediately
   useEffect(() => {
     if (stageInitialized && currentStage === 'IDENTITY' && !hasIdentityFields) {
       if (isTokenProtected) {
         setCurrentStage('TOKEN');
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'TOKEN');
       } else {
         setCurrentStage('EXAM');
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'EXAM');
+        initExamTimer(settings?.duration_minutes);
         ensureSessionActive('', {});
+        enterFullscreen();
       }
     }
-  }, [stageInitialized, currentStage, hasIdentityFields, isTokenProtected]);
+  }, [stageInitialized, currentStage, hasIdentityFields, isTokenProtected, identifier, settings?.duration_minutes]);
 
-  // Identity Form State
-  const [identityData, setIdentityData] = useState({});
+  // Identity Form State (restored from localStorage if exists)
+  const [identityData, setIdentityData] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`hidocs_identity_${identifier}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [identityErrors, setIdentityErrors] = useState({});
 
-  // Token Form State
-  const [enteredToken, setEnteredToken] = useState('');
+  // Token Form State (restored from localStorage if exists)
+  const [enteredToken, setEnteredToken] = useState(() => {
+    try {
+      return localStorage.getItem(`hidocs_token_${identifier}`) || '';
+    } catch {
+      return '';
+    }
+  });
   const [tokenError, setTokenError] = useState('');
 
   // Exam Questions State
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`hidocs_question_idx_${identifier}`);
+      return saved !== null ? parseInt(saved, 10) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [answers, setAnswers] = useState({});
   const [flagged, setFlagged] = useState({}); // { [questionId]: boolean }
   const [showMatrixModal, setShowMatrixModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
+
+  // Sync currentIndex to localStorage so page refresh stays on the exact same question
+  useEffect(() => {
+    if (currentStage === 'EXAM') {
+      try {
+        localStorage.setItem(`hidocs_question_idx_${identifier}`, String(currentIndex));
+      } catch {}
+    }
+  }, [currentIndex, currentStage, identifier]);
 
   const autosaveTimeoutRef = useRef(null);
 
@@ -525,7 +681,18 @@ export default function ExamTakePage() {
   const unansweredCount = Math.max(0, questions.length - answeredCount);
   const progressPercent = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
 
-  const currentQuestion = questions[currentIndex];
+  const safeIndex = useMemo(() => {
+    if (!questions || questions.length === 0) return 0;
+    return Math.min(Math.max(0, currentIndex), questions.length - 1);
+  }, [currentIndex, questions]);
+
+  const currentQuestion = questions && questions.length > 0 ? questions[safeIndex] : null;
+
+  useEffect(() => {
+    if (questions && questions.length > 0 && currentIndex !== safeIndex) {
+      setCurrentIndex(safeIndex);
+    }
+  }, [safeIndex, currentIndex, questions]);
 
   const triggerAutosave = async (questionId, value, isFlaggedVal) => {
     if (!sessionId || !questionId) return;
@@ -600,7 +767,14 @@ export default function ExamTakePage() {
     }
 
     setIdentityErrors({});
+    try {
+      localStorage.setItem(`hidocs_identity_${identifier}`, JSON.stringify(identityData));
+    } catch {}
+
     if (isTokenProtected) {
+      try {
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'TOKEN');
+      } catch {}
       setCurrentStage('TOKEN');
     } else {
       setSubmitting(true);
@@ -610,6 +784,10 @@ export default function ExamTakePage() {
         toast.error(res.error);
         return;
       }
+      try {
+        localStorage.setItem(`hidocs_stage_${identifier}`, 'EXAM');
+      } catch {}
+      initExamTimer(settings?.duration_minutes);
       enterFullscreen();
       setCurrentStage('EXAM');
     }
@@ -631,6 +809,11 @@ export default function ExamTakePage() {
       setTokenError(res.error);
       return;
     }
+    try {
+      localStorage.setItem(`hidocs_token_${identifier}`, actualToken);
+      localStorage.setItem(`hidocs_stage_${identifier}`, 'EXAM');
+    } catch {}
+    initExamTimer(settings?.duration_minutes);
     setTokenError('');
     enterFullscreen();
     setCurrentStage('EXAM');
@@ -703,6 +886,13 @@ export default function ExamTakePage() {
       if (form?.id) {
         localStorage.setItem(`hidocs_submitted_${form.id}`, 'true');
       }
+      try {
+        localStorage.removeItem(`hidocs_stage_${identifier}`);
+        localStorage.removeItem(`hidocs_identity_${identifier}`);
+        localStorage.removeItem(`hidocs_token_${identifier}`);
+        localStorage.removeItem(`hidocs_question_idx_${identifier}`);
+        localStorage.removeItem(`hidocs_end_timestamp_${identifier}`);
+      } catch {}
 
       setSubmissionResult({
         formTitle: form.title,
@@ -1066,6 +1256,10 @@ export default function ExamTakePage() {
               <Card className="p-8 text-center text-sm text-text-secondary">
                 Belum ada soal yang tersedia pada form ujian ini.
               </Card>
+            ) : !currentQuestion ? (
+              <Card className="p-8 text-center text-sm text-text-secondary">
+                Memuat butir soal...
+              </Card>
             ) : (
               <>
                 {/* Question Card */}
@@ -1077,10 +1271,10 @@ export default function ExamTakePage() {
                         className="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold text-white shadow-sm"
                         style={{ backgroundColor: accent }}
                       >
-                        {currentIndex + 1}
+                        {safeIndex + 1}
                       </span>
                       <span className="text-xs font-semibold text-text">
-                        Soal Nomor {currentIndex + 1} dari {questions.length}
+                        Soal Nomor {safeIndex + 1} dari {questions.length}
                       </span>
                     </div>
 
@@ -1130,7 +1324,7 @@ export default function ExamTakePage() {
                   <div className="pt-2">
                     <TakeQuestionAnswerArea
                       question={currentQuestion}
-                      value={answers[currentQuestion.id]}
+                      value={currentQuestion.id ? answers[currentQuestion.id] : undefined}
                       onChange={handleSetAnswer}
                       accent={accent}
                     />
@@ -1144,8 +1338,8 @@ export default function ExamTakePage() {
                     type="button"
                     variant="outline"
                     size="md"
-                    disabled={currentIndex === 0}
-                    onClick={() => setCurrentIndex((prev) => prev - 1)}
+                    disabled={safeIndex === 0}
+                    onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
                     className="gap-1.5 text-xs sm:text-sm font-semibold min-w-[90px] sm:min-w-[120px]"
                   >
                     <ChevronLeft size={16} />
@@ -1156,22 +1350,23 @@ export default function ExamTakePage() {
                   <button
                     type="button"
                     onClick={handleToggleFlag}
+                    disabled={!currentQuestion}
                     className={cn(
                       'flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all border shadow-sm',
-                      flagged[currentQuestion.id]
+                      currentQuestion && flagged[currentQuestion.id]
                         ? 'bg-amber-500 text-white border-amber-600 shadow-amber-500/20'
                         : 'bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20'
                     )}
                   >
                     <Flag
                       size={15}
-                      fill={flagged[currentQuestion.id] ? 'currentColor' : 'none'}
+                      fill={currentQuestion && flagged[currentQuestion.id] ? 'currentColor' : 'none'}
                     />
                     <span>Ragu - Ragu</span>
                   </button>
 
                   {/* 3. NEXT / SUBMIT BUTTON */}
-                  {currentIndex === questions.length - 1 ? (
+                  {safeIndex >= questions.length - 1 ? (
                     <Button
                       type="button"
                       size="md"
@@ -1186,7 +1381,7 @@ export default function ExamTakePage() {
                     <Button
                       type="button"
                       size="md"
-                      onClick={() => setCurrentIndex((prev) => prev + 1)}
+                      onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
                       className="gap-1.5 text-xs sm:text-sm font-semibold min-w-[90px] sm:min-w-[120px] text-white shadow-md"
                       style={{ backgroundColor: accent }}
                     >
@@ -1287,7 +1482,7 @@ export default function ExamTakePage() {
             <div className="flex-1 overflow-y-auto p-5">
               <div className="grid grid-cols-5 sm:grid-cols-6 gap-2.5">
                 {questions.map((q, idx) => {
-                  const isCurrent = idx === currentIndex;
+                  const isCurrent = idx === safeIndex;
                   const isFlagged = Boolean(flagged[q.id]);
                   const isAnswered =
                     answers[q.id] !== undefined &&
@@ -1492,6 +1687,7 @@ export default function ExamTakePage() {
 
 /* ================= QUESTION ANSWER AREA COMPONENT ================= */
 function TakeQuestionAnswerArea({ question, value, onChange, accent }) {
+  if (!question) return null;
   const type = question.question_type;
 
   if (type === 'SHORT_TEXT') {
