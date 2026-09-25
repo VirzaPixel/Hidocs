@@ -28,6 +28,7 @@ import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class FillFormScreen extends StatefulWidget {
   final FormModel form;
@@ -82,10 +83,13 @@ class _FillFormScreenState extends State<FillFormScreen>
   bool get _examMode => widget.form.isExam;
 
   final ScrollController _numberStripController = ScrollController();
+  AudioPlayer? _alarmPlayer;
 
   @override
   void initState() {
     super.initState();
+    
+    _alarmPlayer = AudioPlayer();
 
     _questions = List<QuestionModel>.from(
       widget.form.questions,
@@ -98,6 +102,7 @@ class _FillFormScreenState extends State<FillFormScreen>
     _responseId = widget.responseId.isNotEmpty ? widget.responseId : null;
 
     if (_examMode) {
+      _alarmPlayer?.setSource(AssetSource('keluar.mp3'));
       WidgetsBinding.instance.addObserver(this);
 
       ExamViolationReporter.register(_handleReportedViolation);
@@ -169,6 +174,7 @@ class _FillFormScreenState extends State<FillFormScreen>
 
   @override
   void dispose() {
+    _alarmPlayer?.dispose();
     _timer?.cancel();
 
     if (_examMode) {
@@ -1094,13 +1100,65 @@ class _FillFormScreenState extends State<FillFormScreen>
         widget.form.hasTimer &&
         _remaining < 60;
 
-    return Scaffold(
-      backgroundColor:
-          isDark
-              ? AppTheme.darkBg
-              : AppTheme.surfaceLight,
+    return PopScope(
+      canPop: !_examMode && !_isSubmitting, // Jika mode ujian, cegah pop sembarangan.
+      onPopInvokedWithResult: (didPop, dynamic _) async {
+        if (didPop) return;
 
-      appBar: AppBar(
+        if (_examMode) {
+          // BUNYIKAN ALARM KELUAR 🚨
+          try {
+            await _alarmPlayer?.stop();
+            await _alarmPlayer?.setVolume(1.0);
+            await _alarmPlayer?.play(AssetSource('keluar.mp3'));
+          } catch (e) {
+            debugPrint("Failed to play alarm: \$e");
+          }
+
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '⚠ PERINGATAN! Anda tidak diperbolehkan keluar dari sesi ujian yang sedang berlangsung.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: AppTheme.error,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        } else {
+          // Konfirmasi keluar untuk non-ujian
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Keluar dari Form?'),
+              content: const Text('Jawaban Anda mungkin tidak tersimpan jika Anda keluar sekarang.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Batal'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Ya, Keluar'),
+                ),
+              ],
+            ),
+          );
+          
+          if (!context.mounted) return;
+          if (confirm == true) {
+            Navigator.pop(context);
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor:
+            isDark
+                ? AppTheme.darkBg
+                : AppTheme.surfaceLight,
+
+        appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor:
             FormTheme.resolvePrimary(context, widget.form.themeColor),
@@ -1559,7 +1617,7 @@ class _FillFormScreenState extends State<FillFormScreen>
           ],
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildAnswer(

@@ -31,6 +31,18 @@ class FloatingAppEntry {
 /// Daftar package Android ternama yang memiliki fitur
 /// bubble/chat-heads/overlay/float-window.
 const List<FloatingAppEntry> kFloatingAppCatalog = <FloatingAppEntry>[
+  FloatingAppEntry(
+    androidPackage: 'com.lwi.android.flapps',
+    label: 'Floating Apps',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.floatee.app',
+    label: 'Floatee',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
   // ---------------------------------------------------------------------------
   // Messaging / chat dengan chat-heads & bubble
   // ---------------------------------------------------------------------------
