@@ -791,7 +791,7 @@ abstract class AppLocalizations {
   /// No description provided for @loginScreenSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Please login to continue'**
+  /// **'The Most Secure Exam Platform'**
   String get loginScreenSubtitle;
 
   /// No description provided for @wrongEmail.
@@ -2909,7 +2909,7 @@ abstract class AppLocalizations {
   /// No description provided for @authFooterTagline.
   ///
   /// In en, this message translates to:
-  /// **'HiDocs • Dynamic Form & Smart Assessment Platform'**
+  /// **'HiDocs • The Safest Exam Platform'**
   String get authFooterTagline;
 }
 

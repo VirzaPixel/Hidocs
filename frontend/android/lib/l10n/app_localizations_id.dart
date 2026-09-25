@@ -1490,6 +1490,5 @@ class AppLocalizationsId extends AppLocalizations {
   String get categoryFilterHint => 'Filter kategori';
 
   @override
-  String get authFooterTagline =>
-      'HiDocs • Platform Ujian Teraman';
+  String get authFooterTagline => 'HiDocs • Platform Ujian Teraman';
 }

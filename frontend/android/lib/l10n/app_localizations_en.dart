@@ -1495,6 +1495,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryFilterHint => 'Filter by category';
 
   @override
-  String get authFooterTagline =>
-      'HiDocs • The Safest Exam Platform';
+  String get authFooterTagline => 'HiDocs • The Safest Exam Platform';
 }
