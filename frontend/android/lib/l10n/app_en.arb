@@ -115,7 +115,7 @@
   "removeImage": "Remove Image",
   "imagePickError": "Failed to load image.",
   "loginScreenTitle": "Login to Your Account",
-  "loginScreenSubtitle": "Please login to continue",
+  "loginScreenSubtitle": "The Most Secure Exam Platform",
   "wrongEmail": "Invalid email",
   "passMin6": "Minimum 8 characters",
   "signIn": "Sign In",
@@ -521,5 +521,5 @@
   },
   "filterAll": "All",
   "categoryFilterHint": "Filter by category",
-  "authFooterTagline": "HiDocs \u2022 Dynamic Form & Smart Assessment Platform"
+  "authFooterTagline": "HiDocs \u2022 The Safest Exam Platform"
 }

@@ -682,11 +682,12 @@ class _FormsTabState extends State<_FormsTab> {
     super.dispose();
   }
 
-  /// Aturan kontras tegas (Revisi Lanjutan 3): teks tidak boleh memakai
-  /// `Colors.white` buta — label chip terpilih mengikuti luminansi nyata
-  /// warna primary (primary terang → teks gelap, primary gelap → teks terang).
-  Color _onPrimary(BuildContext context) =>
-      context.primary.computeLuminance() > 0.6 ? Colors.black87 : Colors.white;
+  /// Aturan kontras tegas: teks label chip harus selalu kontras dengan
+  /// background chip. Primary gelap → teks putih, primary terang → teks gelap.
+  Color _onPrimary(BuildContext context) {
+    final brightness = ThemeData.estimateBrightnessForColor(context.primary);
+    return brightness == Brightness.light ? Colors.black87 : Colors.white;
+  }
 
   @override
   Widget build(BuildContext context) {

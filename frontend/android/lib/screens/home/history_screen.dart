@@ -68,9 +68,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
         .toList()
       ..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
 
-    final visibleResponses = responses.where((response) {
-      return formProvider.getFormById(response.formId) != null;
-    }).toList();
+    // Tampilkan semua submission tanpa filter form — form mungkin belum
+    // dimuat di FormProvider untuk user biasa (bukan creator).
+    final visibleResponses = responses.toList();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -151,11 +151,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 const SizedBox(height: 18),
                 ...visibleResponses.map((response) {
-                  final form = formProvider.getFormById(response.formId);
-
-                  if (form == null) {
-                    return const SizedBox.shrink();
-                  }
+                  final form = formProvider.getFormById(response.formId) ??
+                      // Fallback: buat FormModel minimal dari data response
+                      FormModel(
+                        id: response.formId,
+                        title: response.formTitle.isNotEmpty
+                            ? response.formTitle
+                            : 'Form',
+                        creatorId: '',
+                        scheduledOpen: response.submittedAt,
+                        scheduledClose: response.submittedAt,
+                        createdAt: response.submittedAt,
+                      );
 
                   return _HistoryCard(
                     form: form,

@@ -88,13 +88,9 @@ class _HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<_HomeTab> {
-  String _selectedCategory = '';
-  List<String> _remoteCategories = [];
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCats());
   }
 
   Future<void> _refreshAll(
@@ -102,24 +98,10 @@ class _HomeTabState extends State<_HomeTab> {
     try {
       await fp.loadForms();
       await rp.loadMySubmissions(formProvider: fp);
-      await _loadCats();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Gagal memuat ulang: $e')),
-      );
-    }
-  }
-
-  Future<void> _loadCats() async {
-    try {
-      final cats = await widget.fp.fetchCategories();
-      if (!mounted) return;
-      setState(() => _remoteCategories = cats);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat kategori: $e')),
       );
     }
   }
@@ -163,25 +145,7 @@ class _HomeTabState extends State<_HomeTab> {
       return (form, r);
     }).toList();
 
-    final catSet = <String>{};
-    for (final e in recentWithForm) {
-      final c = e.$1.category.trim();
-      if (c.isNotEmpty) catSet.add(c);
-    }
-    for (final c in _remoteCategories) {
-      final t = c.trim();
-      if (t.isNotEmpty) catSet.add(t);
-    }
-    final cats = catSet.toList()..sort();
-
-    final filtered = _selectedCategory.isEmpty
-        ? recentWithForm.take(5).toList()
-        : recentWithForm
-            .where((e) =>
-                e.$1.category.trim().toLowerCase() ==
-                _selectedCategory.toLowerCase())
-            .take(5)
-            .toList();
+    final filtered = recentWithForm.take(5).toList();
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
@@ -237,80 +201,6 @@ class _HomeTabState extends State<_HomeTab> {
                         l10n.noFormsYetU,
                       )
                     else ...[
-                      if (cats.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: SizedBox(
-                            height: 38,
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              children: [
-                                ChoiceChip(
-                                  label: Text(l10n.filterAll),
-                                  selected: _selectedCategory.isEmpty,
-                                  showCheckmark: false,
-                                  selectedColor: cs.primary,
-                                  backgroundColor:
-                                      isDark ? AppTheme.darkSurface : Colors.white,
-                                  side: BorderSide(
-                                    color: _selectedCategory.isEmpty
-                                        ? cs.primary
-                                        : (isDark
-                                            ? AppTheme.darkBorder
-                                            : AppTheme.border),
-                                  ),
-                                  labelStyle: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: _selectedCategory.isEmpty
-                                        ? (cs.primary.computeLuminance() > 0.6
-                                            ? Colors.black87
-                                            : Colors.white)
-                                        : (isDark
-                                            ? AppTheme.darkTextSecondary
-                                            : AppTheme.textSecondary),
-                                  ),
-                                  onSelected: (_) => setState(
-                                      () => _selectedCategory = ''),
-                                ),
-                                const SizedBox(width: 8),
-                                for (final c in cats) ...[
-                                  ChoiceChip(
-                                    label: Text(c),
-                                    selected: _selectedCategory == c,
-                                    showCheckmark: false,
-                                    selectedColor: cs.primary,
-                                    backgroundColor: isDark
-                                        ? AppTheme.darkSurface
-                                        : Colors.white,
-                                    side: BorderSide(
-                                      color: _selectedCategory == c
-                                          ? cs.primary
-                                          : (isDark
-                                              ? AppTheme.darkBorder
-                                              : AppTheme.border),
-                                    ),
-                                    labelStyle: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: _selectedCategory == c
-                                          ? (cs.primary.computeLuminance() > 0.6
-                                              ? Colors.black87
-                                              : Colors.white)
-                                          : (isDark
-                                              ? AppTheme.darkTextSecondary
-                                              : AppTheme.textSecondary),
-                                    ),
-                                    onSelected: (_) => setState(() =>
-                                        _selectedCategory =
-                                            _selectedCategory == c ? '' : c),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
                       _RecentHistoryList(
                         isDark: isDark,
                         items: filtered,

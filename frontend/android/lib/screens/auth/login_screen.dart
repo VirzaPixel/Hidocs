@@ -99,7 +99,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: context.primary,
+      // Force default HiDocs blue theme on login screen regardless of user's
+      // saved color scheme — ensures brand identity for new / logged-out users.
+      backgroundColor: AppTheme.primary,
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Stack(
@@ -109,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
               right: -75,
               child: _Blob(
                 230,
-                context.primaryLightWith(0.20),
+                AppTheme.primaryLight.withValues(alpha: 0.20),
               ),
             ),
 
@@ -118,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
               left: -115,
               child: _Blob(
                 210,
-                context.primaryLightWith(0.10),
+                AppTheme.primaryLight.withValues(alpha: 0.10),
               ),
             ),
 
@@ -127,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
               left: -110,
               child: _Blob(
                 260,
-                context.primaryDark.withValues(alpha: 0.42),
+                AppTheme.primaryDark.withValues(alpha: 0.42),
               ),
             ),
 

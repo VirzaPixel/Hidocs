@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:hi_docs/services/api/api_client.dart';
+
 import 'exam_security_service.dart';
 
 /// Ringkasan kesiapan SELURUH syarat persiapan ujian (Revisi Lanjutan 6).
@@ -46,6 +48,10 @@ class LockdownReadiness {
     return list;
   }
 }
+
+/// Batas maksimum pelanggaran (keluar dari aplikasi / floating app terdeteksi)
+/// sebelum akses ujian dicabut otomatis dan jawaban di-submit paksa.
+const int kMaxExitViolations = 3;
 
 /// Orkestrator persiapan ujian (Revisi Lanjutan 6).
 ///
@@ -102,6 +108,27 @@ class ExamLockdownService {
       await target(responseId, eventType, message, questionIndex);
     } catch (_) {
       debugPrint('[ExamLockdown] gagal kirim telemetry');
+    }
+  }
+
+  /// Cabut akses ujian untuk response ini karena pelanggaran keluar
+  /// melebihi batas. Panggil API + kirim telemetry.
+  static Future<void> revokeAccess(
+    String responseId, {
+    required int violationCount,
+  }) async {
+    reportViolation(
+      responseId,
+      eventType: 'ACCESS_REVOKED',
+      message:
+          'Akses dicabut: $violationCount pelanggaran (maks $kMaxExitViolations).',
+    );
+
+    // Beritahu backend (graceful bila endpoint belum ada).
+    try {
+      await ApiClient.revokeExamAccess(responseId);
+    } catch (_) {
+      debugPrint('[ExamLockdown] gagal cabut akses backend');
     }
   }
 }

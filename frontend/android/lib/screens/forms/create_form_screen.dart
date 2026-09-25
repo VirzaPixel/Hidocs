@@ -70,6 +70,15 @@ class _CreateFormScreenState extends State<CreateFormScreen>
 
   bool _isSaving = false;
 
+  /// Simple list equality check (content comparison, not reference).
+  bool _listEquals(List<QuestionModel> a, List<QuestionModel> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].text != b[i].text) return false;
+    }
+    return true;
+  }
+
   bool _hasQuestionContent(QuestionModel q) {
     if (q.text.trim().isNotEmpty) return true;
     if (q.content != null && q.content!.trim().isNotEmpty) return true;
@@ -116,6 +125,7 @@ class _CreateFormScreenState extends State<CreateFormScreen>
       _examToken = existing.examToken;
       _isTokenProtected = existing.isTokenProtected;
       _resultVisibility = existing.resultVisibility;
+      _durationLimitMinutes = existing.timerMinutes;
       _questions.addAll(existing.questions);
     } else if (widget.initialQuestions != null && widget.initialQuestions!.isNotEmpty) {
       _questions.addAll(widget.initialQuestions!);
@@ -482,13 +492,32 @@ class _CreateFormScreenState extends State<CreateFormScreen>
       }
     }
 
-    // Cegah edit yang menghapus jawaban: jika sudah ada responden, tolak edit soal
-    if (widget.isEditing && widget.existingForm!.totalResponses > 0) {
-      _showMessage(
-        l10n.editBlockedHasResponses,
-        backgroundColor: AppTheme.error,
-      );
-      return;
+    // Cegah edit soal/settings saat form ACTIVE — guru harus deaktivasi dulu.
+    // Metadata (title, category) tetap bisa diupdate meski form aktif.
+    if (widget.isEditing && widget.existingForm!.isActive) {
+      // Izinkan perubahan metadata saja (title & category sudah di-save lewat
+      // toUpdateJson), tapi tolak jika soal/settings berubah.
+      final original = widget.existingForm!;
+      final questionsChanged =
+          _questions.length != original.questions.length ||
+              !_listEquals(_questions, original.questions);
+      final settingsChanged =
+          _shuffleQ != original.shuffleQuestions ||
+              _shuffleO != original.shuffleOptions ||
+              _oneTime != original.oneTimeOnly ||
+              _timerMinutes != original.timerMinutes ||
+              _resultVisibility != original.resultVisibility;
+
+      if (questionsChanged || settingsChanged) {
+        _showMessage(
+          l10n.isIndonesian
+              ? 'Form sedang aktif. Nonaktifkan dulu untuk mengubah soal atau pengaturan.'
+              : 'Form is active. Deactivate it to change questions or settings.',
+          backgroundColor: AppTheme.error,
+        );
+        _tabCtrl.animateTo(1);
+        return;
+      }
     }
 
     if (_closeDateTime.isBefore(_openDateTime)) {

@@ -35,6 +35,8 @@ class ResultsScreen extends StatefulWidget {
 }
 
 class _ResultsScreenState extends State<ResultsScreen> {
+  bool _isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,10 +46,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Silently refresh scores when returning from grading/detail screens
+    // so scores are never stale.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_isRefreshing) {
+        _loadResponses();
+      }
+    });
+  }
+
   Future<void> _loadResponses() async {
     if (!mounted) return;
+    _isRefreshing = true;
     await Provider.of<ResponseProvider>(context, listen: false)
         .loadResponsesForForm(widget.form.id, form: widget.form);
+    _isRefreshing = false;
   }
 
   bool _isManuallyGraded(QuestionModel q) {
@@ -150,8 +166,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
         ),
       ),
       body: responses.isEmpty
-          ? const _EmptyState()
-          : ListView(
+          ? RefreshIndicator(
+              onRefresh: _loadResponses,
+              child: const _EmptyState(),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadResponses,
+              child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
               children: [
                 // 1. Top Stats Cards Row (2 equal side-by-side cards)
@@ -582,6 +603,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   ),
                 ),
               ],
+              ),
             ),
     );
   }

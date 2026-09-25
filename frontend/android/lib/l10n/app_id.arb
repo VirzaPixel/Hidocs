@@ -115,7 +115,7 @@
   "removeImage": "Hapus Gambar",
   "imagePickError": "Gagal memuat gambar.",
   "loginScreenTitle": "Masuk ke Akun",
-  "loginScreenSubtitle": "Silakan login untuk melanjutkan",
+  "loginScreenSubtitle": "Platform Ujian Teraman",
   "wrongEmail": "Email tidak valid",
   "passMin6": "Minimal 6 karakter",
   "signIn": "Masuk",
@@ -521,5 +521,5 @@
   },
   "filterAll": "Semua",
   "categoryFilterHint": "Filter kategori",
-  "authFooterTagline": "HiDocs • Formulir Dinamis & Platform Asesmen Cerdas"
+  "authFooterTagline": "HiDocs • Platform Ujian Teraman"
 }

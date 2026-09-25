@@ -712,9 +712,28 @@ class _QuestionCardState extends State<_QuestionCard> {
     _setOptions(opts);
   }
 
+  void _reorderOption(int oldIndex, int newIndex) {
+    if (oldIndex < 0 ||
+        oldIndex >= widget.question.options.length ||
+        newIndex < 0 ||
+        newIndex > widget.question.options.length) {
+      return;
+    }
+    final opts = List<OptionModel>.from(widget.question.options);
+    final item = opts.removeAt(oldIndex);
+    opts.insert(newIndex, item);
+    _setOptions(opts);
+  }
+
   void _updateOptionText(int i, String text) {
     final opts = List<OptionModel>.from(widget.question.options);
     opts[i] = opts[i].copyWith(text: text);
+    _setOptions(opts);
+  }
+
+  void _updateOptionContent(int i, String content) {
+    final opts = List<OptionModel>.from(widget.question.options);
+    opts[i] = opts[i].copyWith(content: content);
     _setOptions(opts);
   }
 
@@ -1184,21 +1203,37 @@ class _QuestionCardState extends State<_QuestionCard> {
                 isDark: isDark,
               ),
             ),
-          for (var i = 0; i < q.options.length; i++) ...[
-            _OptionEditor(
-              key: ValueKey('${q.type.name}_${q.options[i].id}'),
-              option: q.options[i],
-              isCorrect: q.options[i].isCorrect,
-              multiSelect: q.type == QuestionType.checkbox,
-              isDark: isDark,
-              onTextChanged: (text) => _updateOptionText(i, text),
-              onCorrectTap: () => _setCorrectOption(i),
-              onDelete: q.options.length > 2
-                  ? () => _removeOption(i)
-                  : null,
-            ),
-            const SizedBox(height: 8),
-          ],
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            onReorderItem: _reorderOption,
+            itemCount: q.options.length,
+            proxyDecorator: (child, index, animation) {
+              return Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(10),
+                child: child,
+              );
+            },
+            itemBuilder: (context, i) {
+              return Padding(
+                key: ValueKey('${q.type.name}_${q.options[i].id}'),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _OptionEditor(
+                  option: q.options[i],
+                  isCorrect: q.options[i].isCorrect,
+                  multiSelect: q.type == QuestionType.checkbox,
+                  isDark: isDark,
+                  onTextChanged: (text) => _updateOptionText(i, text),
+                  onContentChanged: (content) => _updateOptionContent(i, content),
+                  onCorrectTap: () => _setCorrectOption(i),
+                  onDelete: q.options.length > 2
+                      ? () => _removeOption(i)
+                      : null,
+                ),
+              );
+            },
+          ),
           _buildAddOptionButton(isDark),
         ];
       case QuestionType.imageChoice:
@@ -1219,20 +1254,35 @@ class _QuestionCardState extends State<_QuestionCard> {
             ),
           ),
           const SizedBox(height: 10),
-          for (var i = 0; i < q.options.length; i++) ...[
-            _ImageOptionEditor(
-              key: ValueKey(q.options[i].id),
-              option: q.options[i],
-              isCorrect: q.options[i].isCorrect,
-              isDark: isDark,
-              onTextChanged: (text) => _updateOptionText(i, text),
-              onCorrectTap: () => _setCorrectOption(i),
-              onPickImage: () => _pickOptionImage(i),
-              onRemoveImage: () => _removeOptionImage(i),
-              onDelete: q.options.length > 2 ? () => _removeOption(i) : null,
-            ),
-            const SizedBox(height: 10),
-          ],
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            onReorderItem: _reorderOption,
+            itemCount: q.options.length,
+            proxyDecorator: (child, index, animation) {
+              return Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: child,
+              );
+            },
+            itemBuilder: (context, i) {
+              return Padding(
+                key: ValueKey(q.options[i].id),
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _ImageOptionEditor(
+                  option: q.options[i],
+                  isCorrect: q.options[i].isCorrect,
+                  isDark: isDark,
+                  onTextChanged: (text) => _updateOptionText(i, text),
+                  onCorrectTap: () => _setCorrectOption(i),
+                  onPickImage: () => _pickOptionImage(i),
+                  onRemoveImage: () => _removeOptionImage(i),
+                  onDelete: q.options.length > 2 ? () => _removeOption(i) : null,
+                ),
+              );
+            },
+          ),
           _buildAddOptionButton(isDark),
         ];
       case QuestionType.yesNo:
@@ -1244,6 +1294,7 @@ class _QuestionCardState extends State<_QuestionCard> {
               isCorrect: q.options[i].isCorrect,
               isDark: isDark,
               onTextChanged: (text) => _updateOptionText(i, text),
+              onContentChanged: (content) => _updateOptionContent(i, content),
               onCorrectTap: () => _setCorrectOption(i),
               onDelete: null,
             ),
@@ -1888,12 +1939,10 @@ class _TypeDropdown extends StatelessWidget {
 class _OptionEditor extends StatefulWidget {
   final OptionModel option;
   final bool isCorrect;
-
-  /// `true` untuk soal kotak centang (boleh banyak jawaban benar) sehingga
-  /// indikatornya berbentuk kotak centang, bukan bulatan pilihan tunggal.
   final bool multiSelect;
   final bool isDark;
   final void Function(String) onTextChanged;
+  final void Function(String)? onContentChanged;
   final VoidCallback onCorrectTap;
   final VoidCallback? onDelete;
 
@@ -1904,6 +1953,7 @@ class _OptionEditor extends StatefulWidget {
     this.multiSelect = false,
     required this.isDark,
     required this.onTextChanged,
+    this.onContentChanged,
     required this.onCorrectTap,
     this.onDelete,
   });
@@ -1914,11 +1964,32 @@ class _OptionEditor extends StatefulWidget {
 
 class _OptionEditorState extends State<_OptionEditor> {
   late final TextEditingController _controller;
+  late QuillController _quillController;
+  bool _showRichEditor = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.option.text);
+    _quillController = _buildQuillController();
+    _showRichEditor =
+        widget.option.content != null && widget.option.content!.isNotEmpty;
+  }
+
+  QuillController _buildQuillController() {
+    final content = widget.option.content;
+    if (content != null && content.isNotEmpty) {
+      try {
+        final delta = Delta.fromJson(
+            List<Map<String, dynamic>>.from(jsonDecode(content) as List));
+        final doc = Document.fromDelta(delta);
+        return QuillController(
+          document: doc,
+          selection: const TextSelection.collapsed(offset: 0),
+        );
+      } catch (_) {}
+    }
+    return QuillController.basic();
   }
 
   @override
@@ -1927,17 +1998,44 @@ class _OptionEditorState extends State<_OptionEditor> {
     if (widget.option.text != _controller.text) {
       _controller.text = widget.option.text;
     }
+    if (widget.option.content != oldWidget.option.content) {
+      _quillController.dispose();
+      _quillController = _buildQuillController();
+      _showRichEditor =
+          widget.option.content != null && widget.option.content!.isNotEmpty;
+    }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _quillController.dispose();
     super.dispose();
+  }
+
+  void _syncQuillToPlain() {
+    final plainText = _quillController.document.toPlainText().trim();
+    if (plainText.isNotEmpty) {
+      _controller.text = plainText;
+      widget.onTextChanged(plainText);
+    }
+    final delta = _quillController.document.toDelta().toJson();
+    widget.onContentChanged?.call(jsonEncode(delta));
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildOptionRow(l10n),
+        if (_showRichEditor) _buildRichEditor(),
+      ],
+    );
+  }
+
+  Widget _buildOptionRow(AppLocalizations l10n) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -1987,17 +2085,13 @@ class _OptionEditorState extends State<_OptionEditor> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
-                  color: widget.isDark
-                      ? AppTheme.darkBorder
-                      : AppTheme.border,
+                  color: widget.isDark ? AppTheme.darkBorder : AppTheme.border,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
-                  color: widget.isDark
-                      ? AppTheme.darkBorder
-                      : AppTheme.border,
+                  color: widget.isDark ? AppTheme.darkBorder : AppTheme.border,
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -2014,8 +2108,37 @@ class _OptionEditorState extends State<_OptionEditor> {
             ),
           ),
         ),
+        if (widget.onContentChanged != null) ...[
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: 'Toggle rich text editor',
+            onPressed: () {
+              setState(() {
+                _showRichEditor = !_showRichEditor;
+                if (_showRichEditor) {
+                  final doc = Document()..insert(0, _controller.text);
+                  _quillController.dispose();
+                  _quillController = QuillController(
+                    document: doc,
+                    selection: const TextSelection.collapsed(offset: 0),
+                  );
+                } else {
+                  _syncQuillToPlain();
+                }
+              });
+            },
+            icon: Icon(
+              _showRichEditor
+                  ? Icons.text_fields_rounded
+                  : Icons.format_bold_rounded,
+              size: 18,
+            ),
+            color: _showRichEditor ? context.primary : AppTheme.textMuted,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
         if (widget.onDelete != null) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: 2),
           IconButton(
             tooltip: l10n.deleteOptionTooltip,
             onPressed: widget.onDelete,
@@ -2025,6 +2148,89 @@ class _OptionEditorState extends State<_OptionEditor> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildRichEditor() {
+    final focusNode = FocusNode();
+    final scrollController = ScrollController();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 34),
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.isDark ? AppTheme.darkSurface : AppTheme.surfaceLight,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: widget.isDark ? AppTheme.darkBorder : AppTheme.border,
+          ),
+        ),
+        child: Column(
+          children: [
+            QuillSimpleToolbar(
+              controller: _quillController,
+              config: const QuillSimpleToolbarConfig(
+                multiRowsDisplay: false,
+                toolbarSize: 22,
+                showHeaderStyle: false,
+                showFontFamily: false,
+                showFontSize: false,
+                showColorButton: false,
+                showBackgroundColorButton: false,
+                showClearFormat: false,
+                showSubscript: false,
+                showSuperscript: false,
+                showDirection: false,
+                showSearchButton: false,
+                showQuote: false,
+                showIndent: false,
+                showListCheck: false,
+                showAlignmentButtons: false,
+                showLink: false,
+                showCodeBlock: false,
+                showBoldButton: true,
+                showItalicButton: true,
+                showUnderLineButton: true,
+                showStrikeThrough: false,
+                showInlineCode: false,
+                showUndo: false,
+                showRedo: false,
+              ),
+            ),
+            Container(
+              constraints: const BoxConstraints(minHeight: 36, maxHeight: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: QuillEditor(
+                controller: _quillController,
+                focusNode: focusNode,
+                scrollController: scrollController,
+                config: QuillEditorConfig(
+                  placeholder: 'Rich text option…',
+                  expands: false,
+                  scrollable: true,
+                  embedBuilders: buildQuillEmbedBuilders(),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 6),
+                child: TextButton.icon(
+                  onPressed: _syncQuillToPlain,
+                  icon: const Icon(Icons.check_rounded, size: 14),
+                  label: const Text('Apply', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -2165,7 +2371,6 @@ class _ImageOptionEditor extends StatefulWidget {
   final VoidCallback? onDelete;
 
   const _ImageOptionEditor({
-    super.key,
     required this.option,
     required this.isCorrect,
     required this.isDark,

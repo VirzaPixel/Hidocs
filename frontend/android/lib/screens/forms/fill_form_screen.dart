@@ -25,6 +25,7 @@ import 'package:hi_docs/widgets/form/rich_text_view.dart';
 import 'package:hi_docs/widgets/exam/secure_question_canvas.dart';
 import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/services/security/exam_lockdown_service.dart';
+import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 
@@ -72,6 +73,8 @@ class _FillFormScreenState extends State<FillFormScreen>
   String _overlayWarningText = '';
   int _violationCount = 0;
   Timer? _autosaveTimer;
+  Timer? _floatingScanTimer;
+  bool _accessRevoked = false;
   final Set<String> _dirtyQuestions = {};
   final Set<String> _unsavedQuestions = {};
   bool get _hasUnsaved => _unsavedQuestions.isNotEmpty;
@@ -104,6 +107,13 @@ class _FillFormScreenState extends State<FillFormScreen>
       _autosaveTimer = Timer.periodic(
         const Duration(seconds: 15),
         (_) => _flushAutosave(),
+      );
+
+      // Skorulasi berkala (setiap 30 detik) untuk mendeteksi aplikasi
+      // floating baru yang mungkin muncul selama ujian berlangsung.
+      _floatingScanTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _periodicFloatingScan(),
       );
 
       _restoreExamSession();
@@ -163,6 +173,7 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     if (_examMode) {
       _autosaveTimer?.cancel();
+      _floatingScanTimer?.cancel();
       WidgetsBinding.instance.removeObserver(this);
       ExamViolationReporter.unregister();
       ExamLockdownService.release();
@@ -188,16 +199,22 @@ class _FillFormScreenState extends State<FillFormScreen>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
+        _violationCount++;
         _reportViolation(
           'APP_BACKGROUNDED',
-          message: 'Aplikasi ujian ditinggalkan (state: $state).',
+          message:
+              'Aplikasi ujian ditinggalkan (state: $state). Pelanggaran ke-$_violationCount.',
         );
-        if (mounted) {
+        if (_violationCount >= kMaxExitViolations) {
+          _revokeAndSubmit();
+        } else if (mounted) {
+          final remaining = kMaxExitViolations - _violationCount;
           setState(() {
-            _violationCount++;
             _overlayWarningVisible = true;
             _overlayWarningText =
-                'Anda terdeteksi keluar dari aplikasi ujian. Pelanggaran ke-$_violationCount.';
+                'Anda terdeteksi keluar dari aplikasi ujian.\n'
+                'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
+                'Sisa $remaining kesempatan lagi, setelah itu akses ujian akan dibatalkan.';
           });
         }
         break;
@@ -219,15 +236,89 @@ class _FillFormScreenState extends State<FillFormScreen>
   }
 
   Future<void> _refreshLockdown() async {
-    if (!_examMode) return;
+    if (!_examMode || _accessRevoked) return;
     final readiness = await ExamLockdownService.evaluate();
     if (!mounted) return;
     if (!readiness.isReady) {
+      _violationCount++;
+      _reportViolation(
+        'LOCKDOWN_VIOLATION',
+        message:
+            'Syarat penguncian dilanggar (${readiness.unmetRequirements.join(', ')}). '
+            'Pelanggaran ke-$_violationCount.',
+      );
+      if (_violationCount >= kMaxExitViolations) {
+        _revokeAndSubmit();
+      } else {
+        final remaining = kMaxExitViolations - _violationCount;
+        setState(() {
+          _overlayWarningVisible = true;
+          _overlayWarningText =
+              'Syarat penguncian ujian dilanggar '
+              '(${readiness.unmetRequirements.join(', ')}).\n'
+              'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
+              'Sisa $remaining kesempatan. '
+              'Kembalikan kondisi perangkat lalu tekan "Saya Mengerti, Lanjutkan".';
+        });
+      }
+    }
+  }
+
+  /// Scan floating app berkala (dipanggil oleh timer).
+  /// Sama seperti _refreshLockdown tapi hanya fokus pada floating apps.
+  Future<void> _periodicFloatingScan() async {
+    if (!_examMode || _accessRevoked || _submitted) return;
+    try {
+      final screening = await ExamSecurityService.screenFloatingApps();
+      if (!mounted || screening.isClean) return;
+
+      _violationCount++;
+      _reportViolation(
+        'FLOATING_APP_DETECTED',
+        message:
+            'Aplikasi floating terdeteksi aktif selama ujian. '
+            'Pelanggaran ke-$_violationCount. '
+            'Aplikasi: ${screening.suspicious.map((a) => a.displayName).join(', ')}',
+      );
+
+      if (_violationCount >= kMaxExitViolations) {
+        _revokeAndSubmit();
+      } else {
+        final remaining = kMaxExitViolations - _violationCount;
+        setState(() {
+          _overlayWarningVisible = true;
+          _overlayWarningText =
+              'Aplikasi mengambang/floating terdeteksi aktif.\n'
+              'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
+              'Tutup aplikasi tersebut. Sisa $remaining kesempatan.';
+        });
+      }
+    } catch (_) {
+      // Scan gagal — diam saja, jangan ganggu user.
+    }
+  }
+
+  /// Revoke akses dan submit otomatis karena pelanggaran melebihi batas.
+  Future<void> _revokeAndSubmit() async {
+    if (_accessRevoked || _submitted) return;
+
+    // Beritahu backend dan kirim telemetry.
+    final rid = _responseId;
+    if (rid != null && rid.isNotEmpty) {
+      ExamLockdownService.revokeAccess(
+        rid,
+        violationCount: _violationCount,
+      );
+    }
+
+    _timer?.cancel();
+    _autosaveTimer?.cancel();
+    _floatingScanTimer?.cancel();
+
+    if (mounted) {
       setState(() {
-        _overlayWarningVisible = true;
-        _overlayWarningText =
-            'Syarat penguncian ujian dilanggar (${readiness.unmetRequirements.join(', ')}). '
-            'Kembalikan kondisi perangkat lalu tekan "Saya Mengerti, Lanjutkan".';
+        _accessRevoked = true;
+        _overlayWarningVisible = false;
       });
     }
   }
@@ -944,13 +1035,28 @@ class _FillFormScreenState extends State<FillFormScreen>
     final l10n = AppLocalizations.of(context);
 
     if (_questions.isEmpty) {
+      // Auto-navigate back after build completes since there's nothing to fill
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
       return Scaffold(
         appBar: AppBar(
+          automaticallyImplyLeading: false,
           title: Text(widget.form.title),
         ),
         body: Center(
-          child: Text(
-            l10n.noQuestionsYetF,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.quiz_outlined, size: 48, color: AppTheme.textMuted),
+              const SizedBox(height: 12),
+              Text(
+                l10n.noQuestionsYetF,
+                style: const TextStyle(color: AppTheme.textMuted),
+              ),
+            ],
           ),
         ),
       );
@@ -966,12 +1072,19 @@ class _FillFormScreenState extends State<FillFormScreen>
       );
     }
 
+    if (_accessRevoked) {
+      return _RevokedScreen(
+        onBack: () => Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/',
+          (_) => false,
+        ),
+      );
+    }
+
     final q = _questions[_current];
 
     final questionImagePath = QuestionImageRenderer.pathFor(q);
-
-    final progress =
-        (_current + 1) / _questions.length;
 
     final isDark =
         Theme.of(context).brightness ==
@@ -1067,29 +1180,6 @@ class _FillFormScreenState extends State<FillFormScreen>
         children: [
           Column(
         children: [
-          Container(
-            height: 4,
-            color: isDark
-                ? AppTheme.darkBorder
-                : AppTheme.border,
-            child: FractionallySizedBox(
-              alignment:
-                  Alignment.centerLeft,
-              widthFactor: progress,
-              child: Container(
-                decoration:
-                    BoxDecoration(
-                  gradient:
-                      LinearGradient(
-                    colors: [
-                      context.primary,
-                      context.primaryLight,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
 
           Container(
             height: 50,
@@ -1439,6 +1529,8 @@ class _FillFormScreenState extends State<FillFormScreen>
             SecurityOverlayWidget(
               isVisible: _overlayWarningVisible,
               warningText: _overlayWarningText,
+              violationCount: _violationCount,
+              maxViolations: kMaxExitViolations,
             ),
             if (_overlayWarningVisible)
               Positioned(
@@ -1449,7 +1541,9 @@ class _FillFormScreenState extends State<FillFormScreen>
                   child: ElevatedButton.icon(
                     onPressed: _acknowledgeWarning,
                     icon: const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Saya Mengerti, Lanjutkan'),
+                    label: Text(
+                      'Saya Mengerti, Lanjutkan ($_violationCount/$kMaxExitViolations)',
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.error,
                       foregroundColor: Colors.white,
@@ -2997,6 +3091,95 @@ class _SummaryLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Layar yang ditampilkan saat akses ujian dicabut karena pelanggaran keluar
+/// melebihi batas (3x). Siswa tidak bisa melanjutkan ujian.
+class _RevokedScreen extends StatelessWidget {
+  final VoidCallback onBack;
+
+  const _RevokedScreen({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.gpp_bad_rounded,
+                    size: 52,
+                    color: AppTheme.error,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Text(
+                  'AKSES UJIAN DICABUT',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppTheme.textPrimary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Anda telah melebihi batas maksimum pelanggaran '
+                  'keluar dari aplikasi ujian ($kMaxExitViolations kali).\n\n'
+                  'Sesi ujian ini telah ditutup secara otomatis. '
+                  'Hubungi pengawas/creator untuk informasi lebih lanjut.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.6,
+                    color: isDark
+                        ? AppTheme.darkTextSecondary
+                        : AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: onBack,
+                    icon: const Icon(Icons.home_rounded, size: 20),
+                    label: const Text(
+                      'Kembali ke Beranda',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.error,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

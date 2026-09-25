@@ -90,7 +90,11 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
     final borderClr = isDark ? AppTheme.darkBorder : AppTheme.border;
     final primaryTxt = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
 
-    final canEdit = _form.totalResponses == 0;
+    // Edit metadata (title, deskripsi, category) selalu bisa dilakukan.
+    // Edit soal/settings hanya bisa ketika form DRAFT (belum aktif / sudah ditutup).
+    // Ketika form ACTIVE, guru harus deaktivasi dulu sebelum bisa edit soal.
+    final isFormActive = _form.isActive;
+    final canEditQuestions = !isFormActive;
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
@@ -126,6 +130,26 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
                       ),
                     );
                   } else if (val == 'toggle') {
+                    // Bug 10.2: Validasi sebelum activate form
+                    if (!_form.isActive) {
+                      // Saat mau activate, pastikan ada soal
+                      if (_form.questions.isEmpty) {
+                        final messenger = ScaffoldMessenger.of(context);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              'Form belum punya soal. Tambahkan soal terlebih dahulu.',
+                            ),
+                            backgroundColor: AppTheme.warning,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            margin: const EdgeInsets.all(16),
+                          ),
+                        );
+                        return;
+                      }
+                    }
                     final messenger = ScaffoldMessenger.of(context);
                     final ok = await formProvider.toggleFormActive(_form.id);
                     if (!mounted) return;
@@ -176,28 +200,22 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
                     ),
                   ),
                   PopupMenuItem(
-                    value: canEdit ? 'edit' : null,
+                    value: 'edit',
                     child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.edit_rounded,
                           size: 20,
-                          color: canEdit ? null : AppTheme.textMuted,
                         ),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              'Edit Form',
-                              style: TextStyle(
-                                color: canEdit ? null : AppTheme.textMuted,
-                              ),
-                            ),
-                            if (!canEdit)
+                            const Text('Edit Form'),
+                            if (!canEditQuestions)
                               const Text(
-                                'Form sudah ada responden — tidak bisa diedit',
+                                'Questions/settings locked while active',
                                 style: TextStyle(
                                     fontSize: 12, color: AppTheme.textMuted),
                               ),
@@ -647,36 +665,30 @@ class _FormDetailScreenState extends State<FormDetailScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: canEdit
-                          ? () => Navigator.push(
-                                context,
-                                CustomPageRoute(page:
-                                      CreateFormScreen(existingForm: _form),
-                                ),
-                              )
-                          : null,
+                      onPressed: () => Navigator.push(
+                        context,
+                        CustomPageRoute(page:
+                              CreateFormScreen(existingForm: _form),
+                        ),
+                      ),
                       icon: Icon(
                         Icons.edit_outlined,
                         size: 18,
-                        color: canEdit ? context.primary : AppTheme.textMuted,
+                        color: context.primary,
                       ),
                       label: Text(
-                        canEdit ? 'Edit Form' : 'Edit dikunci (ada responden)',
+                        canEditQuestions ? 'Edit Form' : 'Edit (metadata only — deactivate for full edit)',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: canEdit ? context.primary : AppTheme.textMuted,
+                          color: context.primary,
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
                         backgroundColor: cardBg,
-                        foregroundColor: canEdit
-                            ? context.primary
-                            : AppTheme.textMuted,
+                        foregroundColor: context.primary,
                         side: BorderSide(
-                          color: canEdit
-                              ? borderClr
-                              : borderClr.withValues(alpha: 0.5),
+                          color: borderClr,
                           width: 1.5,
                         ),
                         shape: RoundedRectangleBorder(

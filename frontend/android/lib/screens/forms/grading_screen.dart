@@ -7,6 +7,7 @@ import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/models/question_model.dart';
 import 'package:hi_docs/models/response_model.dart';
 import 'package:hi_docs/providers/response_provider.dart';
+import 'package:hi_docs/screens/forms/bulk_grading_screen.dart';
 import 'package:hi_docs/screens/forms/response_detail_screen.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 
@@ -99,6 +100,24 @@ class _GradingScreenState extends State<GradingScreen> {
       appBar: AppBar(
         title: const Text('Grading'),
         actions: [
+          if (_manualQuestions.isNotEmpty)
+            IconButton(
+              tooltip: 'Quick grade all responses',
+              icon: const Icon(Icons.flash_on_rounded),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  CustomPageRoute(
+                    page: BulkGradingScreen(form: widget.form),
+                  ),
+                ).then((_) {
+                  if (mounted) {
+                    setState(() {});
+                    _loadResponses();
+                  }
+                });
+              },
+            ),
           IconButton(
             icon: const Icon(
               Icons.help_outline_rounded,
