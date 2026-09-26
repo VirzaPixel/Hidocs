@@ -37,6 +37,19 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
       widget.form.hasExamToken || widget.form.isTokenProtected;
 
   @override
+  void initState() {
+    super.initState();
+
+    // Halaman masukan token BUKAN bagian dari sesi ujian. Semua fitur
+    // "kunci" (alarm keluar, volume penuh, FLAG_SECURE, layar penuh)
+    // baru boleh aktif di [FillFormScreen]. Pemanggilan ini juga
+    // membersihkan sisa penguncian dari percobaan sebelumnya, sehingga
+    // menutup aplikasi di halaman ini benar-benar SUNYI — tidak ada
+    // suara alarm.
+    ExamLockdownService.ensureIdle();
+  }
+
+  @override
   void dispose() {
     _tokenCtrl.dispose();
     super.dispose();
@@ -133,12 +146,10 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
 
   /// Batal / kembali dari layar token.
   ///
-  /// Gerbang persiapan sudah mengaktifkan penguncian (volume penuh + alarm
-  /// keluar) sebelum tiba di sini, jadi saat siswa membatalkan itu dilepas
-  /// kembali supaya tidak meninggalkan volume terkunci pada 100%.
-  Future<void> _exit() async {
-    await ExamLockdownService.release();
-    if (!mounted) return;
+  /// Tidak perlu melepas penguncian apa pun: halaman-gerbang tidak lagi
+  /// menyalakan volume/alarm, dan [FillFormScreen] yang-radio-aktif selama
+  /// penguncian itu tidak pernah dibangun sampai token diterima.
+  void _exit() {
     Navigator.pop(context);
   }
 

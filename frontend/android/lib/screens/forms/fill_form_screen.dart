@@ -112,10 +112,12 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     _responseId = widget.responseId.isNotEmpty ? widget.responseId : null;
 
-    // Status bar HP disembunyikan selama mengisi (immersiveSticky: tidak
-    // bisa di-swipe untuk dibuka lagi). Informasinya — jam + baterai —
-    // disediakan aplikasi sendiri lewat [_DeviceStatusBar].
+    // Status bar HP disembunyikan selama mengisi. `immersiveSticky` PLUS kunci
+    // native, supaya geser dari tepi tidak bisa memunculkan status bar lagi.
+    // Informasinya — jam + baterai — disediakan aplikasi sendiri lewat
+    // [_DeviceStatusBar].
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    ExamSecurityService.setFullscreenLock(true);
 
     if (_examMode) {
       WidgetsBinding.instance.addObserver(this);
@@ -192,6 +194,7 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     // Kembalikan status bar sistem seperti semula saat meninggalkan halaman.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    ExamSecurityService.setFullscreenLock(false);
 
     if (_examMode) {
       _autosaveTimer?.cancel();
@@ -238,6 +241,11 @@ class _FillFormScreenState extends State<FillFormScreen>
       case AppLifecycleState.resumed:
         // Episodenya sudah selesai — hitungan berikutnya kembali dari nol.
         _exitEpisode = false;
+        // Kunci native sudah dipasang, tapi saat app dijeda sistem bisa
+        // melepas status bar. Pastikan immersive + kunci native aktif lagi
+        // setiap kali app kembali ke depan.
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        ExamSecurityService.setFullscreenLock(true);
         break;
 
       case AppLifecycleState.detached:
@@ -1780,15 +1788,18 @@ class _FillFormScreenState extends State<FillFormScreen>
   }
 }
 
-/// Bilah status bikinan aplikasi (jam + baterai) untuk halaman pengisian.
+/// Bilah informasi ringkas bikinan aplikasi (jam + baterai) untuk halaman
+/// pengisian.
 ///
 /// Halaman pengisian menyembunyikan status bar HP, jadi widget ini
-/// menyediakan penggantinya: jam berjalan di kiri, persentase + ikon
-/// baterai di kanan, memakai warna tema form yang sama dengan AppBar.
+/// menggantinya. Sengaja TIDAK meniru status bar sungguhan (jarak, ikon
+/// besar, huruf lebar) — yang dipakai hanya dua informasi yang benar-benar
+/// dibutuhkan siswa: jam sekarang dan sisa baterai, masing-masing di dalam
+/// "pill" kecil yang rapi.
 ///
 /// Jam disegarkan tiap 20 detik. Baterai dibaca lewat channel native
 /// `id.hidocs.app/security` (`getBatteryInfo`); bila tidak tersedia
-/// (non-Android) ikonnya disembunyikan dan jam tetap tampil.
+/// (non-Android) chip baterainya disembunyikan dan jam tetap tampil.
 class _DeviceStatusBar extends StatefulWidget {
   /// Warna tema form — dibuat sama dengan AppBar agar menyatu.
   final String themeColor;
@@ -1799,7 +1810,7 @@ class _DeviceStatusBar extends StatefulWidget {
   static double heightOf(BuildContext context) =>
       MediaQuery.of(context).padding.top + contentHeight;
 
-  static const double contentHeight = 26;
+  static const double contentHeight = 30;
 
   @override
   State<_DeviceStatusBar> createState() => _DeviceStatusBarState();
@@ -1866,41 +1877,76 @@ class _DeviceStatusBarState extends State<_DeviceStatusBar> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Text(
-                _clock,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
+              // Jam — pill transparan, angka tabular supaya lebarnya stabil
+              // dan tidak "berganti-ganti" tiap menit.
+              _InfoPill(
+                child: Text(
+                  _clock,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
               const Spacer(),
-              if (battery != null) ...[
-                if (battery.charging)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 3),
-                    child: Icon(
-                      Icons.bolt_rounded,
-                      color: Colors.amberAccent,
-                      size: 14,
-                    ),
-                  ),
-                Text(
-                  '${battery.level}%',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
+              if (battery != null)
+                _InfoPill(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${battery.level}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Icon(
+                        _batteryIcon,
+                        color: battery.charging
+                            ? Colors.amberAccent
+                            : Colors.white,
+                        size: 14,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 4),
-                Icon(_batteryIcon, color: Colors.white, size: 18),
-              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "Pill" kecil transparan pembungkus satu potongan info pada [_DeviceStatusBar].
+///
+/// Dipakai supaya jam dan baterai terlihat sebagai dua unit info yang rapi,
+/// bukan baris status yang meniru tampilan sistem. Latar putih transparan
+/// tipis + radius penuh membuatnya menyatu dengan warna AppBar tanpa
+/// menambah kotak-kotak berat.
+class _InfoPill extends StatelessWidget {
+  final Widget child;
+
+  const _InfoPill({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: child,
     );
   }
 }

@@ -4,7 +4,9 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.NotificationManager
+import android.app.admin.DevicePolicyManager
 import android.app.PictureInPictureParams
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -19,6 +21,9 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Process
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -61,8 +66,40 @@ class SecurityBridge(
     private var exitAlarmPlayer: MediaPlayer? = null
     private var exitAlarmCachedFile: File? = null
 
+    /**
+     * `true` HANYA selama halaman pengisian (sesi ujian) yang sedang dibuka.
+     *
+     * Ini penjaga kedua untuk alarm keluar: [exitAlarmArmed] disetel dari
+     * Dart, tapi baik halaman gerbang maupun layar token BUKAN bagian dari
+     * sesi ujian. Tanpa penjaga ini, satu sesi ujian yang tertinggal
+     * "armed" membuat suara alarm berbunyi walau siswa baru sekadar
+     * sedang memasukkan token. Lihat [onUserLeftActivity].
+     */
+    private var examSessionActive = false
+
+    /** `true` selama layar dikunci penuh (status bar + nav bar tak bisa muncul). */
+    private var fullscreenLocked = false
+
     /** `true` bila alarm keluar sedang dipasang (dipakai MainActivity). */
     val isExitAlarmArmed: Boolean get() = exitAlarmArmed
+
+    /** `true` bila sesi ujian benar-benar sedang dikerjakan. */
+    val isExamSessionActive: Boolean get() = examSessionActive
+
+    /** `true` bila layar sedang dikunci penuh. */
+    val isFullscreenLocked: Boolean get() = fullscreenLocked
+
+    /**
+     * `true` bila aplikasi ini sudah pernah masuk Lock Task Mode.
+     *
+     * Dipakai untuk membedakan "kiosk sedang dijeda" dari "kiosk memang tidak
+     * pernah aktif", sehingga alarm keluar tidak dibunyikan pada perangkat
+     * yang tidak diprovision sebagai device owner.
+     */
+    private var kioskActive = false
+
+    /** `true` bila kiosk pernah diaktifkan pada proses ini. */
+    val isKioskActive: Boolean get() = kioskActive
 
     fun register() {
         channel.setMethodCallHandler { call, result ->
@@ -109,6 +146,24 @@ class SecurityBridge(
                     result.success(openAppSettings(call.argument("packageName")))
                 }
                 "isDeviceAdminActive" -> result.success(isDeviceAdminActive())
+                // Lock Task Mode (kiosk sejati, butuh status device owner).
+                "startKiosk" -> result.success(startKiosk())
+                "stopKiosk" -> {
+                    stopKiosk()
+                    result.success(true)
+                }
+                "getLockTaskReport" -> result.success(lockTaskReport())
+                // Kunci tampilan penuh saat mengerjakan (status bar + nav bar).
+                "setFullscreenLock" -> {
+                    setFullscreenLock(call.argument("enabled") ?: false)
+                    result.success(true)
+                }
+                // Penjaga alarm keluar: hanya menyala saat halaman pengisian
+                // (sesi ujian) yang benar-benar terbuka.
+                "setExamSessionActive" -> {
+                    setExamSessionActive(call.argument("active") ?: false)
+                    result.success(true)
+                }
                 "startLockService" -> {
                     ExamLockService.start(activity)
                     result.success(true)
@@ -123,10 +178,244 @@ class SecurityBridge(
     }
 
     fun dispose() {
+        fullscreenLocked = false
+        examSessionActive = false
         disableSecure()
         releaseExitAlarm()
         exitAlarmArmed = false
+        kioskActive = false
         channel.setMethodCallHandler(null)
+    }
+
+    // ---------- Kunci tampilan penuh (fullscreen lock) ----------
+
+    /**
+     * Benar-benar mengunci layar saat mengerjakan ujian: status bar DAN nav bar
+     * disembunyikan, dan gesture "geser dari tepi" untuk memunculkannya
+     * dinonaktifkan lewat [WindowInsetsControllerCompat].
+     *
+     * `SystemUiMode.immersiveSticky` dari sisi Dart saja belum cukup —
+     * di beberapa perangkat Android, geser dari tepi atas masih memunculkan
+     * status bar. Flag window di sini menutup celah tersebut.
+     *
+     * Status "yang sedang dikunci" disimpan di [fullscreenLocked] supaya
+     * [reapplyFullscreenLock] bisa mengunci ulang setiap kali window regain
+     * focus. Tanpa itu, begitu siswa menarik panel notifikasi, status bar
+     * tetap tampil sampai aplikasi ditutup.
+     */
+    private fun setFullscreenLock(enabled: Boolean) {
+        fullscreenLocked = enabled
+        applyFullscreenLock(enabled)
+    }
+
+    /**
+     * Kunci ulang tampilan penuh bila sedang dalam mode ujian.
+     *
+     * Dipanggil dari [MainActivity.onWindowFocusChanged] / `onResume`:
+     * gestur tepi (tarik panel notifikasi, geser nav bar) sewaktu-waktu
+     * memunculkan system bar sementara, dan tanpa penguncian ulang bar itu
+     * tidak pernah hilang lagi.
+     *
+     * Sekaligus memeriksa Lock Task Mode: bila sesi ujian masih berjalan tapi
+     * mode terkunci sudah lepas (mis. sempat dipaksa keluar sistem), kiosk
+     * dibangun ulang di sini. Ini menggantikan callback
+     * `onLockTaskModeExiting` — callback itu TIDAK tersedia di `Activity`
+     * (telah diverifikasi pada `android.jar`), sedangkan focus-change selalu
+     * terpanggil ketika aplikasi kembali ke depan.
+     */
+    fun reapplyFullscreenLock() {
+        if (fullscreenLocked) applyFullscreenLock(true)
+        if (examSessionActive && !isLockTaskLocked()) {
+            startKiosk()
+        }
+    }
+
+    /** `true` bila Lock Task Mode sedang aktif (pinned maupun locked). */
+    private fun isLockTaskLocked(): Boolean =
+        lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE
+
+    private fun applyFullscreenLock(enabled: Boolean) {
+        activity.runOnUiThread {
+            val window = activity.window
+            if (enabled) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                // Hilangkan cutout/system bar insets supaya konten aplikasi
+                // benar-benar memenuhi layar.
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            }
+
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            if (enabled) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE sengaja TIDAK dipakai:
+                // itulah yang membuat status bar muncul sesaat saat digeser.
+                // Dengan behavior default, penyembunyian bersifat permanen
+                // selama aplikasi berjalan.
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    // ---------- Lock Task Mode: kiosk sejati (device owner) ----------
+
+    /**
+     * Status Lock Task Mode saat ini (`ActivityManager.getLockTaskModeState()`).
+     *
+     * `LOCK_TASK_MODE_NONE` (0) = tidak terkunci, `LOCK_TASK_MODE_PINNED` (1) =
+     * screen pinning biasa (masih bisa keluar dengan tahan Back+Recents),
+     * `LOCK_TASK_MODE_LOCKED` (2) = kiosk penuh.
+     */
+    private fun lockTaskState(): Int = try {
+        (activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
+            .lockTaskModeState
+    } catch (_: Exception) {
+        ActivityManager.LOCK_TASK_MODE_NONE
+    }
+
+    /**
+     * Laporan kesiapan kiosk untuk halaman persiapan ujian.
+     *
+     * Urutan pemeriksaan penting: API `DevicePolicyManager` yang menyangkut
+     * Lock Task (`isLockTaskPermitted`, `setLockTaskPackages`) melempar
+     * `SecurityException` bila aplikasi BUKAN device owner, jadi seluruhnya
+     * hanya dipanggil setelah status device owner dipastikan.
+     */
+    fun lockTaskReport(): Map<String, Any?> {
+        val dpm = devicePolicyManager()
+        val owner = try {
+            dpm?.isDeviceOwnerApp(activity.packageName) == true
+        } catch (_: Exception) {
+            false
+        }
+        val whitelisted = if (owner) {
+            try {
+                dpm?.isLockTaskPermitted(activity.packageName) == true
+            } catch (_: Exception) {
+                false
+            }
+        } else {
+            false
+        }
+
+        return mapOf(
+            "deviceOwner" to owner,
+            "adminActive" to isDeviceAdminActive(),
+            "whitelisted" to whitelisted,
+            "lockTaskState" to lockTaskState(),
+            "kioskActive" to kioskActive,
+        )
+    }
+
+    /**
+     * Masuk Lock Task Mode (kiosk sejati).
+     *
+     * Tanpa status device owner, `startLockTask()` hanya memunculkan dialog
+     * persetujuan screen pinning (lihat dokumentasi atribut `lockTaskMode`:
+     * "otherwise the user will be presented with a dialog to approve entering
+     * pinned mode"). Karena itu langkah berikut dijalankan lebih dulu:
+     *
+     *  1. daftarkan paket ini sebagai task yang boleh dikunci
+     *     (`setLockTaskPackages`) — hanya berhasil sebagai device owner;
+     *  2. batasi fitur sistem ke informasi sistem saja
+     *     (`LOCK_TASK_FEATURE_SYSTEM_INFO`): jam + baterai tetap tampil, sedang
+     *     Home, Recents, notifikasi, dan panel tindakan global dimatikan;
+     *  3. `startLockTask()` — masuk seketika karena paket sudah terdaftar.
+     *
+     * Kembalikan `true` HANYA bila Lock Task Mode benar-benar aktif, supaya
+     * pemanggil tidak menyangka perangkat terkunci padahal masih bebas.
+     */
+    fun startKiosk(): Boolean {
+        return try {
+            val dpm = devicePolicyManager()
+            if (dpm != null && dpm.isDeviceOwnerApp(activity.packageName)) {
+                val admin = adminComponent()
+                dpm.setLockTaskPackages(admin, arrayOf(activity.packageName))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    dpm.setLockTaskFeatures(
+                        admin,
+                        DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO,
+                    )
+                }
+            }
+            activity.startLockTask()
+            kioskActive = lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE
+            kioskActive
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Keluar dari Lock Task Mode dan hapus whitelist paket.
+     *
+     * Dipanggil saat ujian selesai/ditinggalkan supaya HP kembali normal dan
+     * ujian berikutnya benar-benar memulai kiosk dari awal.
+     */
+    fun stopKiosk() {
+        try {
+            activity.stopLockTask()
+        } catch (_: Exception) {
+        }
+        kioskActive = false
+        try {
+            val dpm = devicePolicyManager()
+            if (dpm != null && dpm.isDeviceOwnerApp(activity.packageName)) {
+                dpm.setLockTaskPackages(adminComponent(), emptyArray())
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Bersihkan sisa kiosk dari proses sebelumnya.
+     *
+     * Kalau aplikasi sempat dibunuh/keluar saat masih terkunci, paket bisa
+     * masih terdaftar; dipanggil saat sesi ditandai tidak aktif lagi.
+     */
+    fun clearStaleKiosk() {
+        kioskActive = false
+        try {
+            val dpm = devicePolicyManager()
+            if (dpm != null && dpm.isDeviceOwnerApp(activity.packageName)) {
+                dpm.setLockTaskPackages(adminComponent(), emptyArray())
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun devicePolicyManager(): DevicePolicyManager? =
+        activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+
+    private fun adminComponent(): ComponentName =
+        ComponentName(activity, ExamDeviceAdminReceiver::class.java)
+
+    // ---------- Sesi ujian aktif ----------
+
+    /**
+     * Nyalakan/matikan penanda "siswa sedang mengerjakan soal".
+     *
+     * Dipakai sebagai penjaga alarm keluar: [onUserLeftActivity] hanya
+     * berbunyi bila penanda ini `true`. Halaman gerbang dan layar token
+     * memanggilnya dengan `false`, sehingga suara alarm tidak pernah bunyi
+     * sebelum ujian benar-benar dimulai.
+     */
+    fun setExamSessionActive(active: Boolean) {
+        examSessionActive = active
+        if (!active) {
+            // Berhenti berbunyi + lepaskan SENJATA, supaya tidak ada
+            // suara yang masih menggantung saat pindah halaman.
+            exitAlarmArmed = false
+            stopExitAlarm()
+            // Sisa kiosk dari percobaan sebelumnya (mis. aplikasi sempat
+            // ditutup paksa saat masih terkunci) dibersihkan supaya sesi
+            // berikutnya mulai dari kondisi bersih.
+            clearStaleKiosk()
+        }
     }
 
     // ---------- FLAG_SECURE ----------
@@ -791,7 +1080,11 @@ private fun knownFloatingLabel(pkg: String): String {
 
     /** Panggilan dari MainActivity: pengguna sedang meninggalkan ujian. */
     fun onUserLeftActivity() {
-        if (exitAlarmArmed) playExitAlarm()
+        // Dua syarat WAJIB: alarm terpasang (di-set dari `engage()`) DAN sesi
+        // ujian benar-benar sedang dikerjakan. Syarat kedua inilah yang
+        // membuat halaman masukan token benar-benar sunyi: siswa boleh
+        // menutup aplikasi di sana tanpa alarm.
+        if (exitAlarmArmed && examSessionActive) playExitAlarm()
     }
 
     /** Panggilan dari MainActivity: pengguna kembali, hentikan alarm. */
@@ -924,11 +1217,7 @@ private fun knownFloatingLabel(pkg: String): String {
 
     private fun isDeviceAdminActive(): Boolean {
         return try {
-            val dpm = activity.getSystemService(Context.DEVICE_POLICY_SERVICE)
-                    as android.app.admin.DevicePolicyManager
-            dpm.isAdminActive(
-                android.content.ComponentName(activity, ExamDeviceAdminReceiver::class.java),
-            )
+            devicePolicyManager()?.isAdminActive(adminComponent()) == true
         } catch (_: Exception) {
             false
         }

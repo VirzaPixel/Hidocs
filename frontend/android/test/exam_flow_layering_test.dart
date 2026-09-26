@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +9,7 @@ import 'package:hi_docs/providers/form_provider.dart';
 import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
 import 'package:hi_docs/screens/exam/exam_token_screen.dart';
 import 'package:hi_docs/screens/forms/user_form_detail_screen.dart';
+import 'package:hi_docs/services/security/exam_security_service.dart';
 
 /// Regresi untuk urutan alur ujian (Revisi Lanjutan 8):
 ///
@@ -54,6 +56,68 @@ void _useTallScreen(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
+/// Payload tiruan untuk [MethodChannel] `id.hidocs.app/security`.
+///
+/// Native mengirim objek `{'apps': [...], 'totalInstalled': n}`. Daftar
+/// kosong dianggap **gagal memindai** oleh `screenInstalledPayload`
+/// (fail-closed: HP Android pasti punya puluhan aplikasi), jadi payload di
+/// sini memuat satu aplikasi biasa yang tidak menghalangi ujian.
+Map<String, Object?> _cleanScreeningPayload() => <String, Object?>{
+      'apps': <Map<String, Object?>>[
+        <String, Object?>{
+          'packageName': 'com.example.calculator',
+          'appName': 'Calculator',
+          'isSystem': false,
+          'isFloatingActive': false,
+          'declaresOverlayPermission': false,
+          'overlayPermissionGranted': false,
+          'isRunning': false,
+        },
+      ],
+      'totalInstalled': 48,
+    };
+
+/// Tiruan channel keamanan native: HP dianggap SIAP (device owner aktif,
+/// tidak ada aplikasi mengganggu, izin overlay ada).
+///
+/// Sejak kunci kiosk ditambahkan, halaman persiapan ujian menuntut status
+/// device owner. Tanpa tiruan ini `getLockTaskReport` gagal dan tombol mulai
+/// tetap nonaktif, sehingga pengujian alur tidak bisa berjalan.
+void _mockReadySecurityChannel(WidgetTester tester) {
+  const channel = MethodChannel('id.hidocs.app/security');
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+      (call) async {
+    switch (call.method) {
+      case 'getInstalledApps':
+      case 'getActiveFloatingApps':
+        return _cleanScreeningPayload();
+      case 'canDrawOverlays':
+        return true;
+      case 'getLockTaskReport':
+        return <String, Object?>{
+          'deviceOwner': true,
+          'adminActive': true,
+          'whitelisted': true,
+          'lockTaskState': 2,
+          'kioskActive': true,
+        };
+      default:
+        return null;
+    }
+  });
+  addTearDown(() {
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+}
+
+/// Tandai pengujian berjalan di jalur Android supaya panggilan channel native
+/// benar-benar dikirim ke tiruan [_mockReadySecurityChannel].
+void _asAndroid(WidgetTester tester) {
+  ExamSecurityService.platformOverrideForTest = true;
+  addTearDown(() => ExamSecurityService.platformOverrideForTest = null);
+}
+
 /// Pump beberapa kali sampai kondisi terpenuhi (evaluasi gerbang bersifat
 /// async walaupun di host uji berjalan sangat cepat).
 Future<void> _pumpUntil(
@@ -97,11 +161,13 @@ void main() {
       'gerbang persiapan tidak lagi menuntut sesi ujian terdaftar '
       'dan lanjutnya ke layar token', (tester) async {
     _useTallScreen(tester);
+    _asAndroid(tester);
+    _mockReadySecurityChannel(tester);
     await tester.pumpWidget(_wrap(ExamLockdownGateScreen(
       form: _buildForm(type: FormType.exam, tokenProtected: true),
     )));
 
-    // Tunggu hasil evaluasi (screening + izin overlay) di UI.
+    // Tunggu hasil evaluasi (screening + izin overlay + kiosk) di UI.
     await _pumpUntil(
       tester,
       () =>
@@ -118,6 +184,10 @@ void main() {
       ),
       findsNothing,
     );
+
+    // Syarat BARU: kunci kiosk (device owner) ikut diperiksa & dilaporkan.
+    expect(find.text('Kunci kiosk aktif (device owner)'), findsOneWidget);
+    expect(find.text('Kunci Kiosk Sejati'), findsOneWidget);
 
     // Tombol utama mengarah ke layar token, bukan langsung pengisian.
     final startButton = find.widgetWithText(ElevatedButton,
@@ -138,6 +208,8 @@ void main() {
   testWidgets('gerbang memakai label "Mulai Ujian" untuk tipe survei',
       (tester) async {
     _useTallScreen(tester);
+    _asAndroid(tester);
+    _mockReadySecurityChannel(tester);
     await tester.pumpWidget(_wrap(ExamLockdownGateScreen(
       form: _buildForm(type: FormType.survey),
     )));
@@ -154,5 +226,56 @@ void main() {
       find.widgetWithText(ElevatedButton, 'Mulai Ujian'),
       findsOneWidget,
     );
+  });
+
+  testWidgets(
+      'tanpa device owner gerbang menahan tombol mulai dan menampilkan '
+      'petunjuk provisioning', (tester) async {
+    _useTallScreen(tester);
+    _asAndroid(tester);
+    // Channel keamanan sengaja dibiarkan tanpa `getLockTaskReport`: kesiapan
+    // kiosk dianggap tidak tersedia (HP belum diprovision).
+    const channel = MethodChannel('id.hidocs.app/security');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+        (call) async {
+      switch (call.method) {
+        case 'getInstalledApps':
+        case 'getActiveFloatingApps':
+          return _cleanScreeningPayload();
+        case 'canDrawOverlays':
+          return true;
+        default:
+          return null;
+      }
+    });
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await tester.pumpWidget(_wrap(ExamLockdownGateScreen(
+      form: _buildForm(type: FormType.exam, tokenProtected: true),
+    )));
+
+    await _pumpUntil(
+      tester,
+      () => find
+          .text('Diperlukan aksi dari teknisi/guru')
+          .evaluate()
+          .isNotEmpty,
+    );
+
+    // Syarat kiosk belum terpenuhi → tombol utama tetap nonaktif.
+    expect(
+      find.widgetWithText(ElevatedButton, 'Syarat Belum Lengkap'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(ElevatedButton, 'Lanjut Ke Token Ujian'),
+      findsNothing,
+    );
+    // Petunjuk provisioning ditampilkan supaya teknisi tahu langkahnya.
+    expect(find.text('Diperlukan aksi dari teknisi/guru'), findsOneWidget);
+    expect(find.text('tool/exam_device_owner.sh'), findsOneWidget);
   });
 }

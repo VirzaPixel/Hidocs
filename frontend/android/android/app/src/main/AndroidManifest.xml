@@ -30,6 +30,8 @@
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
+            android:excludeFromRecents="true"
+            android:lockTaskMode="if_whitelisted"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -69,7 +71,10 @@
                 android:value="Menjaga sesi ujian HiDocs tetap terkunci" />
         </service>
 
-        <!-- Device admin opsional untuk penegakan lebih kuat -->
+        <!-- Device admin: dipakai sekaligus sebagai komponen admin untuk
+             Lock Task Mode (kiosk sejati). Aplikasi harus menjadi device owner
+             (lihat tool/exam_device_owner.sh) supaya `setLockTaskPackages`
+             berhasil; tanpa itu `startLockTask` hanya jadi screen pinning. -->
         <receiver
             android:name=".ExamDeviceAdminReceiver"
             android:permission="android.permission.BIND_DEVICE_ADMIN"

@@ -141,6 +141,52 @@ class BatteryInfo {
   const BatteryInfo({required this.level, required this.charging});
 }
 
+/// Kesiapan Lock Task Mode (kiosk sejati) di perangkat ini.
+///
+/// Lock Task Mode hanya terkunci sungguhan bila aplikasi berstatus **device
+/// owner** — lihat `tool/exam_device_owner.sh`. Tanpa status itu,
+/// `startLockTask()` berhenti pada dialog persetujuan screen pinning yang
+/// masih bisa dibatalkan siswa.
+class KioskReadiness {
+  /// HiDocs sudah menjadi device owner (kunci sejati bisa dipakai).
+  final bool deviceOwner;
+
+  /// Device admin HiDocs aktif (opsional; bukan syarat Lock Task).
+  final bool adminActive;
+
+  /// Paket HiDocs terdaftar di allowlist Lock Task (`setLockTaskPackages`).
+  final bool whitelisted;
+
+  /// `ActivityManager.getLockTaskModeState()`: 0 none, 1 pinned, 2 locked.
+  final int lockTaskState;
+
+  /// Lock Task Mode sedang aktif pada proses ini.
+  final bool kioskActive;
+
+  const KioskReadiness({
+    required this.deviceOwner,
+    required this.adminActive,
+    required this.whitelisted,
+    required this.lockTaskState,
+    required this.kioskActive,
+  });
+
+  /// Nilai aman untuk platform non-Android / channel tidak tersedia.
+  static const KioskReadiness unsupported = KioskReadiness(
+    deviceOwner: false,
+    adminActive: false,
+    whitelisted: false,
+    lockTaskState: 0,
+    kioskActive: false,
+  );
+
+  /// Kunci sejati tersedia di perangkat ini.
+  bool get available => deviceOwner;
+
+  /// Perangkat sedang benar-benar terkunci (kiosk penuh, bukan pinned).
+  bool get locked => lockTaskState == 2;
+}
+
 
 class InstalledAppInfo {
   final String packageName;
@@ -375,7 +421,21 @@ class ExamSecurityService {
   static const MethodChannel _channel =
       MethodChannel('id.hidocs.app/security');
 
-  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  /// Guardian sebelum setiap panggilan channel native.
+  ///
+  /// Memakai `Platform.isAndroid` (bukan `defaultTargetPlatform`) supaya
+  /// perilakunya di host pengujian tetap sama dengan perangkat uji.
+  /// [platformOverrideForTest] tersedia bagi widget test yang perlu
+  /// menguji jalur Android tanpa mengubah semantik produksi.
+  static bool get _isAndroid =>
+      platformOverrideForTest ?? (!kIsWeb && Platform.isAndroid);
+
+  /// Timpa deteksi platform khusus widget test.
+  ///
+  /// `null` (default) = pakai deteksi asli. Diisi `true` untuk menguji
+  /// bahwa penguncian ujian benar-benar menembak channel native.
+  @visibleForTesting
+  static bool? platformOverrideForTest;
 
   // ---------------------------------------------------------------
   // Penguncian layar (FLAG_SECURE)
@@ -549,6 +609,95 @@ class ExamSecurityService {
     } catch (_) {
       return 1.0;
     }
+  }
+
+  // ---------------------------------------------------------------
+  // Kunci tampilan penuh
+  // ---------------------------------------------------------------
+
+  /// Menembakkan kunci fullscreen ke sisi native (`setFullscreenLock`).
+  ///
+  /// `SystemUiMode.immersiveSticky` dari Flutter masih menyisakan celah:
+  /// di beberapa perangkat, geser dari tepi atas memunculkan status bar
+  /// sesaat. Native menambahkan `FLAG_FULLSCREEN` dan memakai
+  /// `BEHAVIOR_DEFAULT` sehingga system bar tidak muncul lewat gestur.
+  static Future<void> setFullscreenLock(bool enabled) async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('setFullscreenLock', {
+        'enabled': enabled,
+      });
+    } catch (_) {}
+  }
+
+  /// Nyalakan/matikan penanda "sesi ujian sedang dikerjakan" di sisi native.
+  ///
+  /// Ini penjaga alarm keluar. Halaman gerbang dan layar token memanggilnya
+  /// dengan `false` sehingga suara `assets/keluar.mp3` tidak pernah berbunyi
+  /// sebelum siswa benar-benar mulai mengisi soal — alarm hanya hidup selama
+  /// `ExamLockdownService.engage()` sudah dijalankan, dan dimatikan lagi oleh
+  /// `ExamLockdownService.release()`.
+  ///
+  /// Saat dimatikan, native sekalian menghentikan suara yang mungkin masih
+  /// berbunyi dari sesi sebelumnya.
+  static Future<void> setExamSessionActive(bool active) async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('setExamSessionActive', {
+        'active': active,
+      });
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------
+  // Lock Task Mode — kiosk sejati (butuh status device owner)
+  // ---------------------------------------------------------------
+
+  /// Kesiapan Lock Task Mode di perangkat ini.
+  ///
+  /// `available` hanya `true` bila HiDocs sudah menjadi **device owner**;
+  /// tanpa itu `startLockTask()` tidak pernah masuk mode terkunci dan hanya
+  /// menjadi dialog screen pinning. Nilai ini dibaca halaman persiapan ujian
+  /// supaya bisa memberi tahu guru/siswa bahwa HP belum diprovision.
+  ///
+  /// Kegagalan channel (mis. build native lama yang belum punya method ini)
+  /// dilaporkan sebagai TIDAK siap — sama seperti [canDrawOverlays] — supaya
+  /// aplikasi tidak pernah menyangka perangkat terkunci padahal tidak.
+  static Future<KioskReadiness> getKioskReadiness() async {
+    if (!_isAndroid) return KioskReadiness.unsupported;
+    try {
+      final raw = await _channel.invokeMethod<Object?>('getLockTaskReport');
+      if (raw is Map) {
+        return KioskReadiness(
+          deviceOwner: raw['deviceOwner'] == true,
+          adminActive: raw['adminActive'] == true,
+          whitelisted: raw['whitelisted'] == true,
+          lockTaskState: (raw['lockTaskState'] as num?)?.toInt() ?? 0,
+          kioskActive: raw['kioskActive'] == true,
+        );
+      }
+      return KioskReadiness.unsupported;
+    } catch (_) {
+      return KioskReadiness.unsupported;
+    }
+  }
+
+  /// Masuk Lock Task Mode. `true` hanya bila perangkat benar-benar terkunci.
+  static Future<bool> startKiosk() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('startKiosk') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Keluar dari Lock Task Mode (dipanggil saat ujian selesai/ditinggalkan).
+  static Future<void> stopKiosk() async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('stopKiosk');
+    } catch (_) {}
   }
 
   // ---------------------------------------------------------------

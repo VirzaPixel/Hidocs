@@ -8,12 +8,16 @@ import 'exam_security_service.dart';
 
 /// Ringkasan kesiapan SELURUH syarat persiapan ujian (Revisi Lanjutan 7).
 ///
-/// Syaratnya HANYA dua + pemeriksaan sesi:
+/// Syaratnya TIGA:
 ///  1. `overlayPermissionOk` — HiDocs punya izin "tampil di atas aplikasi".
 ///  2. `floatingAppsClean` — hasil screening seluruh aplikasi terpasang:
 ///     tidak ada alat floating khusus terpasang dan tidak ada overlay yang
 ///     sedang tampil (lihat [ExamLockdownService.evaluateLive] untuk versi
 ///     "hanya yang sedang tampil" selama ujian).
+///  3. `kioskReady` — HP sudah diprovision sebagai **device owner** sehingga
+///     Lock Task Mode (kiosk sejati) bisa dikunci saat siswa mengerjakan.
+///     Tanpa status ini `startLockTask()` hanya berhenti pada dialog screen
+///     pinning yang masih bisa dibatalkan siswa (lihat `KioskReadiness`).
 ///
 /// "Mode Sunyi Total" DIHAPUS sesuai permintaan: tidak ada DND, tidak ada
 /// akses kebijakan notifikasi. Field `dndAccessOk`/`dndActive` dipertahankan
@@ -22,6 +26,9 @@ import 'exam_security_service.dart';
 class LockdownReadiness {
   final bool overlayPermissionOk;
   final bool floatingAppsClean;
+
+  /// Kesiapan Lock Task Mode; lihat [KioskReadiness].
+  final KioskReadiness kiosk;
 
   /// Kompatibilitas: selalu true. Mode Sunyi Total (DND) dihapus —
   /// lihat [ExamLockdownService].
@@ -37,16 +44,19 @@ class LockdownReadiness {
     @Deprecated('Mode Sunyi Total dihapus (Revisi Lanjutan 6). Selalu true.')
     this.dndActive = true,
     required this.screening,
+    this.kiosk = KioskReadiness.unsupported,
   });
 
-  /// Hanya screening floating aktif + izin overlay.
-  bool get isReady => overlayPermissionOk && floatingAppsClean;
+  /// Hanya screening floating aktif + izin overlay + kesiapan kiosk.
+  bool get isReady =>
+      overlayPermissionOk && floatingAppsClean && kiosk.deviceOwner;
 
   /// Daftar id syarat yang belum terpenuhi.
   List<String> get unmetRequirements {
     final list = <String>[];
     if (!overlayPermissionOk) list.add('overlay');
     if (!floatingAppsClean) list.add('floating_apps');
+    if (!kiosk.deviceOwner) list.add('kiosk');
     return list;
   }
 }
@@ -71,17 +81,20 @@ class ExamLockdownService {
   ExamLockdownService._();
 
   /// Jalankan seluruh pemeriksaan dan kembalikan ringkasannya.
-  /// Read-only: TIDAK mengubah volume maupun izin apa pun.
+  /// Read-only: TIDAK mengubah volume, izin, maupun status Lock Task.
   ///
   /// Versi "persiapan": memindai seluruh aplikasi yang terpasang di perangkat
-  /// dan mengkategorikan mana yang aplikasi floating.
+  /// dan mengkategorikan mana yang aplikasi floating, sekaligus membaca
+  /// kesiapan Lock Task Mode (apakah HiDocs sudah jadi device owner).
   static Future<LockdownReadiness> evaluate() async {
     final screening = await ExamSecurityService.screenFloatingApps();
     final overlayOk = await ExamSecurityService.canDrawOverlays();
+    final kiosk = await ExamSecurityService.getKioskReadiness();
 
     return LockdownReadiness(
       overlayPermissionOk: overlayOk,
       floatingAppsClean: screening.isClean,
+      kiosk: kiosk,
       screening: screening,
     );
   }
@@ -93,31 +106,80 @@ class ExamLockdownService {
   static Future<LockdownReadiness> evaluateLive() async {
     final screening = await ExamSecurityService.screenActiveFloatingApps();
     final overlayOk = await ExamSecurityService.canDrawOverlays();
+    final kiosk = await ExamSecurityService.getKioskReadiness();
 
     return LockdownReadiness(
       overlayPermissionOk: overlayOk,
       floatingAppsClean: screening.isClean,
+      kiosk: kiosk,
       screening: screening,
     );
   }
 
   /// Aktifkan persiapan/awal ujian: FLAG_SECURE, foreground service,
-  /// volume media AUTO FULL (nilai lama disimpan untuk dipulihkan), dan
-  /// alarm keluar aplikasi.
-  static Future<void> engage() async {
+  /// volume media AUTO FULL (nilai lama disimpan untuk dipulihkan), alarm
+  /// keluar aplikasi, dan Lock Task Mode (kiosk sejati).
+  ///
+  /// `setExamSessionActive(true)` adalah pemicu penjaga alarm keluar di
+  /// native: tanpa itu, `MainActivity` akan membunyikan alarm untuk halaman
+  /// mana pun yang kebetulan terbuka sebelum ujian dimulai (mis. layar
+  /// masukan token).
+  ///
+  /// Urutan penting: penanda sesi dinyalakan SEBELUM [ExamSecurityService
+  /// .startKiosk]. Bila siswa menekan Home tepat saat kiosk aktif, penanda
+  /// sesi sudah `true` sehingga alarm berbunyi.
+  ///
+  /// Kembalikan `true` bila perangkat benar-benar terkunci (device owner).
+  static Future<bool> engage() async {
     await ExamSecurityService.enableSecureScreen();
     await ExamSecurityService.startLockService();
     await ExamSecurityService.maximizeExamVolume();
+    await ExamSecurityService.setExamSessionActive(true);
     await ExamSecurityService.setExitAlarmArmed(true);
+    // Kunci tampilan penuh: status bar + nav bar tidak bisa dimunculkan lagi
+    // lewat gestur tepi layar.
+    await ExamSecurityService.setFullscreenLock(true);
+    // Kunci Task Mode: Home/Recents/notifikasi mati total. Hanya berhasil
+    // penuh bila HiDocs berstatus device owner (lihat KioskReadiness).
+    return ExamSecurityService.startKiosk();
   }
 
   /// Lepaskan persiapan/penguncian: kembalikan FLAG_SECURE, hentikan service,
-  /// cabut alarm keluar, dan pulihkan volume perangkat ke nilai semula.
+  /// cabut alarm keluar, lepas Lock Task Mode, dan pulihkan volume perangkat
+  /// ke nilai semula.
   static Future<void> release() async {
+    // Keluar dari kiosk lebih dulu supaya aplikasi bisa benar-benar meninggalkan
+    // layar ujian.
+    await ExamSecurityService.stopKiosk();
+    // Matikan penanda sesi DULUAN: native ikut menghentikan suara yang
+    // masih berbunyi sebelum alarm dilepas sepenuhnya.
+    await ExamSecurityService.setExamSessionActive(false);
     await ExamSecurityService.setExitAlarmArmed(false);
+    await ExamSecurityService.setFullscreenLock(false);
     await ExamSecurityService.disableSecureScreen();
     await ExamSecurityService.stopLockService();
     await ExamSecurityService.restoreExamVolume();
+  }
+
+  /// Pastikan tidak ada penguncian maupun suara yang menyala.
+  ///
+  /// Dipanggil halaman gerbang dan layar token: keduanya BUKAN bagian dari
+  /// sesi ujian, jadi siswa boleh menutup aplikasi di sana tanpa alarm
+  /// berbunyi dan tanpa layar terkunci. Fungsi ini idempoten — aman
+  /// dipanggil berulang, termasuk untuk membersihkan sisa sesi sebelumnya.
+  ///
+  /// Jika kiosk ternyata masih aktif (mis. aplikasi dibuka ulang saat masih
+  /// terkunci), Lock Task Mode juga dilepas di sini supaya tidak ada paket
+  /// yang tertinggal di allowlist.
+  static Future<void> ensureIdle() async {
+    await ExamSecurityService.setExamSessionActive(false);
+    await ExamSecurityService.setExitAlarmArmed(false);
+    await ExamSecurityService.stopExitAlarm();
+    await ExamSecurityService.setFullscreenLock(false);
+    final kiosk = await ExamSecurityService.getKioskReadiness();
+    if (kiosk.kioskActive) {
+      await ExamSecurityService.stopKiosk();
+    }
   }
 
   /// Kirim event pelanggaran ke backend dan kembalikan status berhasil.

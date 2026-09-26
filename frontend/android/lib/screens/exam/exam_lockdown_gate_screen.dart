@@ -47,6 +47,10 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Halaman ini BUKAN sesi ujian: pastikan tidak ada alarm keluar maupun
+    // kunci layar yang masih menyala dari percobaan sebelumnya, sehingga
+    // siswa boleh menutup aplikasi tanpa suara alarm.
+    ExamLockdownService.ensureIdle();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
@@ -88,7 +92,12 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     }
 
     setState(() => _engaging = true);
-    await ExamLockdownService.engage();
+
+    // CATATAN: `engage()` SENGAJA tidak dipanggil di sini. Halaman ini hanya
+    // memeriksa perangkat (read-only). Volume penuh + alarm keluar baru
+    // dinyalakan oleh [FillFormScreen] saat siswa benar-benar mulai mengisi —
+    // kalau dipasang di sini, suara alarm keluar ikut berbunyi saat siswa
+    // masih di layar masukan token.
     if (!mounted) return;
 
     Navigator.pushReplacement(
@@ -172,6 +181,22 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
                     dark: isDark,
                     onAction: () => ExamSecurityService.openOverlaySettings(),
                   ),
+                  const SizedBox(height: 20),
+
+                  _SectionTitle(
+                    title: l10n.isIndonesian
+                        ? 'Proses 3 — Kunci Kiosk (Device Owner)'
+                        : 'Step 3 — Kiosk Lock (Device Owner)',
+                    subtitle: l10n.isIndonesian
+                        ? 'Saat siswa mengerjakan, tombol Home, daftar aplikasi '
+                              'terbaru, dan panel notifikasi dimatikan total. '
+                              'Jam + baterai tetap tampil dari sistem.'
+                        : 'While working, Home, Recents, and the notification '
+                              'panel are fully disabled. Clock + battery stay '
+                              'visible from the system.',
+                  ),
+                  const SizedBox(height: 10),
+                  _KioskCard(kiosk: ready?.kiosk, dark: isDark),
                   const SizedBox(height: 20),
 
                   // "Fitur volume otomatis" (kartu interaktif + tombol tes)
@@ -880,6 +905,201 @@ class _RequirementCard extends StatelessWidget {
   }
 }
 
+/// Kartu kesiapan kunci kiosk (Lock Task Mode).
+///
+/// Status device owner TIDAK bisa diaktifkan dari dalam aplikasi — Android
+/// hanya mengizinkan lewat provisioning (ADB/QR). Jadi kartu ini tidak
+/// menawarkan tombol "Aktifkan", melainkan menampilkan langkah yang harus
+/// dijalankan teknisi/guru supaya tidak ada harapan palsu.
+class _KioskCard extends StatelessWidget {
+  final KioskReadiness? kiosk;
+  final bool dark;
+
+  const _KioskCard({required this.kiosk, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final k = kiosk;
+    final owner = k?.deviceOwner ?? false;
+    final color = owner ? AppTheme.success : AppTheme.error;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: dark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: owner
+              ? color.withValues(alpha: 0.35)
+              : (dark ? AppTheme.darkBorder : AppTheme.border),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  owner ? Icons.lock_rounded : Icons.lock_open_rounded,
+                  color: color,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.isIndonesian
+                          ? 'Kunci Kiosk Sejati'
+                          : 'True Kiosk Lock',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: dark
+                            ? AppTheme.darkTextPrimary
+                            : AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      owner
+                          ? (l10n.isIndonesian
+                              ? 'HP siap: Home, Recents, dan panel notifikasi '
+                                    'akan dimatikan selama ujian.'
+                              : 'Device ready: Home, Recents, and the '
+                                    'notification panel are disabled during the exam.')
+                          : (l10n.isIndonesian
+                              ? 'HP belum diprovision sebagai device owner. '
+                                    'Tanpa ini siswa masih bisa keluar dari '
+                                    'aplikasi.'
+                              : 'Device is not provisioned as device owner. '
+                                    'Without it, students can still leave the app.'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: dark
+                            ? AppTheme.darkTextMuted
+                            : AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                owner
+                    ? Icons.check_circle_rounded
+                    : Icons.error_outline_rounded,
+                color: color,
+                size: 24,
+              ),
+            ],
+          ),
+          if (owner && (k?.adminActive ?? false)) ...[
+            const SizedBox(height: 10),
+            Text(
+              l10n.isIndonesian
+                  ? 'Device admin aktif — penegakan tambahan siap.'
+                  : 'Device admin active — extra enforcement ready.',
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.45,
+                color:
+                    dark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+              ),
+            ),
+          ],
+          if (!owner) ...[
+            const SizedBox(height: 12),
+            _KioskProvisionHint(dark: dark),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Petunjuk provisioning device owner (tidak bisa dari dalam aplikasi).
+class _KioskProvisionHint extends StatelessWidget {
+  final bool dark;
+
+  const _KioskProvisionHint({required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.error.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.build_rounded, size: 15, color: AppTheme.error),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l10n.isIndonesian
+                      ? 'Diperlukan aksi dari teknisi/guru'
+                      : 'Requires technician/teacher action',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l10n.isIndonesian
+                ? 'Hubungkan HP ke komputer dengan USB debugging aktif, lalu '
+                      'jalankan skrip di bawah dari folder frontend/android. '
+                      'Buka ulang aplikasi setelah itu agar izin kiosk dikenali.'
+                : 'Connect the phone to a computer with USB debugging enabled, '
+                      'then run the script below from the frontend/android '
+                      'folder. Relaunch the app afterwards so the kiosk '
+                      'permission is recognized.',
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.45,
+              color: dark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SelectableText(
+            'tool/exam_device_owner.sh',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'monospace',
+              color: dark ? AppTheme.accent : AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChecklistSummary extends StatelessWidget {
   final LockdownReadiness? ready;
   final bool dark;
@@ -903,6 +1123,12 @@ class _ChecklistSummary extends StatelessWidget {
       (
         l10n.isIndonesian ? 'Izin overlay HiDocs' : 'HiDocs overlay permission',
         r?.overlayPermissionOk ?? false,
+      ),
+      (
+        l10n.isIndonesian
+            ? 'Kunci kiosk aktif (device owner)'
+            : 'Kiosk lock ready (device owner)',
+        r?.kiosk.deviceOwner ?? false,
       ),
     ];
 
