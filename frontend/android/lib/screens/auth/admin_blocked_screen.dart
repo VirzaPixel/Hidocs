@@ -51,7 +51,7 @@ class _AdminBlockedScreenState extends State<AdminBlockedScreen> {
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         elevation: 0,
-        backgroundColor: context.primary,
+        backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
       ),
@@ -110,15 +110,17 @@ class _AdminBlockedScreenState extends State<AdminBlockedScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: context.primaryFaint,
+                      color: AppTheme.primaryFaint,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: context.primaryWith(0.22)),
+                      // Sama dengan AppTheme.primary pada alpha 0.22.
+                      border: Border.all(
+                          color: const Color(0x38133E76)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.language_rounded,
-                            size: 18, color: context.primary),
+                        const Icon(Icons.language_rounded,
+                            size: 18, color: AppTheme.primary),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -140,7 +142,7 @@ class _AdminBlockedScreenState extends State<AdminBlockedScreen> {
                       onPressed: () => Navigator.of(context)
                           .pushNamedAndRemoveUntil('/login', (r) => false),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: context.primary,
+                        backgroundColor: AppTheme.primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(

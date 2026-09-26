@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -72,8 +73,12 @@ class _FillFormScreenState extends State<FillFormScreen>
   bool _overlayWarningVisible = false;
   String _overlayWarningText = '';
   int _violationCount = 0;
+
+  /// `true` selama aplikasi sedang berada di luar foreground dalam SATU
+  /// episode. Mencegah satu kali keluar dihitung beberapa kali.
+  bool _exitEpisode = false;
+
   Timer? _autosaveTimer;
-  Timer? _floatingScanTimer;
   bool _accessRevoked = false;
   final Set<String> _dirtyQuestions = {};
   final Set<String> _unsavedQuestions = {};
@@ -107,6 +112,11 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     _responseId = widget.responseId.isNotEmpty ? widget.responseId : null;
 
+    // Status bar HP disembunyikan selama mengisi (immersiveSticky: tidak
+    // bisa di-swipe untuk dibuka lagi). Informasinya — jam + baterai —
+    // disediakan aplikasi sendiri lewat [_DeviceStatusBar].
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
     if (_examMode) {
       WidgetsBinding.instance.addObserver(this);
 
@@ -119,13 +129,12 @@ class _FillFormScreenState extends State<FillFormScreen>
         (_) => _flushAutosave(),
       );
 
-      // Skorulasi berkala (setiap 30 detik) untuk mendeteksi aplikasi
-      // floating baru yang mungkin muncul selama ujian berlangsung.
-      _floatingScanTimer = Timer.periodic(
-        const Duration(seconds: 30),
-        (_) => _periodicFloatingScan(),
-      );
-
+      // CATATAN (Revisi Lanjutan 9): skoring aplikasi floating SETELAH
+      // ujian dimulai DIHAPUS. Deteksi floating hanya dijalankan sekali di
+      // halaman "Persiapan Ujian" (screening penuh). Selama mengerjakan,
+      // aplikasi tidak boleh memunculkan notifikasi floating — free-riding
+      // pada sinyal yang salah membuat '=' deteksi hantu' dan nama baik
+      // aplikasi rusak.
       _restoreExamSession();
     }
 
@@ -181,9 +190,11 @@ class _FillFormScreenState extends State<FillFormScreen>
   void dispose() {
     _timer?.cancel();
 
+    // Kembalikan status bar sistem seperti semula saat meninggalkan halaman.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
     if (_examMode) {
       _autosaveTimer?.cancel();
-      _floatingScanTimer?.cancel();
       WidgetsBinding.instance.removeObserver(this);
       ExamViolationReporter.unregister();
       ExamLockdownService.release();
@@ -209,38 +220,24 @@ class _FillFormScreenState extends State<FillFormScreen>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        // Pengganti native onPause: pastikan alarm keluar tetap berbunyi
-        // walau hook platform tidak sempat terpanggil.
+      case AppLifecycleState.hidden:
+        // Android mengirim `inactive` → `hidden` → `paused` untuk SATU kali
+        // keluar aplikasi. Tanpa [_exitEpisode] ketiganya terhitung sebagai
+        // tiga pelanggaran terpisah sehingga satu keluar saja langsung
+        // mencabut akses ujian. [_exitEpisode] memastikan satu episode keluar
+        // = satu pelanggaran, dan direset begitu aplikasi kembali aktif.
+        if (_exitEpisode) return;
+        _exitEpisode = true;
+
+        // Alarm keluar tetap berbunyi walau hook platform tidak sempat
+        // terpanggil (native juga memicunya sendiri dari onPause).
         _soundExitAlarm();
-        _violationCount++;
-        _reportViolation(
-          'APP_BACKGROUNDED',
-          message:
-              'Aplikasi ujian ditinggalkan (state: $state). Pelanggaran ke-$_violationCount.',
-        );
-        if (_violationCount >= kMaxExitViolations) {
-          _revokeAndSubmit();
-        } else if (mounted) {
-          final remaining = kMaxExitViolations - _violationCount;
-          setState(() {
-            _overlayWarningVisible = true;
-            _overlayWarningText =
-                'Anda terdeteksi keluar dari aplikasi ujian.\n'
-                'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
-                'Sisa $remaining kesempatan lagi, setelah itu akses ujian akan dibatalkan.';
-          });
-        }
+        _registerExitViolation(state);
         break;
 
       case AppLifecycleState.resumed:
-        _refreshLockdown();
-        break;
-
-      case AppLifecycleState.hidden:
-        _reportViolation(
-          'WINDOW_BLUR',
-          message: 'Aplikasi ujian tidak lagi menjadi fokus.',
-        );
+        // Episodenya sudah selesai — hitungan berikutnya kembali dari nol.
+        _exitEpisode = false;
         break;
 
       case AppLifecycleState.detached:
@@ -248,70 +245,30 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
   }
 
-  Future<void> _refreshLockdown() async {
-    if (!_examMode || _accessRevoked) return;
-    //evaluateLive: hanya overlay yang SEDANG tampil yang dihitung, supaya
-    //aplikasi floating yang hanya terpasang tidak memicu pelanggaran tiap
-    //kali aplikasi kembali ke depan.
-    final readiness = await ExamLockdownService.evaluateLive();
+  /// Catat satu pelanggaran "keluar aplikasi" lalu tampilkan peringatannya.
+  Future<void> _registerExitViolation(AppLifecycleState state) async {
+    if (_accessRevoked || _submitted) return;
+
+    _violationCount++;
+    _reportViolation(
+      'APP_BACKGROUNDED',
+      message: 'Aplikasi ujian ditinggalkan (state: $state). '
+          'Pelanggaran ke-$_violationCount dari $kMaxExitViolations.',
+    );
+
+    if (_violationCount >= kMaxExitViolations) {
+      await _revokeAndSubmit();
+      return;
+    }
     if (!mounted) return;
-    if (!readiness.isReady) {
-      _violationCount++;
-      _reportViolation(
-        'LOCKDOWN_VIOLATION',
-        message:
-            'Syarat penguncian dilanggar (${readiness.unmetRequirements.join(', ')}). '
-            'Pelanggaran ke-$_violationCount.',
-      );
-      if (_violationCount >= kMaxExitViolations) {
-        _revokeAndSubmit();
-      } else {
-        final remaining = kMaxExitViolations - _violationCount;
-        setState(() {
-          _overlayWarningVisible = true;
-          _overlayWarningText =
-              'Syarat penguncian ujian dilanggar '
-              '(${readiness.unmetRequirements.join(', ')}).\n'
-              'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
-              'Sisa $remaining kesempatan. '
-              'Kembalikan kondisi perangkat lalu tekan "Saya Mengerti, Lanjutkan".';
-        });
-      }
-    }
-  }
-
-  /// Scan floating app berkala (dipanggil oleh timer).
-  /// Sama seperti _refreshLockdown tapi hanya fokus pada floating apps.
-  Future<void> _periodicFloatingScan() async {
-    if (!_examMode || _accessRevoked || _submitted) return;
-    try {
-      final screening = await ExamSecurityService.screenActiveFloatingApps();
-      if (!mounted || screening.isClean) return;
-
-      _violationCount++;
-      _reportViolation(
-        'FLOATING_APP_DETECTED',
-        message:
-            'Aplikasi floating terdeteksi aktif selama ujian. '
-            'Pelanggaran ke-$_violationCount. '
-            'Aplikasi: ${screening.blocking.map((a) => a.displayName).join(', ')}',
-      );
-
-      if (_violationCount >= kMaxExitViolations) {
-        _revokeAndSubmit();
-      } else {
-        final remaining = kMaxExitViolations - _violationCount;
-        setState(() {
-          _overlayWarningVisible = true;
-          _overlayWarningText =
-              'Aplikasi mengambang/floating terdeteksi aktif.\n'
-              'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
-              'Tutup aplikasi tersebut. Sisa $remaining kesempatan.';
-        });
-      }
-    } catch (_) {
-      // Scan gagal — diam saja, jangan ganggu user.
-    }
+    final remaining = kMaxExitViolations - _violationCount;
+    setState(() {
+      _overlayWarningVisible = true;
+      _overlayWarningText =
+          'Anda terdeteksi keluar dari aplikasi ujian.\n'
+          'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
+          'Sisa $remaining kesempatan lagi, setelah itu akses ujian akan dibatalkan.';
+    });
   }
 
   /// Revoke akses dan submit otomatis karena pelanggaran melebihi batas.
@@ -329,7 +286,6 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     _timer?.cancel();
     _autosaveTimer?.cancel();
-    _floatingScanTimer?.cancel();
 
     if (mounted) {
       setState(() {
@@ -1162,7 +1118,24 @@ class _FillFormScreenState extends State<FillFormScreen>
                 ? AppTheme.darkBg
                 : AppTheme.surfaceLight,
 
-        appBar: AppBar(
+        // ---------------------------------------------------------------
+        // Bilah sistem bikinan aplikasi (Revisi Lanjutan 9).
+        //
+        // Halaman pengisian menutupi status bar HP, jadi jam + baterai
+        // ditampilkan aplikasi sendiri tepat di atas AppBar. Tingginya
+        // dijumlahkan dengan tinggi AppBar sehingga totalnya tetap satu
+        // baris setinggi status bar — tidak memakan ruang extra.
+        // ---------------------------------------------------------------
+        appBar: PreferredSize(
+          preferredSize: Size.fromHeight(
+            kToolbarHeight + _DeviceStatusBar.heightOf(context),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DeviceStatusBar(themeColor: widget.form.themeColor),
+              Expanded(
+                child: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor:
             FormTheme.resolvePrimary(context, widget.form.themeColor),
@@ -1235,8 +1208,12 @@ class _FillFormScreenState extends State<FillFormScreen>
                 isWarning: isWarn,
               ),
             ),
-        ],
-      ),
+          ],
+        ),
+              ),
+            ],
+          ),
+        ),
 
       body: Stack(
         children: [
@@ -1800,6 +1777,131 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
 
     return null;
+  }
+}
+
+/// Bilah status bikinan aplikasi (jam + baterai) untuk halaman pengisian.
+///
+/// Halaman pengisian menyembunyikan status bar HP, jadi widget ini
+/// menyediakan penggantinya: jam berjalan di kiri, persentase + ikon
+/// baterai di kanan, memakai warna tema form yang sama dengan AppBar.
+///
+/// Jam disegarkan tiap 20 detik. Baterai dibaca lewat channel native
+/// `id.hidocs.app/security` (`getBatteryInfo`); bila tidak tersedia
+/// (non-Android) ikonnya disembunyikan dan jam tetap tampil.
+class _DeviceStatusBar extends StatefulWidget {
+  /// Warna tema form — dibuat sama dengan AppBar agar menyatu.
+  final String themeColor;
+
+  const _DeviceStatusBar({required this.themeColor});
+
+  /// Total tinggi baris ini termasuk ruang notch/status bar tersembunyi.
+  static double heightOf(BuildContext context) =>
+      MediaQuery.of(context).padding.top + contentHeight;
+
+  static const double contentHeight = 26;
+
+  @override
+  State<_DeviceStatusBar> createState() => _DeviceStatusBarState();
+}
+
+class _DeviceStatusBarState extends State<_DeviceStatusBar> {
+  Timer? _ticker;
+  DateTime _now = DateTime.now();
+  BatteryInfo? _battery;
+
+  @override
+  void initState() {
+    super.initState();
+    _readBattery();
+    _ticker = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _readBattery();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _readBattery() async {
+    final info = await ExamSecurityService.getBatteryInfo();
+    if (!mounted || info == null) return;
+    setState(() => _battery = info);
+  }
+
+  String get _clock {
+    final h = _now.hour.toString().padLeft(2, '0');
+    final m = _now.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  IconData get _batteryIcon {
+    final battery = _battery;
+    if (battery == null) return Icons.battery_unknown_rounded;
+    if (battery.charging) return Icons.battery_charging_full_rounded;
+    final level = battery.level;
+    if (level <= 10) return Icons.battery_0_bar_rounded;
+    if (level <= 30) return Icons.battery_2_bar_rounded;
+    if (level <= 50) return Icons.battery_3_bar_rounded;
+    if (level <= 80) return Icons.battery_5_bar_rounded;
+    return Icons.battery_full_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final background =
+        FormTheme.resolvePrimary(context, widget.themeColor);
+    final battery = _battery;
+
+    return Container(
+      color: background,
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      child: SizedBox(
+        height: _DeviceStatusBar.contentHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Text(
+                _clock,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              if (battery != null) ...[
+                if (battery.charging)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 3),
+                    child: Icon(
+                      Icons.bolt_rounded,
+                      color: Colors.amberAccent,
+                      size: 14,
+                    ),
+                  ),
+                Text(
+                  '${battery.level}%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(_batteryIcon, color: Colors.white, size: 18),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

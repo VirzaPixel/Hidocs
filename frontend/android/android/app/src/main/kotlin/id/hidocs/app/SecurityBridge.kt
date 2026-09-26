@@ -7,6 +7,8 @@ import android.app.NotificationManager
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.Manifest
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
@@ -87,6 +89,9 @@ class SecurityBridge(
                 "maximizeExamVolume" -> result.success(maximizeExamVolume())
                 "restoreExamVolume" -> result.success(restoreExamVolume())
                 "currentMediaVolume" -> result.success(currentMediaVolume())
+                // Persentase + status pengisian baterai untuk bilah status
+                // dalam aplikasi (halaman pengisian menutupi status bar HP).
+                "getBatteryInfo" -> result.success(getBatteryInfo())
                 // Inventaris SELURUH aplikasi terpasang + fakta floating-nya.
                 "getInstalledApps" -> scanInstalledApps(result)
                 // Hanya aplikasi yang SEDANG menayangkan overlay/bubble/PiP.
@@ -247,6 +252,37 @@ class SecurityBridge(
             am.getStreamVolume(AudioManager.STREAM_MUSIC).toDouble() / max.toDouble()
         } catch (_: Exception) {
             1.0
+        }
+    }
+
+    // ---------- Info baterai (bilah status dalam aplikasi) ----------
+
+    /**
+     * Persentase (0-100) + status pengisian baterai untuk bilah status
+     * dalam aplikasi — halaman pengisian ujian menutup status bar HP dan
+     * menggantinya dengan informasi jam + baterai bikinan aplikasi sendiri.
+     *
+     * Memakai intent lengket `ACTION_BATTERY_CHANGED` sehingga tidak perlu
+     * izin tambahan dan tidak perlu menunggu siaran broadcast sungguhan.
+     */
+    private fun getBatteryInfo(): Map<String, Any> {
+        return try {
+            val sticky = activity.registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+            )
+            val level = sticky?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = sticky?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+            val status = sticky?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            val percent = if (level >= 0 && scale > 0) (level * 100) / scale else -1
+            val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+            mapOf(
+                "level" to percent,
+                "charging" to charging,
+            )
+        } catch (_: Exception) {
+            mapOf("level" to -1, "charging" to false)
         }
     }
 

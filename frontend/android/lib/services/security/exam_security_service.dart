@@ -130,6 +130,18 @@ class FloatingAppScreeningResult {
 /// jendela); klasifikasi "floating app atau bukan" dilakukan di Dart lewat
 /// katalog [kFloatingAppCatalog] sehingga mudah diuji dan bisa diperluas
 /// tanpa menyentuh kode Kotlin.
+/// Info baterai perangkat (0-100 + status pengisian), dibaca lewat native.
+class BatteryInfo {
+  /// Persentase baterai 0–100.
+  final int level;
+
+  /// `true` bila sedang diisi daya / penuh.
+  final bool charging;
+
+  const BatteryInfo({required this.level, required this.charging});
+}
+
+
 class InstalledAppInfo {
   final String packageName;
   final String appName;
@@ -536,6 +548,32 @@ class ExamSecurityService {
       return await _channel.invokeMethod<double>('currentMediaVolume') ?? 1.0;
     } catch (_) {
       return 1.0;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Info baterai untuk bilah status dalam aplikasi
+  // ---------------------------------------------------------------
+
+  /// Persentase + status pengisian baterai dari native (`getBatteryInfo`).
+  ///
+  /// Dipakai bilah status bikinan aplikasi di halaman pengisian — halaman
+  /// itu menutup status bar HP, jadi informasi jam + baterai ditampilkan
+  /// aplikasi sendiri. Mengembalikan `null` bila tidak tersedia
+  /// (non-Android / native versi lama); UI menyembunyikan ikon baterainya.
+  static Future<BatteryInfo?> getBatteryInfo() async {
+    if (!_isAndroid) return null;
+    try {
+      final raw = await _channel.invokeMethod<Object?>('getBatteryInfo');
+      if (raw is Map) {
+        final level = (raw['level'] as num?)?.toInt() ?? -1;
+        final charging = raw['charging'] == true;
+        if (level < 0 || level > 100) return null;
+        return BatteryInfo(level: level, charging: charging);
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

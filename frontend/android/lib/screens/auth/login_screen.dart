@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
-import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/widgets/common/gradient_button.dart';
@@ -281,6 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 25),
 
                               CustomInput(
+                                accentColor: AppTheme.primary,
                                 controller: _emailCtrl,
                                 label: l10n.email,
                                 hint: l10n.emailPlaceholder,
@@ -299,6 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 16),
 
                               CustomInput(
+                                accentColor: AppTheme.primary,
                                 controller: _passCtrl,
                                 label: l10n.password,
                                 hint: l10n.passMin6,
@@ -336,6 +337,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 isLoading: auth.isLoading,
                                 fullWidth: true,
                                 icon: Icons.login_rounded,
+                                // Warna tetap biru bawaan aplikasi — halaman
+                                // auth tidak ikut custom tema pengguna.
+                                colors: const [
+                                  AppTheme.primary,
+                                  AppTheme.primaryLight,
+                                ],
                               ),
 
                               const SizedBox(height: 14),
@@ -364,14 +371,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                         TextSpan(
                                           text: l10n.signUpNow,
-                                          style: TextStyle(
-                                            color: context.primary,
+                                          style: const TextStyle(
+                                            color: AppTheme.primary,
                                             fontWeight:
                                                 FontWeight.w700,
                                             decoration:
                                                 TextDecoration.underline,
                                             decorationColor:
-                                                context.primary,
+                                                AppTheme.primary,
                                           ),
                                         ),
                                       ],

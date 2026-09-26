@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
-import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/widgets/common/gradient_button.dart';
@@ -310,7 +309,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           contentPadding: EdgeInsets.zero,
           filled: true,
           fillColor: isFilled
-              ? context.primaryWith(0.07)
+              ? AppTheme.primary.withValues(alpha: 0.07)
               : (isDark
                   ? AppTheme.darkCard
                   : Colors.grey.shade100),
@@ -318,7 +317,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(
               color: isFilled
-                  ? context.primaryWith(0.4)
+                  ? AppTheme.primary.withValues(alpha: 0.4)
                   : (isDark
                       ? AppTheme.darkBorder
                       : Colors.grey.shade300),
@@ -327,8 +326,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-              color: context.primary,
+            borderSide: const BorderSide(
+              color: AppTheme.primary,
               width: 2,
             ),
           ),
@@ -397,8 +396,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ? AppTheme.darkTextMuted
         : AppTheme.textMuted;
 
-    final primaryColor =
-        context.primary;
+    const primaryColor =
+        AppTheme.primary;
 
     return Column(
       crossAxisAlignment:
@@ -440,9 +439,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               TextSpan(
                 text: email,
-                style: TextStyle(
+                style: const TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: primaryColor,
+                  color: AppTheme.primary,
                 ),
               ),
             ],
@@ -546,10 +545,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     decoration:
                         BoxDecoration(
                       gradient:
-                          LinearGradient(
+                          const LinearGradient(
                         colors: [
-                          context.primary,
-                          context.primaryDark,
+                          AppTheme.primary,
+                          AppTheme.primaryDark,
                         ],
                         begin:
                             Alignment.topLeft,
@@ -596,11 +595,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Text(
             l10n.backToRegister,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 13,
               fontWeight:
                   FontWeight.w600,
-              color: primaryColor,
+              color: AppTheme.primary,
               decoration:
                   TextDecoration.underline,
               decorationColor:
@@ -648,6 +647,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 25),
           CustomInput(
+            accentColor: AppTheme.primary,
             controller: _emailCtrl,
             label: l10n.emailAddress,
             hint: l10n.emailExample,
@@ -671,6 +671,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 16),
           CustomInput(
+            accentColor: AppTheme.primary,
             controller: _usernameCtrl,
             label: l10n.username,
             hint: l10n.usernameHint,
@@ -690,6 +691,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 16),
           CustomInput(
+            accentColor: AppTheme.primary,
             controller: _passwordCtrl,
             label: l10n.password,
             hint: l10n.min6,
@@ -733,6 +735,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             onPressed: _handleRegister,
             isLoading: auth.isLoading,
             fullWidth: true,
+            // Warna tetap biru bawaan aplikasi — halaman auth tidak ikut
+            // custom tema pengguna.
+            colors: const [
+              AppTheme.primary,
+              AppTheme.primaryLight,
+            ],
             icon:
                 Icons.how_to_reg_rounded,
           ),
@@ -761,16 +769,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextSpan(
                       text: l10n.signIn,
                       style:
-                          TextStyle(
+                          const TextStyle(
                         color:
-                            context.primary,
+                            AppTheme.primary,
                         fontWeight:
                             FontWeight.w700,
                         decoration:
                             TextDecoration
                                 .underline,
                         decorationColor:
-                            context.primary,
+                            AppTheme.primary,
                       ),
                     ),
                   ],
@@ -811,7 +819,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor:
-          context.primary,
+          AppTheme.primary,
       body: GestureDetector(
         onTap: () =>
             FocusScope.of(context)
@@ -823,7 +831,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               right: -75,
               child: _Blob(
                 230,
-                context.primaryLight
+                AppTheme.primaryLight
                     .withValues(
                   alpha: 0.20,
                 ),
@@ -834,7 +842,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               left: -115,
               child: _Blob(
                 210,
-                context.primaryLight
+                AppTheme.primaryLight
                     .withValues(
                   alpha: 0.10,
                 ),
@@ -845,7 +853,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               left: -110,
               child: _Blob(
                 260,
-                context.primaryDark
+                AppTheme.primaryDark
                     .withValues(
                   alpha: 0.42,
                 ),

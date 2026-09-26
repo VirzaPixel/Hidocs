@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
@@ -26,7 +27,6 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
   bool _error = false;
   bool _isChecking = false;
   int _attempts = 0;
-  bool _obscure = false;
   String _enteredToken = '';
 
   String _responseId = '';
@@ -272,8 +272,12 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _tokenCtrl,
-                    obscureText: _obscure,
-                    textCapitalization: TextCapitalization.none,
+                    // Token ujian selalu KAPITAL (seperti kebanyakan kode
+                    // ujian yang dibagikan guru).
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: const <TextInputFormatter>[
+                      UpperCaseTokenFormatter(),
+                    ],
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -297,16 +301,6 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
                           ? l10n.wrongToken +
                               (_attempts >= 3 ? l10n.tokenEnsureCorrect : '')
                           : null,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscure
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          size: 18,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscure = !_obscure),
-                      ),
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14)),
                       contentPadding: const EdgeInsets.symmetric(
@@ -417,6 +411,25 @@ class _StepIndicator extends StatelessWidget {
           ],
         );
       }),
+    );
+  }
+}
+
+/// Memaksa setiap karakter yang diketik/tempel menjadi huruf kapital,
+/// sehingga token ujian selalu dalam bentuk yang dikenali backend.
+class UpperCaseTokenFormatter extends TextInputFormatter {
+  const UpperCaseTokenFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final upper = newValue.text.toUpperCase();
+    if (upper == newValue.text) return newValue;
+    return newValue.copyWith(
+      text: upper,
+      selection: newValue.selection,
     );
   }
 }
