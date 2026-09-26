@@ -21,6 +21,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Process
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -176,6 +177,12 @@ class SecurityBridge(
                     setFullscreenLock(call.argument("enabled") ?: false)
                     result.success(true)
                 }
+                // Screen pinning: satu-satunya cara RESMI memblokir panel
+                // notifikasi dari aplikasi biasa. Dipicu tombol siswa karena
+                // Android menampilkan dialog persetujuan "Pin app?".
+                "startExamLockTask" -> result.success(startExamLockTask())
+                "stopExamLockTask" -> result.success(stopExamLockTask())
+                "isExamLockTaskActive" -> result.success(isExamLockTaskActive())
                 // Penjaga alarm keluar: hanya menyala saat halaman pengisian
                 // (sesi ujian) yang benar-benar terbuka.
                 "setExamSessionActive" -> {
@@ -198,6 +205,8 @@ class SecurityBridge(
     fun dispose() {
         fullscreenLocked = false
         examSessionActive = false
+        stopSystemBarWatchdog()
+        stopExamLockTask()
         disableSecure()
         releaseExitAlarm()
         exitAlarmArmed = false
@@ -209,21 +218,37 @@ class SecurityBridge(
 
     /**
      * Benar-benar mengunci layar saat mengerjakan ujian: status bar DAN nav bar
-     * disembunyikan, dan gesture "geser dari tepi" untuk memunculkannya
-     * dinonaktifkan lewat [WindowInsetsControllerCompat].
+     * disembunyikan, gesture "geser dari tepi" dibuat tidak interaktif, dan
+     * (bila siswa menyetujui) aplikasi diletakkan dalam screen pinning
+     * sehingga panel notifikasi benar-benar tertutup.
      *
-     * `SystemUiMode.immersiveSticky` dari sisi Dart saja belum cukup —
-     * di beberapa perangkat Android, geser dari tepi atas masih memunculkan
-     * status bar. Flag window di sini menutup celah tersebut.
+     * KOREKSI FAKTA (revisi ini). Komentar lama menyatakan
+     * `BEHAVIOR_DEFAULT` membuat penyembunyian "permanen". Itu KELIRU.
+     * Pada androidx `WindowInsetsControllerCompat`:
+     *   - `BEHAVIOR_DEFAULT = 1` dan `BEHAVIOR_SHOW_BARS_BY_SWIPE = 1`
+     *     adalah NILAI YANG SAMA — artinya memakai `BEHAVIOR_DEFAULT` justru
+     *     MEMBIARKAN system bar dimunculkan lewat geseran dari tepi layar
+     *     (dokumentasi resminya: "they can be revealed with system gestures,
+     *     such as swiping from the edge of the screen where the bar is hidden
+     *     from"), persis keluhan "status bar masih bisa di-swipe".
+     *   - `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE = 2` memunculkan bar HANYA
+     *     sementara, sebagai overlay yang tidak interaktif dan otomatis
+     *     hilang — jadi siswa tidak bisa menekan notifikasi atau membuka
+     *     panelnya. Itu yang dipakai di sini.
+     *
+     * Untuk BENAR-BENAR memblokir panel notifikasi, Android tidak menyediakan
+     * sihir dari sisi aplikasi biasa: satu-satunya jalur resmi adalah
+     * **screen pinning / lock task mode** ([startExamLockTask]). Lihat
+     * [startExamLockTask] untuk batasnya.
      *
      * Status "yang sedang dikunci" disimpan di [fullscreenLocked] supaya
      * [reapplyFullscreenLock] bisa mengunci ulang setiap kali window regain
-     * focus. Tanpa itu, begitu siswa menarik panel notifikasi, status bar
-     * tetap tampil sampai aplikasi ditutup.
+     * focus, dan [systemBarWatchdog] mengulanginya berkala.
      */
     private fun setFullscreenLock(enabled: Boolean) {
         fullscreenLocked = enabled
         applyFullscreenLock(enabled)
+        if (enabled) startSystemBarWatchdog() else stopSystemBarWatchdog()
     }
 
     /**
@@ -253,15 +278,180 @@ class SecurityBridge(
             val controller = WindowCompat.getInsetsController(window, window.decorView)
             if (enabled) {
                 controller.hide(WindowInsetsCompat.Type.systemBars())
-                // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE sengaja TIDAK dipakai:
-                // itulah yang membuat status bar muncul sesaat saat digeser.
-                // Dengan behavior default, penyembunyian bersifat permanen
-                // selama aplikasi berjalan.
+                // PENTING: BEHAVIOR_DEFAULT (== BEHAVIOR_SHOW_BARS_BY_SWIPE, 1)
+                // justru MEMBIARKAN status bar ditarik keluar dengan geseran
+                // dari tepi layar. Yang benar untuk ujian adalah TRANSIENT:
+                // bar hanya muncul sesaat sebagai overlay tidak interaktif
+                // lalu hilang sendiri, sehingga notifikasi tidak bisa
+                // disentuh maupun dibuka.
                 controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
                 controller.show(WindowInsetsCompat.Type.systemBars())
             }
+        }
+    }
+
+    /**
+     * Penjaga berkala: system bar yang sempat muncul dipaksa tersembunyi lagi.
+     *
+     * [reapplyFullscreenLock] hanya bekerja saat window kehilangan/mendapat
+     * fokus, sedangkan geseran tepi layar bisa memunculkan status bar TANPA
+     * perubahan fokus. Selama mode ujian, watchdog ini mengulang penyembunyian
+     * setiap [SYSTEM_BAR_WATCHDOG_MS] sehingga bar itu tidak pernah bertahan.
+     *
+     * Native membuktikan enaknya sendiri: [isSystemBarVisible] diperiksa lebih
+     * dulu, jadi saat bar memang sudah tersembunyi tidak ada pemanggilan
+     * window yang sia-sia.
+     *
+     * Selain watchdog polling ini, [startInsetListener] memasang listener
+     * event-driven yang bekerja SEKETIKA saat inset berubah — lebih cepat
+     * daripada menunggu putaran polling berikutnya.
+     */
+    private val systemBarWatchdog = object : Runnable {
+        override fun run() {
+            if (!fullscreenLocked) return
+            if (isSystemBarVisible()) applyFullscreenLock(true)
+            activity.window.decorView.postDelayed(this, SYSTEM_BAR_WATCHDOG_MS)
+        }
+    }
+
+    private fun startSystemBarWatchdog() {
+        val view = activity.window.decorView
+        view.removeCallbacks(systemBarWatchdog)
+        view.postDelayed(systemBarWatchdog, SYSTEM_BAR_WATCHDOG_MS)
+        startInsetListener()
+    }
+
+    private fun stopSystemBarWatchdog() {
+        try {
+            activity.window.decorView.removeCallbacks(systemBarWatchdog)
+        } catch (_: Exception) {
+        }
+        stopInsetListener()
+    }
+
+    /**
+     * Listener event-driven untuk perubahan inset window.
+     *
+     * Watchdog polling (700 ms) masih menyisakan jeda: bar bisa muncul
+     * selama hampir 700 ms sebelum ditutup lagi. Listener ini bereaksi
+     * SEKETIKA setiap kali sistem melaporkan perubahan inset — termasuk
+     * saat status bar atau nav bar dimunculkan oleh gestur tepi — sehingga
+     * bar ditutup sebelum pengguna sempat berinteraksi dengannya.
+     */
+    private val insetListener = ViewCompat.OnApplyWindowInsetsListener { _, insets ->
+        if (fullscreenLocked && insets.isVisible(WindowInsetsCompat.Type.systemBars())) {
+            // Bar baru saja muncul — sembunyikan lagi seketika.
+            activity.window.decorView.post { applyFullscreenLock(true) }
+        }
+        insets
+    }
+
+    private fun startInsetListener() {
+        ViewCompat.setOnApplyWindowInsetsListener(activity.window.decorView, insetListener)
+    }
+
+    private fun stopInsetListener() {
+        ViewCompat.setOnApplyWindowInsetsListener(activity.window.decorView, null)
+    }
+
+    /**
+     * Apakah status bar atau nav bar sedang terlihat.
+     *
+     * `isVisible` adalah API resmi (`WindowInsetsController`) untuk memeriksa
+     * keadaan ini tanpa menebak-nebak dari tinggi inset.
+     */
+    private fun isSystemBarVisible(): Boolean {
+        return try {
+            val insets = ViewCompat.getRootWindowInsets(
+                activity.window.decorView,
+            ) ?: return false
+            insets.isVisible(WindowInsetsCompat.Type.systemBars())
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------- Screen pinning (pemblokiran system bar yang sesungguhnya) ----------
+
+    /**
+     * Memasuki **screen pinning** selama sesi ujian.
+     *
+     * Mengapa ini perlu: menyembunyikan system bar (`applyFullscreenLock`)
+     * HANYA menyembunyikan tampilannya. Panel notifikasi tetap bisa ditarik
+     * selama aplikasi tidak berstatus *device owner*, dan status itu tidak
+     * bisa diminta dari dalam aplikasi (harus lewat ADB/QR provisioning di
+     * luar aplikasi). Satu-satunya jalur resmi yang tersedia bagi aplikasi
+     * biasa adalah `Activity.startLockTask()` — inilah "screen pinning".
+     *
+     * Perilaku yang WAJIB diketahui (dan ditulis apa adanya di layar
+     * persiapan ujian):
+     *  - Bila aplikasi BELUM di-allowlist device owner, Android menampilkan
+     *    **dialog persetujuan** "Pin app?" yang hanya bisa diterima siswa.
+     *    Itulah sebabnya fungsi ini dipanggil dari tombol yang diketik siswa,
+     *    bukan otomatis saat halaman dibuka.
+     *  - Selama tersemat, siswa tidak bisa membuka Home/Recents maupun
+     *    menarik panel notifikasi; keluar hanya lewat gestur "tahan Back +
+     *    Recents" (atau [stopExamLockTask] milik aplikasi sendiri).
+     *  - Karena itu tidak ada larangan mutlak: siswa tetap bisa keluar, tapi
+     *    lewat tindakan sadar yang tercatat sebagai pelanggaran oleh
+     *    `ExamLockdownService` + alarm `assets/keluar.mp3`.
+     *
+     * Dijalankan di UI thread karena `startLockTask()` adalah API UI.
+     * Kembalikan `true` bila permintaan diterima (tanpa menunggu jawaban
+     * dialog, karena dialog itu ditangani sistem).
+     */
+    fun startExamLockTask(): Boolean {
+        return try {
+            activity.runOnUiThread {
+                try {
+                    activity.startLockTask()
+                } catch (_: Exception) {
+                    // Sebagian ROM menolak saat transisi (mis. baru kembali
+                    // dari lockscreen). Alarm + penarikan task tetap bekerja.
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Keluar dari screen pinning. WAJIB dipanggil saat ujian selesai /
+     * halaman pengisian ditutup, supaya siswa tidak tertahan di dalam
+     * aplikasi setelah selesai mengerjakan.
+     *
+     * Hanya bertindak bila aplikasi memang sedang tersemat, karena
+     * `stopLockTask()` di luar mode itu melempar `IllegalStateException`.
+     */
+    fun stopExamLockTask(): Boolean {
+        return try {
+            activity.runOnUiThread {
+                try {
+                    val am = activity.getSystemService(Context.ACTIVITY_SERVICE)
+                            as ActivityManager
+                    if (am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) {
+                        activity.stopLockTask()
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** `true` bila aplikasi sedang berada dalam lock task / screen pinning. */
+    fun isExamLockTaskActive(): Boolean {
+        return try {
+            val am = activity.getSystemService(Context.ACTIVITY_SERVICE)
+                    as ActivityManager
+            am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -1154,5 +1344,14 @@ private fun knownFloatingLabel(pkg: String): String {
 
         /** Jendela waktu event UsageStats yang dianggap "masih aktif". */
         private const val USAGE_STATS_WINDOW_MS = 120_000L
+
+        /**
+         * Selang pemeriksaan [systemBarWatchdog].
+         *
+         * Dipilih pendek (700 ms) karena tujuannya menutup system bar yang baru
+         * saja digeser keluar; terlalu panjang membuat status bar sempat
+         * terlihat cukup lama untuk menekan notifikasi.
+         */
+        private const val SYSTEM_BAR_WATCHDOG_MS = 150L
     }
 }

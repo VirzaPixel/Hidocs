@@ -143,10 +143,18 @@ class ExamLockdownService {
     // dilepas sepenuhnya.
     await ExamSecurityService.setExamSessionActive(false);
     await ExamSecurityService.setExitAlarmArmed(false);
+    // Keluar dari screen pinning LEBIH DULU sebelum membuka system bar:
+    // selama tersemat, siswa tidak boleh tertahan setelah ujian selesai.
+    await ExamSecurityService.stopExamLockTask();
     await ExamSecurityService.setFullscreenLock(false);
     await ExamSecurityService.disableSecureScreen();
     await ExamSecurityService.stopLockService();
     await ExamSecurityService.restoreExamVolume();
+  }
+
+  /// Lepaskan screen pinning tanpa menyentuh penguncian lain.
+  static Future<void> stopScreenPinning() async {
+    await ExamSecurityService.stopExamLockTask();
   }
 
   /// Pastikan tidak ada penguncian maupun suara yang menyala.
@@ -156,11 +164,15 @@ class ExamLockdownService {
   /// berbunyi, tanpa ditarik kembali, dan tanpa layar terkunci. Fungsi ini
   /// idempoten — aman dipanggil berulang, termasuk untuk membersihkan sisa
   /// sesi sebelumnya.
+  ///
+  /// Screen pinning juga dilepas: siswa yang menyalakan penguncian di
+  /// percobaan sebelumnya tidak boleh terjebak di dalam aplikasi.
   static Future<void> ensureIdle() async {
     await ExamSecurityService.setExamSessionActive(false);
     await ExamSecurityService.setExitAlarmArmed(false);
     await ExamSecurityService.stopExitAlarm();
     await ExamSecurityService.setFullscreenLock(false);
+    await ExamSecurityService.stopExamLockTask();
   }
 
   /// Kirim event pelanggaran ke backend dan kembalikan status berhasil.

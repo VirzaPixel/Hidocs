@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
@@ -330,6 +331,111 @@ class _CreateFormScreenState extends State<CreateFormScreen>
       );
   }
 
+  /// Tampilkan dialog error yang bertahan sampai ditutup — dipakai untuk
+  /// kegagalan simpan form/soal yang harus DIBACA pengguna, bukan SnackBar
+  /// sekejap yang hilang sebelum sempat dibaca.
+  Future<void> _showErrorDialog(String message) async {
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(
+          Icons.error_outline_rounded,
+          color: AppTheme.error,
+          size: 36,
+        ),
+        title: Text(
+          l10n.isIndonesian ? 'Gagal menyimpan' : 'Save failed',
+        ),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            message,
+            style: const TextStyle(fontSize: 13.5, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    l10n.isIndonesian
+                        ? 'Pesan galat disalin.'
+                        : 'Error message copied.',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label:
+                Text(l10n.isIndonesian ? 'Salin pesan' : 'Copy message'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.isIndonesian ? 'Tutup' : 'Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Tampilkan dialog peringatan SEBELUM meninggalkan layar — dipakai
+  /// ketika form berhasil dibuat/diperbarui tapi ada soal yang gagal
+  /// tersimpan. Dialog bertahan sampai ditutup, menyertakan tombol
+  /// "Salin pesan" agar bisa dilaporkan.
+  Future<void> _showWarningDialog(String message) async {
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(
+          Icons.warning_amber_rounded,
+          color: AppTheme.warning,
+          size: 36,
+        ),
+        title: Text(
+          l10n.isIndonesian
+              ? 'Form disimpan — ada soal yang gagal'
+              : 'Form saved — some questions failed',
+        ),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            message,
+            style: const TextStyle(fontSize: 13.5, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    l10n.isIndonesian
+                        ? 'Pesan disalin.'
+                        : 'Message copied.',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label:
+                Text(l10n.isIndonesian ? 'Salin pesan' : 'Copy message'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.isIndonesian ? 'OK, lanjutkan' : 'OK, continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Converts every question into a local PNG (temp dir only — no
   /// database/backend). Cached by content hash so unchanged questions are
   /// skipped instantly. Failures are non-blocking: the fill screen falls
@@ -607,10 +713,10 @@ class _CreateFormScreenState extends State<CreateFormScreen>
 
       formProvider.clearError();
 
-      _showMessage(
-        errorMessage,
-        backgroundColor: AppTheme.error,
-      );
+      // Gunakan dialog yang bertahan — bukan SnackBar yang hilang sebelum
+      // sempat dibaca. Pengguna perlu tahu MENGAPA simpan gagal dan apa
+      // yang harus dilakukan.
+      await _showErrorDialog(errorMessage);
 
       return;
     }
@@ -621,24 +727,36 @@ class _CreateFormScreenState extends State<CreateFormScreen>
       return;
     }
 
-    Navigator.pop(context);
-
+    // Ambil peringatan soal SEBELUM menutup layar supaya dialog bisa
+    // tampil di atas layar buat-form, bukan tumpang-tindih dengan
+    // layar sebelumnya.
     final warning = formProvider.saveWarning;
     formProvider.clearSaveWarning();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          warning ??
-              (editing != null
-                  ? l10n.formUpdatedSuccess
-                  : l10n.formCreatedSuccess),
+    if (warning != null) {
+      // Soal tertentu gagal disimpan — tampilkan dialog agar pengguna
+      // tahu persis soal mana yang bermasalah dan pesan errornya, lalu
+      // baru kembali ke layar sebelumnya.
+      await _showWarningDialog(warning);
+    }
+
+    if (!mounted) return;
+    Navigator.pop(context);
+
+    // Tampilkan konfirmasi singkat di layar sebelumnya kalau tidak ada warning.
+    if (warning == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            editing != null
+                ? l10n.formUpdatedSuccess
+                : l10n.formCreatedSuccess,
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: warning == null ? null : AppTheme.warning,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: warning == null ? 3 : 6),
-      ),
-    );
+      );
+    }
   }
 
   @override

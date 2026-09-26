@@ -28,7 +28,9 @@ import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
+import 'package:hi_docs/utils/submit_payload.dart';
 
 class FillFormScreen extends StatefulWidget {
   final FormModel form;
@@ -112,8 +114,14 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     _responseId = widget.responseId.isNotEmpty ? widget.responseId : null;
 
-    // Status bar HP disembunyikan selama mengisi. `immersiveSticky` PLUS kunci
-    // native, supaya geser dari tepi tidak bisa memunculkan status bar lagi.
+    // Status bar HP disembunyikan selama mengisi. Dua lapis dipakai bersama:
+    //  1. `immersiveSticky` dari Flutter — CATATAN PENTING: pada targetSdk 36
+    //     (nilai proyek ini) Flutter memaksa `edgeToEdge` dan mengabaikan mode
+    //     ini, jadi ia hanya berfungsi sebagai cadangan untuk targetSdk lama;
+    //  2. kunci native `setFullscreenLock` (WindowInsetsControllerCompat) —
+    //     INILAH yang benar-benar bekerja di perangkat: bar disembunyikan
+    //     dengan BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE (hanya muncul sesaat,
+    //     overlay tidak interaktif) plus watchdog yang menutup ulang bar.
     // Informasinya — jam + baterai — disediakan aplikasi sendiri lewat
     // [_DeviceStatusBar].
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -516,6 +524,96 @@ class _FillFormScreenState extends State<FillFormScreen>
     return _controllers[questionId]!;
   }
 
+  /// Tampilkan kegagalan pengiriman sebagai ALERT yang benar-benar terbaca.
+  ///
+  /// Sebelumnya kegagalan hanya muncul sebagai SnackBar sekejap. Pesannya
+  /// sering generik ("Invalid request payload") dan hilang sebelum sempat
+  /// dibaca, sehingga pengguna merasa aplikasinya rusak tanpa tahu penyebab
+  /// atau apa yang harus dilakukan. Dialog ini bertahan sampai ditutup dan
+  /// menyediakan tombol "Salin pesan" agar isinya bisa dilaporkan ke pengawas.
+  void _showSubmitError(String message) {
+    if (!mounted) return;
+
+    final l10n = AppLocalizations.of(context);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l10n.isIndonesian
+                      ? 'Pengiriman jawaban gagal. Baca penjelasannya.'
+                      : 'Submitting answers failed. See the explanation.',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(
+          Icons.error_outline_rounded,
+          color: AppTheme.error,
+          size: 36,
+        ),
+        title: Text(
+          l10n.isIndonesian
+              ? 'Jawaban gagal dikirim'
+              : 'Answers could not be sent',
+        ),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            message,
+            style: const TextStyle(fontSize: 13.5, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    l10n.isIndonesian
+                        ? 'Pesan galat disalin.'
+                        : 'Error message copied.',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: Text(l10n.isIndonesian ? 'Salin pesan' : 'Copy message'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.isIndonesian ? 'Coba lagi' : 'Try again'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _autoSubmit() {
     if (_submitted || _isSubmitting) return;
 
@@ -596,6 +694,35 @@ class _FillFormScreenState extends State<FillFormScreen>
       }
     }
 
+    // --- Penjaga payload: sebab "Invalid request payload" yang paling sering ---
+    //
+    // Backend mem-binding `respondent_email` sebagai `required,email`, jadi
+    // permintaan TANPA email selalu dibalas `400 "Invalid request payload"`.
+    // Ini bisa terjadi bila siswa membuka form lewat QR/tautan dalam keadaan
+    // belum login (rute `/scan-form`, `/link-input`, dan deep-link `/f/<slug>`
+    // tidak dijaga login). Lebih baik dicegah di sini dengan pesan yang jelas
+    // daripada membiarkan server menolak dengan kalimat buntu.
+    final auth = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    );
+
+    final respondentEmail = auth.currentUser?.email.trim() ?? '';
+
+    if (respondentEmail.isEmpty) {
+      _showSubmitError(
+        l10n.isIndonesian
+            ? 'Jawaban tidak dikirim: Anda belum masuk, sehingga server tidak '
+                  'tahu siapa pengirimnya. Masuk (login) dulu dengan akun yang '
+                  'punya email, lalu tekan Kirim Jawaban kembali. Jawaban Anda '
+                  'saat ini masih tersimpan di perangkat ini.'
+            : 'Answers were not sent: you are not signed in, so the server '
+                  'cannot identify the respondent. Sign in first, then submit '
+                  'again. Your current answers are still kept on this device.',
+      );
+      return;
+    }
+
     _timer?.cancel();
 
     setState(() {
@@ -603,11 +730,6 @@ class _FillFormScreenState extends State<FillFormScreen>
     });
 
     final formProvider = Provider.of<FormProvider>(
-      context,
-      listen: false,
-    );
-
-    final auth = Provider.of<AuthProvider>(
       context,
       listen: false,
     );
@@ -677,10 +799,16 @@ class _FillFormScreenState extends State<FillFormScreen>
       }
     }
 
+    // Buang baris yang tidak mungkin diterima backend SEBELUM dikirim.
+    // Satu `question_id` non-UUID membuat `ShouldBindJSON` menolak SELURUH
+    // body dengan `400 "Invalid request payload"`, sehingga seluruh jawaban
+    // ikut hilang. Lihat [sanitizeSubmitAnswers].
+    final safeAnswers = sanitizeSubmitAnswers(answers);
+
     final result = await formProvider.submitForm(
       widget.form.id,
-      respondentEmail: auth.currentUser?.email ?? '',
-      answers: answers,
+      respondentEmail: respondentEmail,
+      answers: safeAnswers,
       auto: auto,
       token: _token,
       responseId: _responseId ?? '',
@@ -691,8 +819,7 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
 
     if (result == null) {
-      final errorMessage = formProvider.error ??
-          l10n.failSendResp;
+      final errorMessage = formProvider.error ?? l10n.failSendResp;
 
       formProvider.clearError();
 
@@ -700,32 +827,7 @@ class _FillFormScreenState extends State<FillFormScreen>
         _isSubmitting = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  errorMessage,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+      _showSubmitError(errorMessage);
 
       return;
     }
@@ -754,7 +856,7 @@ class _FillFormScreenState extends State<FillFormScreen>
       formTitle: widget.form.title,
       responseId: (result['response_id'] ?? '').toString(),
       respondentId: auth.currentUser?.id ?? '',
-      respondentEmail: auth.currentUser?.email ?? '',
+      respondentEmail: respondentEmail,
       answers: Map<String, dynamic>.from(_answers),
       totalScore: (result['total_score'] as num?)?.toDouble(),
       submittedAt:
@@ -1718,6 +1820,13 @@ class _FillFormScreenState extends State<FillFormScreen>
         return _YesNoAnswer(
           value:
               _answers[q.id] as String?,
+          // `_answers` menyimpan **ID opsi** hasil [_yesNoOptionId], bukan teks
+          // 'yes'/'no'. ID itu harus diresolusi lebih dulu supaya penyorotan
+          // pilihan cocok dengan jawaban yang benar-benar tersimpan.
+          yesOptionId:
+              _yesNoOptionId(q, true),
+          noOptionId:
+              _yesNoOptionId(q, false),
           onSelect: (yes) {
             setState(() {
               _answers[q.id] =
@@ -1762,28 +1871,40 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
   }
 
+  /// ID opsi yang mewakili "Ya"/"Tidak" pada soal [q].
+  ///
+  /// Halaman pengisian menyimpan jawaban sebagai **ID opsi**
+  /// (`selected_option_id` di backend), bukan teks 'yes'/'no'. Karena itu
+  /// pemetaan id ⇄ tombol harus dihitung dari [q.options] dan TIDAK boleh
+  /// mengandalkan teks mentah — itulah bug yang membuat tombol Ya/Tidak
+  /// tampak "tidak bisa dipencet" (jawaban tersimpan, tapi tidak tersorot).
+  ///
+  /// Urutan pencarian teks: 'ya'/'yes'/'true'/'benar' untuk "Ya", dan
+  /// 'tidak'/'no'/'false'/'salah' untuk "Tidak". Bila label tidak standar
+  /// (mis. hasil AI "Opsi A"/"Opsi B"), urutan opsi dipakai sebagai cadangan:
+  /// opsi pertama = Ya, opsi terakhir = Tidak.
   String? _yesNoOptionId(
     QuestionModel q,
     bool yes,
   ) {
     for (final opt in q.options) {
       final t = opt.text.trim().toLowerCase();
-      if (yes &&
-          (t == 'yes' || t == 'ya')) {
+      if (yes && _yesTokens.contains(t)) {
         return opt.id;
       }
-      if (!yes &&
-          (t == 'no' || t == 'tidak')) {
+      if (!yes && _noTokens.contains(t)) {
         return opt.id;
       }
     }
 
-    if (q.options.isNotEmpty) {
+    if (q.options.length >= 2) {
       return yes
           ? q.options.first.id
           : q.options.last.id;
     }
 
+    // Satu opsi (atau tidak ada): tidak ada pasangan Ya/Tidak yang sah, jadi
+    // jangan mengarang id. Tombolnya akan tampil nonaktif.
     return null;
   }
 }
@@ -2880,11 +3001,21 @@ class _RatingAnswer
 
 class _YesNoAnswer
     extends StatelessWidget {
+  /// Jawaban tersimpan: **ID opsi** (bentuk normal) atau teks 'yes'/'no'
+  /// (sesi lama). Lihat [FillFormScreen._yesNoOptionId].
   final String? value;
+
+  /// ID opsi yang mewakili "Ya"/"Tidak" pada soal ini. Dibutuhkan supaya
+  /// penyorotan pilihan membandingkan HAL YANG SAMA dengan yang disimpan.
+  final String? yesOptionId;
+  final String? noOptionId;
+
   final void Function(bool) onSelect;
 
   const _YesNoAnswer({
     required this.value,
+    required this.yesOptionId,
+    required this.noOptionId,
     required this.onSelect,
   });
 
@@ -2895,6 +3026,11 @@ class _YesNoAnswer
     final l10n =
         AppLocalizations.of(context);
 
+    final yesSelected =
+        _yesNoMatches(value, yesOptionId, _yesTokens);
+    final noSelected =
+        _yesNoMatches(value, noOptionId, _noTokens);
+
     return Row(
       children: [
         Expanded(
@@ -2904,10 +3040,12 @@ class _YesNoAnswer
                 Icons.check_circle_rounded,
             color:
                 AppTheme.success,
-            selected:
-                value == 'yes' || value == 'Yes',
-            onTap: () =>
-                onSelect(true),
+            selected: yesSelected,
+            // `null` = soal tidak punya dua opsi yang sah → tombol nonaktif,
+            // bukan menyimpan id yang salah ke jawaban.
+            onTap: yesOptionId == null
+                ? null
+                : () => onSelect(true),
           ),
         ),
 
@@ -2922,15 +3060,32 @@ class _YesNoAnswer
                 Icons.cancel_rounded,
             color:
                 AppTheme.error,
-            selected:
-                value == 'no' || value == 'No',
-            onTap: () =>
-                onSelect(false),
+            selected: noSelected,
+            onTap: noOptionId == null
+                ? null
+                : () => onSelect(false),
           ),
         ),
       ],
     );
   }
+}
+
+/// Teks jawaban yang diterima sebagai padanan "Ya"/"Tidak" saat jawaban
+/// tersimpan berupa teks, bukan id opsi.
+const Set<String> _yesTokens = {'yes', 'ya', 'true', 'benar'};
+const Set<String> _noTokens = {'no', 'tidak', 'false', 'salah'};
+
+/// [FillFormScreen._yesNoMatches] versi bebas-konteks untuk widget Ya/Tidak.
+bool _yesNoMatches(
+  String? value,
+  String? optionId,
+  Set<String> tokens,
+) {
+  final raw = (value ?? '').trim();
+  if (raw.isEmpty) return false;
+  if (optionId != null && raw == optionId) return true;
+  return tokens.contains(raw.toLowerCase());
 }
 
 class _YNOption
@@ -2939,7 +3094,9 @@ class _YNOption
   final IconData icon;
   final Color color;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// `null` = tombol tidak bisa ditekan (mis. soal Ya/Tidak tanpa dua opsi).
+  final VoidCallback? onTap;
 
   const _YNOption({
     required this.label,
@@ -2957,69 +3114,87 @@ class _YNOption
         Theme.of(context).brightness ==
             Brightness.dark;
 
-    return GestureDetector(
-      onTap: onTap,
-      child:
-          AnimatedContainer(
-        duration:
-            const Duration(
-          milliseconds: 200,
-        ),
-        height: 68,
-        decoration:
-            BoxDecoration(
-          color: selected
-              ? color.withValues(
-                  alpha: 0.10,
-                )
-              : Colors.transparent,
-          borderRadius:
-              BorderRadius.circular(
-            16,
+    // Soal Ya/Tidak tanpa dua opsi yang sah tidak boleh menipu: tombolnya
+    // tampil redup dan memang tidak bisa ditekan.
+    final enabled = onTap != null;
+
+    final Color idleColor = enabled
+        ? AppTheme.textMuted
+        : AppTheme.textMuted.withValues(alpha: 0.45);
+
+    final Color borderColor = selected
+        ? color
+        : (isDark
+            ? AppTheme.darkBorder
+            : AppTheme.border);
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        // Area sentuh SELUAR tombol — termasuk saat belum dipilih, karena
+        // kotak transparan tidak punya piksel untuk di-hit-test. Tanpa ini
+        // ketukan di bagian kosong tombol terasa "tidak berfungsi".
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child:
+            AnimatedContainer(
+          duration:
+              const Duration(
+            milliseconds: 200,
           ),
-          border:
-              Border.all(
+          height: 68,
+          decoration:
+              BoxDecoration(
             color: selected
-                ? color
-                : (isDark
-                    ? AppTheme
-                        .darkBorder
-                    : AppTheme
-                        .border),
-            width:
-                selected ? 2 : 1,
+                ? color.withValues(
+                    alpha: 0.10,
+                  )
+                : Colors.transparent,
+            borderRadius:
+                BorderRadius.circular(
+              16,
+            ),
+            border:
+                Border.all(
+              color: enabled
+                  ? borderColor
+                  : borderColor.withValues(alpha: 0.50),
+              width:
+                  selected ? 2 : 1,
+            ),
           ),
-        ),
-        child: Center(
-          child: Row(
-            mainAxisSize:
-                MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 22,
-                color: selected
-                    ? color
-                    : AppTheme
-                        .textMuted,
-              ),
-              const SizedBox(
-                width: 8,
-              ),
-              Text(
-                label,
-                style:
-                    TextStyle(
-                  fontSize: 16,
-                  fontWeight:
-                      FontWeight.w700,
+          child: Center(
+            child: Row(
+              mainAxisSize:
+                  MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
                   color: selected
                       ? color
-                      : AppTheme
-                          .textMuted,
+                      : idleColor,
                 ),
-              ),
-            ],
+                const SizedBox(
+                  width: 8,
+                ),
+                Text(
+                  label,
+                  style:
+                      TextStyle(
+                    fontSize: 16,
+                    fontWeight:
+                        FontWeight.w700,
+                    color: selected
+                        ? color
+                        : idleColor,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

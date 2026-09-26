@@ -279,7 +279,7 @@ void main() {
     expect(find.text('Kunci Kiosk Sejati'), findsNothing);
     expect(find.text('Kunci kiosk aktif (device owner)'), findsNothing);
     expect(find.text('tool/exam_device_owner.sh'), findsNothing);
-    expect(find.text('Kunci layar ujian siap'), findsOneWidget);
+    expect(find.text('Kunci layar ujian (system bar + sematan)'), findsOneWidget);
 
     // Gerbang adalah langkah terakhir: tombolnya langsung membuka pengisian.
     final startButton =
@@ -381,7 +381,7 @@ void main() {
     // Tidak ada lagi permintaan aksi teknisi/guru maupun skrip ADB.
     expect(find.text('Diperlukan aksi dari teknisi/guru'), findsNothing);
     expect(find.text('tool/exam_device_owner.sh'), findsNothing);
-    expect(find.text('Kunci layar ujian siap'), findsOneWidget);
+    expect(find.text('Kunci layar ujian (system bar + sematan)'), findsOneWidget);
   });
 
   testWidgets(

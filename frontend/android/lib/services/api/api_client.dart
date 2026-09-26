@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'package:hi_docs/services/api/api_error_messages.dart';
 import 'package:hi_docs/utils/constants.dart';
 
 class ApiException implements Exception {
@@ -117,17 +118,27 @@ class ApiClient {
 
     var message = 'Terjadi kesalahan (${response.statusCode})';
 
+    // `errors` berisi SEBAB sebenarnya dari kegagalan validasi backend
+    // (mis. field 'RespondentEmail' gagal 'required'). Dulu field ini dibuang
+    // sehingga pengguna hanya melihat "Invalid request payload" tanpa tahu
+    // apa yang harus diperbaiki.
+    Object? detail;
+
     if (decoded is Map) {
       if (decoded['message'] != null) {
         message = decoded['message'].toString();
       } else if (decoded['error'] != null) {
         message = decoded['error'].toString();
       }
+      detail = decoded['errors'] ?? decoded['error'];
     } else if (response.body.isNotEmpty) {
       message = response.body;
     }
 
-    throw ApiException(message, statusCode: response.statusCode);
+    throw ApiException(
+      describeApiError(message, detail, statusCode: response.statusCode),
+      statusCode: response.statusCode,
+    );
   }
 
   static Uri _uri(String path, [Map<String, String>? query]) {
@@ -210,13 +221,18 @@ class ApiClient {
       return response.bodyBytes.toList();
     }
     var message = 'Terjadi kesalahan (${response.statusCode})';
+    Object? detail;
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map && decoded['message'] != null) {
         message = decoded['message'].toString();
+        detail = decoded['errors'] ?? decoded['error'];
       }
     } catch (_) {}
-    throw ApiException(message, statusCode: response.statusCode);
+    throw ApiException(
+      describeApiError(message, detail, statusCode: response.statusCode),
+      statusCode: response.statusCode,
+    );
   }
 
   static Future<dynamic> uploadFile(

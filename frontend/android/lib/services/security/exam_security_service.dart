@@ -584,6 +584,54 @@ class ExamSecurityService {
     } catch (_) {}
   }
 
+  // ---------------------------------------------------------------
+  // Screen pinning (pemblokiran system bar yang sesungguhnya)
+  // ---------------------------------------------------------------
+
+  /// Memasuki **screen pinning** (`Activity.startLockTask`) selama ujian.
+  ///
+  /// Ini satu-satunya jalur RESMI untuk benar-benar memblokir panel notifikasi
+  /// dari aplikasi biasa: menyembunyikan system bar hanya menyembunyikan
+  /// tampilannya, sedangkan `BEHAVIOR_DEFAULT` justru membiarkan bar ditarik
+  /// lewat geseran tepi. Lihat komentar native `startExamLockTask`.
+  ///
+  /// PENTING: bila aplikasi belum di-allowlist device owner, Android
+  /// menampilkan dialog persetujuan **"Pin app?"** yang harus diterima siswa.
+  /// Karena itu fungsi ini dipanggil dari tombol (tindakan sadar siswa), bukan
+  /// otomatis saat halaman dibuka.
+  ///
+  /// Kembalikan `true` bila permintaan berhasil dikirim (jawaban dialog
+  /// ditangani sistem, tidak terlihat dari sini).
+  static Future<bool> startExamLockTask() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('startExamLockTask') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Keluar dari screen pinning. Wajib dipanggil saat sesi ujian berakhir,
+  /// supaya siswa tidak tertahan di dalam aplikasi setelah selesai.
+  static Future<bool> stopExamLockTask() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('stopExamLockTask') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// `true` bila aplikasi sedang tersemat (screen pinning / lock task aktif).
+  static Future<bool> isExamLockTaskActive() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isExamLockTaskActive') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Nyalakan/matikan penanda "sesi ujian sedang dikerjakan" di sisi native.
   ///
   /// Ini penjaga alarm keluar. Halaman gerbang dan layar token memanggilnya

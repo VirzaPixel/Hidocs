@@ -139,6 +139,21 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
 
     if (!mounted) return;
 
+    // Nyalakan screen pinning DARI SINI — di halaman gerbang, yang bukan
+    // bagian sesi ujian. Alasannya penting:
+    //  - Android menampilkan dialog persetujuan "Pin app?" untuk aplikasi yang
+    //    belum di-allowlist device owner. Bila dipicu saat siswa sudah
+    //    mengerjakan, app akan kehilangan fokus dan tercatat sebagai
+    //    pelanggaran keluar + alarm berbunyi. Di gerbang, dialog itu aman.
+    //  - Setelah tersemat, siswa tidak bisa membuka Home/Recents maupun
+    //    menarik panel notifikasi; keluar hanya lewat gestur Back+Recents,
+    //    yang tercatat sebagai pelanggaran.
+    // Hasilnya diabaikan dengan sengaja: bila siswa menolak atau ROM menolak,
+    // penguncian berlapis lain (system bar tersembunyi + task ditarik kembali
+    // + alarm) tetap bekerja, jadi ujian jangan sampai terhalang karenanya.
+    await ExamSecurityService.startExamLockTask();
+    if (!mounted) return;
+
     Navigator.pushReplacement(
       context,
       CustomPageRoute(
@@ -423,12 +438,14 @@ class _ExamNoticeCard extends StatelessWidget {
       (
         Icons.lock_rounded,
         l10n.isIndonesian
-            ? 'Status bar dan tombol navigasi disembunyikan, dan aplikasi '
-                  'otomatis kembali ke depan bila Anda mencoba keluar. '
-                  'Screenshot tetap diblokir.'
-            : 'The status bar and navigation buttons are hidden, and the app '
-                  'pulls itself back to the front if you try to leave. '
-                  'Screenshots stay blocked.',
+            ? 'Status bar dan tombol navigasi disembunyikan. Setelah Anda '
+                  'menekan tombol mulai, Android akan menampilkan konfirmasi '
+                  '"Sematkan aplikasi?"; setujui agar panel notifikasi tidak '
+                  'bisa ditarik selama ujian. Screenshot tetap diblokir.'
+            : 'The status bar and navigation buttons are hidden. After you '
+                  'press start, Android shows a "Pin app?" confirmation; '
+                  'accept it so the notification shade cannot be pulled down '
+                  'during the exam. Screenshots stay blocked.',
       ),
     ];
 
@@ -971,11 +988,14 @@ class _ChecklistSummary extends StatelessWidget {
       ),
       (
         l10n.isIndonesian
-            ? 'Kunci layar ujian siap'
-            : 'Exam screen lock ready',
-        // Selalu siap: penguncian dikerjakan dari dalam aplikasi (status bar
-        // disembunyikan + task ditarik kembali ke depan). Sebelumnya baris ini
-        // menuntut status device owner yang harus diprovision lewat ADB.
+            ? 'Kunci layar ujian (system bar + sematan)'
+            : 'Exam screen lock (system bars + pinning)',
+        // Status bar/nav bar disembunyikan memakai
+        // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE (bar hanya muncul sesaat dan
+        // tidak interaktif) + watchdog yang menutup ulang bar, lalu screen
+        // pinning dipasang agar panel notifikasi benar-benar tidak bisa
+        // ditarik. Semuanya dikerjakan dari dalam aplikasi, tanpa provisioning
+        // ADB/device owner yang dulu dituntut baris ini.
         r != null,
       ),
     ];
