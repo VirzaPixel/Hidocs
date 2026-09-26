@@ -314,8 +314,15 @@ class FormProvider extends ChangeNotifier {
   }
 
   void syncExpiredForms() {
-    _forms.removeWhere((f) => f.isExpired);
-    notifyListeners();
+    bool changed = false;
+    for (int i = 0; i < _forms.length; i++) {
+      final f = _forms[i];
+      if (f.isExpired && f.rawIsActive) {
+        _forms[i] = copyFormModel(f, isActive: false);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   List<FormModel> getFormsByCreator(String creatorId) =>
@@ -412,8 +419,9 @@ class FormProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Gunakan format yang sama dengan toUpdateJson()
       await ApiClient.put('/forms/$formId', body: {
-        'is_active': !form.isActive,
+        'status': !form.isActive ? 'ACTIVE' : 'CLOSED',
       });
       final index = _forms.indexWhere((f) => f.id == formId);
       if (index >= 0) {
@@ -526,9 +534,21 @@ class FormProvider extends ChangeNotifier {
         _saveWarnings.add('Status form gagal disimpan.');
       }
 
+      // Update local model supaya status (active/public) langsung sinkron
+      // di UI tanpa perlu refresh list. Kita update variabel `created` sebelum
+      // ditambahkan ke _forms.
+      FormModel finalForm = created;
+      if (form.isActive || form.isPublic) {
+        finalForm = copyFormModel(
+          created,
+          isActive: form.isActive,
+          isPublic: form.isPublic,
+        );
+      }
+
       await _persistRelations(created.id, form);
 
-      _forms.add(created);
+      _forms.add(finalForm);
       _isLoading = false;
       notifyListeners();
       return true;

@@ -397,15 +397,14 @@ class AppTheme {
     dividerTheme: const DividerThemeData(color: darkBorder, thickness: 1, space: 1),
     chipTheme: ChipThemeData(
       backgroundColor: darkSurface,
-      // Teks pakai warna terang supaya selalu terbaca di atas background chip
-      // (terpilih maupun tidak) pada tema gelap — dulu label & background sama
-      // persis warna primary sehingga teks hilang.
+      // Jangan set selectedColor di sini — biarkan tiap ChoiceChip
+      // mengatur selectedColor & labelStyle sendiri agar teks selalu
+      // kontras dengan background (primary gelap → teks putih, dst).
       color: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
-            ? _darkPrimary.withValues(alpha: 0.30)
+            ? _darkPrimary.withValues(alpha: 0.25)
             : darkSurface,
       ),
-      selectedColor: _darkPrimary.withValues(alpha: 0.30),
       labelStyle: const TextStyle(
           fontSize: 12, fontWeight: FontWeight.w600, color: darkTextPrimary),
       secondaryLabelStyle: const TextStyle(

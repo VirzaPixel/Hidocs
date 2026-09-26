@@ -69,11 +69,15 @@ class SecureQuestionCanvas extends StatelessWidget {
 class SecurityOverlayWidget extends StatelessWidget {
   final bool isVisible;
   final String warningText;
+  final int? violationCount;
+  final int? maxViolations;
 
   const SecurityOverlayWidget({
     super.key,
     required this.isVisible,
     this.warningText = 'Peringatan Keamanan Ujian! Fokus layar terdeteksi berpindah.',
+    this.violationCount,
+    this.maxViolations,
   });
 
   @override
@@ -112,6 +116,28 @@ class SecurityOverlayWidget extends StatelessWidget {
               height: 1.5,
             ),
           ),
+          if (violationCount != null && maxViolations != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.redAccent.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                'Pelanggaran: $violationCount / $maxViolations',
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

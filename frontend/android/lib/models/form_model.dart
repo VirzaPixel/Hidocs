@@ -87,6 +87,13 @@ class FormModel {
     return true;
   }
 
+  /// Status label untuk UI: 'active', 'closed', 'expired'
+  String get statusLabel {
+    if (isActive) return 'active';
+    if (_rawIsActive && isExpired) return 'expired';
+    return 'closed';
+  }
+
   String get fullLink => customLinkAlias.isNotEmpty
       ? 'hidocs.app/f/$customLinkAlias'
       : 'hidocs.app/f/$shortLink';
@@ -302,25 +309,18 @@ class FormModel {
 
   Map<String, dynamic> toSettingsJson() {
     final bool hasSchedule = isScheduled && scheduledClose.isAfter(scheduledOpen);
-    return {
+    final map = <String, dynamic>{
       'type': typeForApi,
-      'duration_minutes': hasTimer ? timerMinutes : null,
+      'access_mode': isPublic ? 'public' : 'qr-only',
+      'duration_minutes': hasTimer ? timerMinutes : 0,
       'auto_active_days': 30,
-      // Sebelumnya selalu `true` sehingga toggle "Aktif Langsung" di halaman
-      // pengaturan form tidak berpengaruh sama sekali.
       'is_active_immediately': isActive,
       'is_one_time_submission': oneTimeOnly,
       'randomize_questions': shuffleQuestions,
       'randomize_options': shuffleOptions,
-      'start_time': hasSchedule ? scheduledOpen.toUtc().toIso8601String() : null,
-      'end_time': hasSchedule ? scheduledClose.toUtc().toIso8601String() : null,
       'theme_color': themeColor,
       'cover_gradient': coverGradient,
-      // Token proteksi hanya relevan untuk mode ujian. Mengirim nilai kosong
-      // saat mode survei membuat token lama tidak "nyangkut" di server.
-      'exam_token': isExam && examToken.trim().isNotEmpty
-          ? examToken.trim()
-          : '',
+      'exam_token': isExam && examToken.trim().isNotEmpty ? examToken.trim() : '',
       'is_token_protected': isExam && isTokenProtected,
       'result_visibility': resultVisibility == ResultVisibility.resultAndScore
           ? 'result_and_score'
@@ -328,6 +328,15 @@ class FormModel {
               ? 'result_only'
               : 'hidden',
     };
+    
+    if (hasSchedule) {
+      map['start_time'] = scheduledOpen.toUtc().toIso8601String();
+      map['end_time'] = scheduledClose.toUtc().toIso8601String();
+    }
+    // Jangan kirim 'start_time'/'end_time' kosong — backend bisa reject
+    // empty string sebagai invalid date.
+    
+    return map;
   }
 }
 

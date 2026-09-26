@@ -36,84 +36,322 @@ class LockRequirement {
   }
 }
 
-/// Hasil screening aplikasi berbahaya yang terpasang.
+/// Temuan satu aplikasi floating selama screening.
+enum FloatingFindingKind {
+  /// Sedang menayangkan bubble / jendela mengambang / PiP saat ini.
+  activeOverlay,
+
+  /// Alat floating KHUSUS yang terpasang (Floatee, Floating Apps, Easy
+  /// Touch, XRecorder, Parallel Space, dsb) — memblokir walau sedang tidak
+  /// tampil, karena tinggal satu ketukan untuk memunculkan overlay.
+  installedTool,
+
+  /// Aplikasi harian dengan kemampuan bubble/overlay (WhatsApp, Messenger,
+  /// Gmail, keyboard, browser) yang TIDAK sedang menayangkannya → info saja.
+  informational,
+}
+
+/// Hasil screening SELURUH aplikasi yang terpasang di perangkat.
 class FloatingAppScreeningResult {
-  final List<InstalledAppInfo> suspicious;
+  /// Aplikasi yang menghalangi mulai ujian: overlay sedang tampil ATAU
+  /// alat floating khusus terpasang.
+  final List<InstalledAppInfo> blocking;
+
+  /// Aplikasi ber-kemampuan floating yang hanya perlu dilaporkan, tidak
+  /// memblokir (agar pengguna dengan WhatsApp/Gmail/keyboard pihak ketiga
+  /// tetap bisa mengerjakan ujian).
+  final List<InstalledAppInfo> informational;
+
+  /// Jumlah aplikasi yang berhasil dibaca dari perangkat.
   final int totalScanned;
+
+  /// `false` bila perangkat tidak menyediakan daftar aplikasi terpasang
+  /// (non-Android atau scan gagal).
   final bool scanSupported;
 
+  /// `true` bila pemindaian di Android diminta tapi GAGAL (channel tidak ada /
+  /// PackageManager melempar error / daftar kosong pada perangkat yang jelas
+  /// punya aplikasi terpasang).
+  ///
+  /// Ini menutup bug "fail-open": dulu kegagalan pemindaian dianggap hasil
+  /// bersih sehingga gerbang ujian menyala hijau tanpa memeriksa apa pun.
+  /// Sekarang kegagalan mengunci tombol mulai sampai pemindaian berhasil.
+  final bool scanFailed;
+
+  /// Total aplikasi yang terlihat di perangkat (untuk "memindai N dari M").
+  /// `-1` bila native lama tidak mengirim angka ini.
+  final int totalInstalled;
+
   const FloatingAppScreeningResult({
-    required this.suspicious,
+    required this.blocking,
+    required this.informational,
     required this.totalScanned,
     required this.scanSupported,
+    this.scanFailed = false,
+    this.totalInstalled = -1,
   });
 
-  bool get isClean => suspicious.isEmpty;
+  /// Bersih = pemindaian benar-benar berhasil DAN tidak ada temuan blokir.
+  bool get isClean => !scanFailed && blocking.isEmpty;
+
+  /// Semua temuan floating (blokir + info), terurut risiko tertinggi.
+  List<InstalledAppInfo> get allFindings => [...blocking, ...informational]
+    ..sort((a, b) => b.riskLevel.compareTo(a.riskLevel));
 
   static const FloatingAppScreeningResult unsupported =
       FloatingAppScreeningResult(
-    suspicious: [],
+    blocking: [],
+    informational: [],
     totalScanned: 0,
     scanSupported: false,
   );
+
+  /// Pemindaian gagal total — BUKAN bersih (fail-closed).
+  static const FloatingAppScreeningResult scanFailure =
+      FloatingAppScreeningResult(
+    blocking: [],
+    informational: [],
+    totalScanned: 0,
+    scanSupported: false,
+    scanFailed: true,
+  );
+
+  static const FloatingAppScreeningResult empty = FloatingAppScreeningResult(
+    blocking: [],
+    informational: [],
+    totalScanned: 0,
+    scanSupported: true,
+  );
 }
 
-/// Aplikasi aktif yang sedang tampil/menjalankan jendela mengambang (bubble,
-/// chat-head, float-window, picture-in-picture) menurut pemeriksaan native.
+/// Satu aplikasi yang dibaca dari perangkat beserta fakta floating-nya.
 ///
-/// Ini adalah *fungsi aktual* aplikasi yang terdeteksi — bukan asumsi dari
-/// nama package. WhatsApp/YouTube/Gmail yang terpasang tetapi TIDAK menayangkan
-/// bubble/float TIDAK akan pernah muncul di sini.
+/// Native mengirim FAKTA (terpasang, izin overlay, sedang menayangkan
+/// jendela); klasifikasi "floating app atau bukan" dilakukan di Dart lewat
+/// katalog [kFloatingAppCatalog] sehingga mudah diuji dan bisa diperluas
+/// tanpa menyentuh kode Kotlin.
 class InstalledAppInfo {
   final String packageName;
   final String appName;
 
-  /// `true` bila aplikasi ini BENAR-BENAR menayangkan jendela mengambang
-  /// saat ini (bubble sedang tampil / overlay aktif). Diambil dari
-  /// `NotificationManager.getActiveNotifications` flag bubble,
-  /// `AppOpsManager` overlay yang sedang dipakai, task PiP, dan katalog
-  /// floating yang dikonfirmasi berjalan.
+  /// `true` bila aplikasi BENAR-BENAR menayangkan jendela mengambang saat ini
+  /// (bubble tampil / op overlay sedang dipakai task PiP), menurut native.
   final bool isFloatingActive;
 
-  /// Sistem / launcher bawaan tidak pernah dianggap mengganggu ujian.
+  /// Aplikasi sistem / bawaan ROM tidak pernah dianggap mengganggu ujian.
   final bool isSystem;
 
-  /// Nama tampilan dari katalog bila package dikenal sebagai aplikasi
-  /// floating; `null` untuk aplikasi biasa.
+  /// Aplikasi mendeklarasikan `SYSTEM_ALERT_WINDOW` di manifest-nya.
+  final bool declaresOverlayPermission;
+
+  /// Aplikasi sudah diberi izin "tampil di atas aplikasi lain".
+  final bool overlayPermissionGranted;
+
+  /// Proses aplikasi sedang terlihat/foreground (best-effort native).
+  final bool isRunning;
+
+  /// Nama tampilan dari katalog native bila package dikenal; `null` bila tidak.
   final String? matchedFloatingLabel;
 
-  const InstalledAppInfo({
+  /// Hasil klasifikasi katalog/pola di sisi Dart.
+  final FloatingClassification classification;
+
+  InstalledAppInfo({
     required this.packageName,
     required this.appName,
     required this.isFloatingActive,
     required this.isSystem,
+    this.declaresOverlayPermission = false,
+    this.overlayPermissionGranted = false,
+    this.isRunning = false,
     this.matchedFloatingLabel,
-  });
+    FloatingClassification? classification,
+  }) : classification =
+            classification ??
+            // PERBAIKAN BUG: klasifikasi kini ikut memakai FAKTA dari
+            // perangkat (izin overlay diberikan / sedang menayangkan jendela),
+            // bukan hanya kecocokan nama-package dengan katalog. Tanpa ini,
+            // alat floating yang tidak terdaftar di katalog lolos diam-diam.
+            classifyFloatingTool(
+              packageName: packageName,
+              appName: appName,
+              facts: FloatingFacts(
+                declaresOverlayPermission: declaresOverlayPermission,
+                overlayPermissionGranted: overlayPermissionGranted,
+                isFloatingActive: isFloatingActive,
+                isSystemApp: isSystem,
+              ),
+            );
 
-  FloatingAppEntry? get catalogEntry => lookupCatalog(packageName);
+  FloatingAppEntry? get catalogEntry => classification.catalogEntry;
 
-  int get riskLevel => catalogEntry?.riskLevel ?? 2;
+  int get riskLevel => classification.riskLevel;
 
-  /// Nama yang ditampilkan ke pengguna: nama asli aplikasi, atau nama
-  /// katalog bila nama asli generik.
+  String get category => classification.category;
+
+  /// Cara temuannya disimpulkan — dipakai sebagai teks alasan di UI.
+  FloatingFindingKind get kind {
+    if (isFloatingActive) return FloatingFindingKind.activeOverlay;
+    if (classification.isDedicatedFloatingTool) {
+      return FloatingFindingKind.installedTool;
+    }
+    return FloatingFindingKind.informational;
+  }
+
+  bool get blocks => kind != FloatingFindingKind.informational;
+
+  /// Nama yang ditampilkan ke pengguna.
   String get displayName =>
       appName.isNotEmpty ? appName : (matchedFloatingLabel ?? packageName);
 
+  /// Penjelasan singkat mengapa aplikasi ini ditandai.
+  String get why {
+    switch (kind) {
+      case FloatingFindingKind.activeOverlay:
+        return 'Sedang menayangkan jendela mengambang / bubble / PiP';
+      case FloatingFindingKind.installedTool:
+        final extra = overlayPermissionGranted
+            ? ' · izin overlay sudah diberikan'
+            : (declaresOverlayPermission
+                ? ' · mendeklarasikan izin overlay'
+                : '');
+        return 'Alat floating khusus terpasang '
+            '(${classification.reason})$extra';
+      case FloatingFindingKind.informational:
+        return 'Punya kemampuan bubble/overlay (${classification.reason}), '
+            'tetapi tidak sedang menayangkannya';
+    }
+  }
+
   factory InstalledAppInfo.fromMap(Map<dynamic, dynamic> map) {
+    final pkg = (map['packageName'] ?? '').toString();
+    final label = (map['appName'] ?? '').toString();
+    final matched = (map['matchedFloatingLabel'] ?? '').toString();
     return InstalledAppInfo(
-      packageName: (map['packageName'] ?? '').toString(),
-      appName: (map['appName'] ?? '').toString(),
+      packageName: pkg,
+      appName: label,
       isFloatingActive: map['isFloatingActive'] == true,
       isSystem: map['isSystem'] == true,
-      matchedFloatingLabel: (map['matchedFloatingLabel'] ?? '').toString().isEmpty
-          ? null
-          : (map['matchedFloatingLabel'] ?? '').toString(),
+      declaresOverlayPermission: map['declaresOverlayPermission'] == true,
+      overlayPermissionGranted: map['overlayPermissionGranted'] == true,
+      isRunning: map['isRunning'] == true,
+      matchedFloatingLabel: matched.isEmpty ? null : matched,
     );
   }
 }
 
+
 /// Service penguncian ujian.
 ///
+/// Mengolah payload mentah dari channel native menjadi hasil screening.
+///
+/// Murni (tidak menyentuh platform) sehingga bisa diuji satuan — dan memang
+/// di sinilah keputusan "apakah Floatee/Floating Apps menghalangi ujian"
+/// diambil.
+///
+/// Menerima dua bentuk payload agar tahan terhadap perbedaan versi build
+/// native yang terpasang di perangkat:
+///  * `List` — bentuk lama: hanya daftar aplikasi hasil filter native.
+///  * `Map`  — bentuk baru: `{'apps': [...], 'totalInstalled': int}` sehingga
+///    UI bisa menulis "memindai N dari M aplikasi" dengan jujur.
+FloatingAppScreeningResult screenInstalledPayload(
+  Object? payload, {
+  bool liveOnly = false,
+}) {
+  if (payload == null) return FloatingAppScreeningResult.scanFailure;
+
+  List<dynamic> raw = const <dynamic>[];
+  int totalInstalled = -1;
+
+  if (payload is List) {
+    raw = payload;
+  } else if (payload is Map) {
+    final apps = payload['apps'];
+    if (apps is List) raw = apps;
+    final total = payload['totalInstalled'];
+    if (total is num) totalInstalled = total.toInt();
+  } else {
+    return FloatingAppScreeningResult.scanFailure;
+  }
+
+  final blocking = <InstalledAppInfo>[];
+  final informational = <InstalledAppInfo>[];
+  final seen = <String>{};
+  var scanned = 0;
+
+  for (final item in raw) {
+    if (item is! Map) continue;
+    scanned++;
+    final info = InstalledAppInfo.fromMap(item);
+    if (info.packageName.isEmpty) continue;
+
+    // Mode live (selama ujian berlangsung): HANYA jendela yang benar-benar
+    // sedang tampil yang dihitung, supaya alat floating yang cuma terpasang
+    // tidak memicu pelanggaran berulang pada setiap pengecekan berkala.
+    if (liveOnly && !info.isFloatingActive) continue;
+
+    // Satu package bisa muncul dua kali (mis. profil kerja & profil utama).
+    if (!seen.add(info.packageName)) continue;
+
+    // Aplikasi kritikal sistem (telepon, SMS, settings, dsb) dikecualikan.
+    if (isCriticalAllowed(info.packageName)) continue;
+
+    // HiDocs sendiri tidak pernah ditandai.
+    if (info.packageName == 'id.hidocs.app') continue;
+
+    // Bawaan OEM tidak boleh membuat pengguna terkunci dari ujiannya:
+    // izin overlay sistem jarang bisa dicabut dan aplikasinya tak bisa
+    // di-uninstall. Tetap dilaporkan bila memang alat floating terkenal,
+    // dan tetap diblokir bila SEDANG menayangkan jendela di atas ujian.
+    if (info.isSystem && !info.isFloatingActive) {
+      if (!liveOnly && info.classification.isDedicatedFloatingTool) {
+        informational.add(info);
+      }
+      continue;
+    }
+
+    if (info.blocks) {
+      blocking.add(info);
+    } else {
+      informational.add(info);
+    }
+  }
+
+  // Build native lama tidak mengirim totalInstalled; pakai jumlah terbaca.
+  if (totalInstalled < 0) totalInstalled = scanned;
+
+  // Fail-closed: HP Android pasti punya puluhan aplikasi terpasang. Nol
+  // berarti enumerasi gagal (mis. izin QUERY_ALL_PACKAGES ditolak), BUKAN
+  // berarti perangkat bebas aplikasi floating.
+  if (scanned == 0 && totalInstalled <= 0) {
+    return FloatingAppScreeningResult.scanFailure;
+  }
+
+  blocking.sort((a, b) {
+    final byKind = installedFindingRank(a.kind).compareTo(
+      installedFindingRank(b.kind),
+    );
+    if (byKind != 0) return byKind;
+    return b.riskLevel.compareTo(a.riskLevel);
+  });
+  informational.sort((a, b) => b.riskLevel.compareTo(a.riskLevel));
+
+  return FloatingAppScreeningResult(
+    blocking: blocking,
+    informational: informational,
+    totalScanned: scanned,
+    totalInstalled: totalInstalled,
+    scanSupported: true,
+  );
+}
+
+/// Urutan tampil temuan: yang sedang aktif paling atas, lalu alat terpasang.
+int installedFindingRank(FloatingFindingKind kind) => switch (kind) {
+      FloatingFindingKind.activeOverlay => 0,
+      FloatingFindingKind.installedTool => 1,
+      FloatingFindingKind.informational => 2,
+    };
+
 /// Menyatukan dua proses screening yang terpisah:
 ///  1. Screening daftar aplikasi terpasang (floating/bubble/overlay apps).
 ///  2. Pemeriksaan izin "tampil di atas aplikasi lain" (draw over other apps).
@@ -157,56 +395,54 @@ class ExamSecurityService {
   }
 
   // ---------------------------------------------------------------
-  // Proses 1 — screening daftar aplikasi floating
+  // Proses 1 — screening SELURUH aplikasi terpasang + kategorisasi
   // ---------------------------------------------------------------
 
-  /// Ambil aplikasi floating yang SEDANG AKTIF (menayangkan bubble /
-  /// jendela mengambang) dari native, bukan sekadar "terpasang".
+  /// Screening penuh: membaca SELURUH aplikasi yang terpasang di perangkat,
+  /// lalu mengkategorikan mana yang merupakan aplikasi floating.
   ///
-  /// Hasil HANYA aplikasi yang menurut Android benar-benar memunculkan
-  /// bubble/chat-head/float-window/PiP saat ini. WhatsApp, YouTube, Gmail,
-  /// Truecaller, PUBG, Word, Maps yang HANYA terpasang tetapi tidak
-  /// menampilkan floating TIDAK akan pernah ditandai — persis sesuai
-  /// permintaan: screening berdasarkan *fungsi aktual* aplikasi, bukan nama.
+  /// Kategori hasil (lihat [FloatingAppScreeningResult]):
+  ///  * `blocking` — aplikasi yang SEDANG menayangkan bubble/float/PiP, atau
+  ///    alat floating khusus yang terpasang (Floatee, Floating Apps, Easy
+  ///    Touch, XRecorder, Parallel Space, dsb).
+  ///  * `informational` — aplikasi harian ber-kemampuan bubble (WhatsApp,
+  ///    Messenger, Gmail, keyboard, browser) yang tidak sedang menayangkannya.
+  ///
+  /// Ini memperbaiki bug lama: hasil native dulu difilter
+  /// `isFloatingActive == true` saja, sehingga alat floating yang terpasang
+  /// tetapi sedang tidak tampil (Floatee & Floating Apps) tidak pernah
+  /// muncul di daftar.
   static Future<FloatingAppScreeningResult> screenFloatingApps() async {
+    return _screen(useLiveOnlyChannel: false);
+  }
+
+  /// Screening ketat: HANYA aplikasi yang benar-benar sedang menayangkan
+  /// jendela mengambang saat ini. Dipakai selama ujian berlangsung, supaya
+  /// aplikasi floating yang sekadar terpasang tidak dihitung sebagai
+  /// pelanggaran berulang.
+  static Future<FloatingAppScreeningResult> screenActiveFloatingApps() async {
+    return _screen(useLiveOnlyChannel: true);
+  }
+
+  static Future<FloatingAppScreeningResult> _screen({
+    required bool useLiveOnlyChannel,
+  }) async {
     if (!_isAndroid) return FloatingAppScreeningResult.unsupported;
 
-    List<dynamic> raw;
+    final method =
+        useLiveOnlyChannel ? 'getActiveFloatingApps' : 'getInstalledApps';
+
+    Object? payload;
     try {
-      raw = await _channel.invokeMethod<List<dynamic>>('getInstalledApps') ??
-          const [];
+      payload = await _channel.invokeMethod<Object?>(method);
     } catch (_) {
-      return FloatingAppScreeningResult.unsupported;
+      // Termasuk MissingPluginException — artinya build native yang terpasang
+      // belum punya method ini. Jangan pernah melapor "bersih" untuk
+      // pemindaian yang sebenarnya tidak terjadi.
+      return FloatingAppScreeningResult.scanFailure;
     }
 
-    final suspicious = <InstalledAppInfo>[];
-    var total = 0;
-
-    for (final item in raw) {
-      if (item is! Map) continue;
-      total++;
-      final info = InstalledAppInfo.fromMap(item);
-      if (info.packageName.isEmpty) continue;
-
-      // Aplikasi kritikal sistem (telepon, SMS, settings, dsb) dikecualikan.
-      if (isCriticalAllowed(info.packageName)) continue;
-
-      // HiDocs sendiri tidak pernah ditandai.
-      if (info.packageName == 'id.hidocs.app') continue;
-
-      // HANYA aplikasi floating yang benar-benar aktif yang ditandai.
-      if (!info.isFloatingActive) continue;
-
-      suspicious.add(info);
-    }
-
-    suspicious.sort((a, b) => b.riskLevel.compareTo(a.riskLevel));
-
-    return FloatingAppScreeningResult(
-      suspicious: suspicious,
-      totalScanned: total,
-      scanSupported: true,
-    );
+    return screenInstalledPayload(payload, liveOnly: useLiveOnlyChannel);
   }
 
   // ---------------------------------------------------------------
@@ -340,5 +576,58 @@ class ExamSecurityService {
     try {
       await _channel.invokeMethod<bool>('openUsageAccessSettings');
     } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------
+  // Suara peringatan saat keluar aplikasi (assets/keluar.mp3)
+  // ---------------------------------------------------------------
+
+  /// Senyalkan assets/keluar.mp3 lewat pemain audio NATIVE.
+  ///
+  /// Sengaja tidak memakai audioplayers: ketika aplikasi berpindah ke
+  /// latar, isolat Dart bisa tertunda sehingga suara gagal berbunyi tepat
+  /// di saat pengguna keluar. MediaPlayer native dengan `USAGE_ALARM`
+  /// tetap berbunyi (dan tidak terpengaruh volume media yang di-mute).
+  static Future<bool> playExitAlarm() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('playExitAlarm') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Hentikan suara peringatan (mis. pengguna sudah kembali ke ujian).
+  static Future<void> stopExitAlarm() async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('stopExitAlarm');
+    } catch (_) {}
+  }
+
+  /// Pasang/lepas "senjata" alarm keluar. Hanya saat bernilai `true`
+  /// native akan berbunyi sendiri ketika aktivitas kehilangan fokus
+  /// (tombol Home, Recents, ganti aplikasi).
+  static Future<void> setExitAlarmArmed(bool armed) async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('setExitAlarmArmed', armed);
+    } catch (_) {}
+  }
+
+  /// Buka halaman "Info aplikasi" milik [packageName] di Setelan, tempat
+  /// pengguna bisa menghentikan paksa / mencabut izin overlay / mencopot
+  /// aplikasi floating yang terdeteksi.
+  static Future<bool> openAppSettings(String packageName) async {
+    if (!_isAndroid || packageName.isEmpty) return false;
+    try {
+      return await _channel.invokeMethod<bool>(
+            'openAppSettings',
+            {'packageName': packageName},
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
   }
 }

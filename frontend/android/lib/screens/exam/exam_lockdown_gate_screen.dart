@@ -136,11 +136,15 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
 
                   _SectionTitle(
                     title: l10n.isIndonesian
-                        ? 'Proses 1 — Screening Aplikasi'
-                        : 'Step 1 — App Screening',
+                        ? 'Proses 1 — Screening Seluruh Aplikasi'
+                        : 'Step 1 — Full App Screening',
                     subtitle: l10n.isIndonesian
-                        ? 'Hanya aplikasi yang sedang menayangkan bubble/jendela mengambang yang harus ditutup. Aplikasi biasa yang terpasang (WhatsApp, YouTube, Gmail, dsb) tidak masalah.'
-                        : 'Only apps currently showing a bubble/floating window must be closed. Regular installed apps (WhatsApp, YouTube, Gmail, etc.) are fine.',
+                        ? 'Semua aplikasi yang terpasang di HP diperiksa, lalu '
+                              'dikategorikan: alat floating khusus (harus '
+                              'dihapus/ditutup), aplikasi yang sedang '
+                              'menayangkan overlay, dan aplikasi umum yang '
+                              'hanya punya fitur bubble (tidak menghalangi).'
+                        : 'Every installed app is scanned and categorized: dedicated floating tools (must be removed/closed), apps currently showing an overlay, and mainstream apps that merely have bubble features (not blocking).',
                   ),
                   const SizedBox(height: 10),
                   _FloatingAppsCard(
@@ -172,19 +176,11 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
                   ),
                   const SizedBox(height: 20),
 
-                  // Volume otomatis: saat "Mulai Ujian" ditekan, volume media
-                  // dibuat AUTO FULL; saat keluar/selesai ujian dipulihkan.
-                  // (Pengganti "Mode Sunyi Total"/DND yang DIHAPUS.)
-                  _SectionTitle(
-                    title: l10n.isIndonesian
-                        ? 'Proses 3 — Volume Otomatis'
-                        : 'Step 3 — Automatic Volume',
-                    subtitle: l10n.isIndonesian
-                        ? 'Volume HP otomatis dibuat penuh saat ujian dimulai, lalu dipulihkan saat ujian selesai.'
-                        : 'Phone volume is set to full when the exam starts, then restored when it ends.',
-                  ),
-                  const SizedBox(height: 10),
-                  _VolumeCard(dark: isDark),
+                  // "Fitur volume otomatis" (kartu interaktif + tombol tes)
+                  // DIHAPUS sesuai permintaan. Yang tersisa hanya informasi:
+                  // volume media dibuat 100% otomatis saat mengerjakan ujian
+                  // dan dipulihkan saat keluar, serta alarm keluar berbunyi.
+                  _ExamNoticeCard(dark: isDark),
                   const SizedBox(height: 24),
 
                   _ChecklistSummary(
@@ -326,124 +322,104 @@ class _HeaderCard extends StatelessWidget {
   }
 }
 
-/// Kartu info "Volume Otomatis" (pengganti kartu DND yang dihapus).
+/// Ganti "fitur volume otomatis" yang lama (kartu interaktif + tombol tes).
 ///
-/// Bukan syarat penguncian — hanya penjelasan + tombol "Tes Sekarang" yang
-/// menaikkan volume media ke penuh dan langsung memulihkannya kembali,
-/// supaya pengguna yakin fitur volumenya bekerja sebelum ujian dimulai.
-class _VolumeCard extends StatefulWidget {
+/// Sekarang HANYA informasi pasif: volume media akan dinaikkan ke 100% secara
+/// otomatis pada saat mengerjakan ujian (dan dipulihkan saat keluar), serta
+/// suara `assets/keluar.mp3` berbunyi ketika pengguna keluar aplikasi.
+class _ExamNoticeCard extends StatelessWidget {
   final bool dark;
 
-  const _VolumeCard({required this.dark});
-
-  @override
-  State<_VolumeCard> createState() => _VolumeCardState();
-}
-
-class _VolumeCardState extends State<_VolumeCard> {
-  double? _level;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
-
-  Future<void> _load() async {
-    final v = await ExamSecurityService.currentMediaVolume();
-    if (!mounted) return;
-    setState(() => _level = v.clamp(0.0, 1.0));
-  }
-
-  Future<void> _test() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    await ExamSecurityService.maximizeExamVolume();
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    await ExamSecurityService.restoreExamVolume();
-    final v = await ExamSecurityService.currentMediaVolume();
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _level = v.clamp(0.0, 1.0);
-    });
-  }
+  const _ExamNoticeCard({required this.dark});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final dark = widget.dark;
-    const color = AppTheme.info;
-    final pct = _level == null ? '…' : '${(_level! * 100).round()}%';
+
+    final notes = <(IconData, String)>[
+      (
+        Icons.volume_up_rounded,
+        l10n.isIndonesian
+            ? 'Volume HP akan otomatis dibuat 100% (penuh) selama Anda '
+                  'mengerjakan ujian, lalu dikembalikan seperti semula saat '
+                  'keluar. Tidak perlu diatur manual.'
+            : 'Phone volume is automatically set to 100% while you take the '
+                  'exam, then restored when you leave. No manual setup needed.',
+      ),
+      (
+        Icons.campaign_rounded,
+        l10n.isIndonesian
+            ? 'Jika Anda keluar dari aplikasi saat ujian berlangsung, suara '
+                  'peringtan (alarm) akan langsung berbunyi.'
+            : 'If you leave the app during the exam, an alarm sound plays '
+                  'immediately.',
+      ),
+      (
+        Icons.lock_rounded,
+        l10n.isIndonesian
+            ? 'Layar ujian juga dikunci: screenshot dan preview di daftar '
+                  'aplikasi terbaru diblokir.'
+            : 'The exam screen is also secured: screenshots and recents '
+                  'previews are blocked.',
+      ),
+    ];
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: (dark ? AppTheme.darkCard : Colors.white),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
+        border: Border.all(color: dark ? AppTheme.darkBorder : AppTheme.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.volume_up_rounded,
-              color: color,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 16,
+                color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
                   l10n.isIndonesian
-                      ? 'Volume otomatis penuh saat ujian ($pct)'
-                      : 'Auto full volume during exam ($pct)',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                    color:
-                        dark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                  ),
+                      ? 'Berjalan Otomatis (tanpa pengaturan)'
+                      : 'Runs automatically (no setup)',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  l10n.isIndonesian
-                      ? 'Volume dipulihkan otomatis setelah ujian selesai.'
-                      : 'Volume is restored automatically after the exam.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final (icon, text) in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    icon,
+                    size: 15,
+                    color: dark ? AppTheme.accent : AppTheme.primary,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.45,
+                        color: dark
+                            ? AppTheme.darkTextSecondary
+                            : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: _busy ? null : _test,
-            style: TextButton.styleFrom(
-              foregroundColor: context.primary,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            ),
-            child: Text(
-              _busy
-                  ? '…'
-                  : (l10n.isIndonesian ? 'Tes Sekarang' : 'Test Now'),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
         ],
       ),
     );
@@ -504,8 +480,8 @@ class _FloatingAppsCard extends StatelessWidget {
         icon: Icons.info_outline_rounded,
         color: AppTheme.info,
         title: l10n.isIndonesian
-            ? 'Pemeriksaan tidak didukung di perangkat ini'
-            : 'Screening not supported on this device',
+            ? 'Daftar aplikasi tidak terbaca di perangkat ini'
+            : 'Installed app list unavailable on this device',
         lines: [
           l10n.isIndonesian
               ? 'Ujian tetap dapat dimulai, namun pantau layar Anda.'
@@ -523,8 +499,14 @@ class _FloatingAppsCard extends StatelessWidget {
             : 'Clean — ${data.totalScanned} apps scanned',
         lines: [
           l10n.isIndonesian
-              ? 'Tidak ada aplikasi floating terdeteksi.'
-              : 'No floating apps detected.',
+              ? 'Tidak ada aplikasi floating yang terdeteksi menghalangi ujian.'
+              : 'No floating app detected that blocks the exam.',
+          if (data.informational.isNotEmpty)
+            l10n.isIndonesian
+                ? '${data.informational.length} aplikasi umum punya fitur '
+                      'bubble/overlay tetapi tidak sedang menayangkannya.'
+                : '${data.informational.length} mainstream apps have bubble/'
+                      'overlay features but are not showing them.',
         ],
       );
     }
@@ -547,8 +529,10 @@ class _FloatingAppsCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   l10n.isIndonesian
-                      ? '${data.suspicious.length} aplikasi terdeteksi'
-                      : '${data.suspicious.length} apps detected',
+                      ? '${data.blocking.length} aplikasi floating terdeteksi '
+                            'dari ${data.totalScanned} aplikasi diperiksa'
+                      : '${data.blocking.length} floating apps detected '
+                            'out of ${data.totalScanned} scanned',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
@@ -561,8 +545,12 @@ class _FloatingAppsCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             l10n.isIndonesian
-                ? 'Tutup aplikasi berikut (matikan bubble/fenster mengambang) lalu periksa ulang.'
-                : 'Close the following apps (turn off bubbles/floating windows) then re-check.',
+                ? 'Tekan "Kelola" pada aplikasi tersebut untuk menghentikan '
+                      'paksa, mencabut izin overlay, atau menghapusnya. '
+                      'Setelah itu tekan "Periksa Ulang".'
+                : 'Tap "Manage" on each app to force-stop it, revoke its '
+                      'overlay permission, or uninstall it. Then tap '
+                      '"Re-check".',
             style: TextStyle(
               fontSize: 12,
               height: 1.4,
@@ -570,51 +558,13 @@ class _FloatingAppsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          ...data.suspicious.take(20).map(
-                (app) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        margin: const EdgeInsets.only(right: 10),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: app.riskLevel >= 3
-                              ? AppTheme.error
-                              : AppTheme.warning,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          app.appName.isEmpty
-                              ? app.packageName
-                              : '${app.appName} · ${app.packageName}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: dark
-                                ? AppTheme.darkTextPrimary
-                                : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          if (data.suspicious.length > 20)
-            Text(
-              l10n.isIndonesian
-                  ? '+${data.suspicious.length - 20} aplikasi lainnya...'
-                  : '+${data.suspicious.length - 20} more apps...',
-              style: const TextStyle(
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-                color: AppTheme.textMuted,
-              ),
-            ),
+          ...data.blocking.map(
+            (app) => _FloatingFindingTile(app: app, dark: dark),
+          ),
+          if (data.informational.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            _InformationalAppsDisclosure(apps: data.informational, dark: dark),
+          ],
         ],
       ),
     );
@@ -627,17 +577,17 @@ class _FloatingAppsCard extends StatelessWidget {
     required List<String> lines,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(width: 12),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,9 +595,9 @@ class _FloatingAppsCard extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: dark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                    color: color,
                   ),
                 ),
                 for (final line in lines) ...[
@@ -657,7 +607,9 @@ class _FloatingAppsCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.4,
-                      color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+                      color: dark
+                          ? AppTheme.darkTextSecondary
+                          : AppTheme.textSecondary,
                     ),
                   ),
                 ],
@@ -665,6 +617,170 @@ class _FloatingAppsCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Satu temuan aplikasi floating yang menghalangi ujian.
+class _FloatingFindingTile extends StatelessWidget {
+  final InstalledAppInfo app;
+  final bool dark;
+
+  const _FloatingFindingTile({required this.app, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final active = app.kind == FloatingFindingKind.activeOverlay;
+    final badgeColor = active ? AppTheme.error : AppTheme.warning;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: dark ? AppTheme.darkCard : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: badgeColor.withValues(alpha: 0.45),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 5, right: 10),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: badgeColor,
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    app.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: dark
+                          ? AppTheme.darkTextPrimary
+                          : AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${app.category} · risiko ${app.riskLevel}/3 · '
+                    '${app.why}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.35,
+                      color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    app.packageName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: dark
+                          ? AppTheme.darkTextMuted
+                          : AppTheme.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: () => ExamSecurityService.openAppSettings(
+                app.packageName,
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: badgeColor,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                l10n.isIndonesian ? 'Kelola' : 'Manage',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Aplikasi umum ber-kemampuan bubble: dilaporkan, tidak memblokir.
+class _InformationalAppsDisclosure extends StatelessWidget {
+  final List<InstalledAppInfo> apps;
+  final bool dark;
+
+  const _InformationalAppsDisclosure({
+    required this.apps,
+    required this.dark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: dark ? AppTheme.darkBorder : AppTheme.border,
+        ),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          expansionTileTheme: const ExpansionTileThemeData(
+            iconColor: AppTheme.textMuted,
+          ),
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          title: Text(
+            l10n.isIndonesian
+                ? '${apps.length} aplikasi umum punya fitur bubble '
+                      '(tidak menghalangi)'
+                : '${apps.length} mainstream apps have bubble features '
+                      '(not blocking)',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: dark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+            ),
+          ),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                apps.map((a) => a.displayName).join(', '),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.45,
+                  color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -778,7 +894,9 @@ class _ChecklistSummary extends StatelessWidget {
     final r = ready;
     final items = <(String, bool)>[
       (
-        l10n.isIndonesian ? 'Aplikasi floating bersih' : 'Floating apps clean',
+        l10n.isIndonesian
+            ? 'Tidak ada aplikasi floating terdeteksi'
+            : 'No floating app detected',
         r?.floatingAppsClean ?? false,
       ),
       (
@@ -786,14 +904,9 @@ class _ChecklistSummary extends StatelessWidget {
         r?.overlayPermissionOk ?? false,
       ),
       (
-        // Bukan syarat penguncian — sekadar info bahwa volume otomatis aktif.
-        l10n.isIndonesian ? 'Volume otomatis penuh' : 'Auto full volume',
-        true,
-      ),
-      (
         l10n.isIndonesian
-            ? 'Sesi ujian terdaftar'
-            : 'Exam session registered',
+            ? 'Sesi ujian terdaftar (response id aktif)'
+            : 'Exam session registered (response id)',
         sessionReady,
       ),
     ];
@@ -847,6 +960,42 @@ class _ChecklistSummary extends StatelessWidget {
                 ],
               ),
             ),
+          const SizedBox(height: 2),
+          Text(
+            l10n.isIndonesian
+                ? 'Catatan: "sesi ujian terdaftar" berarti server sudah '
+                      'mencatat percobaan ujian Anda (punya response id). '
+                      'Tanpa sesi itu, autosave dan laporan pelanggaran tidak '
+                      'bisa terhubung, sehingga form bertoken mengunci tombol '
+                      '"Mulai Ujian". Untuk form tanpa token, syarat ini '
+                      'otomatis terpenuhi.'
+                : 'Note: "exam session registered" means the backend already '
+                      'recorded your attempt (a response id). Without it, '
+                      'autosave and violation reports cannot be attached, so '
+                      'token-protected forms keep "Start Exam" locked. Forms '
+                      'without a token satisfy this automatically.',
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.45,
+              color: dark ? AppTheme.darkTextMuted : AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.isIndonesian
+                ? 'Volume media akan otomatis dibuat 100% selama mengerjakan '
+                      'ujian dan dikembalikan seperti semula saat keluar; '
+                      'suara peringatan berbunyi jika Anda keluar aplikasi.'
+                : 'Media volume is automatically set to 100% during the exam '
+                      'and restored on exit; an alarm sounds if you leave the '
+                      'app.',
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+              color: dark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+            ),
+          ),
         ],
       ),
     );

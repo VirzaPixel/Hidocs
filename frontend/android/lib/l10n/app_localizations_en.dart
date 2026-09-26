@@ -363,7 +363,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginScreenTitle => 'Login to Your Account';
 
   @override
-  String get loginScreenSubtitle => 'Please login to continue';
+  String get loginScreenSubtitle => 'The Most Secure Exam Platform';
 
   @override
   String get wrongEmail => 'Invalid email';
@@ -1495,6 +1495,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryFilterHint => 'Filter by category';
 
   @override
-  String get authFooterTagline =>
-      'HiDocs • Dynamic Form & Smart Assessment Platform';
+  String get authFooterTagline => 'HiDocs • The Safest Exam Platform';
 }

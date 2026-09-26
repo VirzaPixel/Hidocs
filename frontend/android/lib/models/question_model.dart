@@ -287,6 +287,7 @@ class QuestionModel {
           mappedType == QuestionType.mathFormula ? mathFormula : null,
       isRequired: json['is_required'] == true,
       ratingMax: mappedType == QuestionType.rating ? 5 : null,
+      correctRating: json['correct_rating'] as int?,
       hasScore: json['points'] is num && (json['points'] as num) > 0,
       score: (json['points'] is num) ? (json['points'] as num).toDouble() : 0,
       options: options,
@@ -346,6 +347,8 @@ class QuestionModel {
       'points': hasScore ? score.round().clamp(0, 100) : 0,
       'order_index': orderIndex,
       'is_required': isRequired,
+      if (type == QuestionType.rating && correctRating != null)
+        'correct_rating': correctRating,
       'options': type == QuestionType.matching
           ? matchingPairs
               .where((p) => p.isComplete)
@@ -401,11 +404,13 @@ class OptionModel {
   factory OptionModel.fromJson(Map<String, dynamic> json) {
     final imageUrl = (json['img_url'] ?? '').toString();
     final isCorrect = json['is_correct'] == true;
+    final content = (json['content'] ?? '').toString();
 
     return OptionModel(
       id: (json['id'] ?? '').toString(),
       text: (json['option_text'] ?? '').toString(),
       imageUrl: imageUrl.isEmpty ? null : imageUrl,
+      content: content.isEmpty ? null : content,
       score: isCorrect ? 1 : 0,
       isCorrect: isCorrect,
     );
@@ -421,6 +426,9 @@ class OptionModel {
       map['img_url'] = imageUrl;
       // fallback: encode image as dataUrl in text if backend doesn't persist img_url
       // keep option_text as is, backend may ignore img_url
+    }
+    if (content != null && content!.isNotEmpty) {
+      map['content'] = content;
     }
     return map;
   }

@@ -32,6 +32,92 @@ class FloatingAppEntry {
 /// bubble/chat-heads/overlay/float-window.
 const List<FloatingAppEntry> kFloatingAppCatalog = <FloatingAppEntry>[
   // ---------------------------------------------------------------------------
+  // Alat floating KHUSUS (dedicated) — fungsi utamanya memang menayangkan
+  // jendela mengambang di atas aplikasi lain. Entri ini yang dulu "tidak
+  // terdeteksi" karena pipeline hanya memeriksa overlay aktif (bukan daftar
+  // aplikasi terpasang).
+  //
+  // PENTING (perbaikan bug): ID paket di bawah ini adalah applicationId ASLI
+  // yang terverifikasi di Google Play, bukan tebakan. Versi katalog sebelumnya
+  // mencantumkan `com.floatee.app` / `com.floatee.android` yang TIDAK PERNAH
+  // ada di Play Store (HTTP 404), sedangkan "Floatee – Floating All In One"
+  // yang benar-benar dipasang pengguna bernama paket `com.maika.floatee`.
+  // Karena itu Floatee & Floating Apps lolos dari pencocokan katalog.
+  //
+  // Karena katalog tidak mungkin lengkap (developer terus membuat varian
+  // baru), keputusan akhir TIDAK bergantung pada katalog: sisi Dart juga
+  // memakai fakta izin overlay dari perangkat — lihat [FloatingFacts].
+  // ---------------------------------------------------------------------------
+  FloatingAppEntry(
+    androidPackage: 'com.lwi.android.flapps',
+    label: 'Floating Apps',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.lwi.android.flappsfull',
+    label: 'Floating Apps Full',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.lwi.android.flappsplugin',
+    label: 'Floating Apps Plugin',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  // "Floatee – Floating All In One" (MA I KA, Jakarta) — ID paket asli.
+  FloatingAppEntry(
+    androidPackage: 'com.maika.floatee',
+    label: 'Floatee',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  // Aplikasi assistive-touch / floating-ball populer yang terverifikasi.
+  FloatingAppEntry(
+    androidPackage: 'com.easytouch.assistivetouch',
+    label: 'Assistive Touch for Android',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.ksxkq.floating',
+    label: 'FloatingMenu - Assistive Touch',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.floatkit.app',
+    label: 'Floatkit - Sidebar & Search',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.bhanu.sidebarfree',
+    label: 'Side Bar',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'io.github.chayanforyou.quickball',
+    label: 'Quick Ball',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'nu.nav.bar',
+    label: 'Navigator Bar',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+  FloatingAppEntry(
+    androidPackage: 'com.floating.apps.box',
+    label: 'Floating Apps Box',
+    category: 'System/Tools',
+    riskLevel: 3,
+  ),
+
+  // ---------------------------------------------------------------------------
   // Messaging / chat dengan chat-heads & bubble
   // ---------------------------------------------------------------------------
   FloatingAppEntry(
@@ -654,12 +740,9 @@ const List<FloatingAppEntry> kFloatingAppCatalog = <FloatingAppEntry>[
     category: 'Utility Overlay',
     riskLevel: 2,
   ),
-  FloatingAppEntry(
-    androidPackage: 'com.easytouch.assistivetouch',
-    label: 'EasyTouch',
-    category: 'Utility Overlay',
-    riskLevel: 2,
-  ),
+  // com.easytouch.assistivetouch dipindah ke blok "alat floating khusus"
+  // (System/Tools) di atas — jangan didaftarkan ulang sebagai Utility Overlay
+  // supaya entri terakhir tidak menimpa klasifikasi dedicated di indeks katalog.
   FloatingAppEntry(
     androidPackage: 'com.floating.widgets',
     label: 'Floating Widgets',
@@ -1354,6 +1437,7 @@ const List<String> kFloatingPackagePatterns = <String>[
   'bubble',
   'overlay',
   'floating',
+  'float',
   'floatwindow',
   'chathead',
   'chat.head',
@@ -1385,6 +1469,20 @@ const List<String> kFloatingPackagePatterns = <String>[
   'floaty',
   'popup',
   'pop.up',
+  // --- Ditambah saat perbaikan bug deteksi Floatee / Floating Apps ---
+  // Pola lama tidak mengenal ID paket sungguhan: `com.maika.floatee` dan
+  // `com.lwi.android.flapps` tidak mengandung satu pun kata di atas, sehingga
+  // aplikasi itu hanya lolos bila kebetulan cocok katalog.
+  'floatee',
+  'flapps',
+  'quickball',
+  'floatball',
+  'float.ball',
+  'sidebar',
+  'side.bar',
+  'nav.bar',
+  'edgepanel',
+  'edge.panel',
 ];
 
 /// Package kritis yang DIIZINKAN (tidak dianggap pelanggaran) karena
@@ -1516,4 +1614,356 @@ bool isSuspiciousFloatingApp({
   }
 
   return false;
+}
+
+// ==========================================================================
+// REVISI LANJUTAN 7 — Klasifikasi menyeluruh SELURUH aplikasi terpasang.
+//
+// BUG yang diperbaiki di sini: screening sebelumnya hanya menerima daftar
+// aplikasi yang SEDANG menayangkan overlay dari native, sehingga alat floating
+// yang terpasang tetapi sedang tidak menampilkan jendela (contoh: "Floatee"
+// dan "Floating Apps") tidak pernah ditandai. Sekarang native mengirim
+// inventaris LENGKAP aplikasi terpasang, dan klasifikasi dilakukan di sini:
+//
+//   blockingInstalled : alat floating KHUSUS (dedicated) yang terpasang.
+//   blockingActive    : aplikasi yang saat ini benar-benar menayangkan
+//                       bubble / jendela mengambang / PiP (fakta dari native).
+//   informational     : aplikasi umum yang punya kemampuan bubble/overlay
+//                       (WhatsApp, Gmail, Maps, keyboard, browser, dsb) tetapi
+//                       tidak sedang menayangkannya -> TIDAK memblokir ujian.
+//   none              : tidak terkait floating sama sekali.
+//
+// Dengan begini Floatee & Floating Apps selalu tertangkap (cocok katalog
+// dan/atau kata kunci nama), sementara aplikasi harian biasa tidak membuat
+// pengguna gagal memenuhi syarat ujian.
+// ==========================================================================
+
+/// Token pada nama package yang menandakan ALAT FLOATING KHUSUS (bukan
+/// aplikasi harian yang kebetulan punya fitur bubble).
+const List<String> kDedicatedFloatingPackageTokens = <String>[
+  'floatee',
+  'flapps',
+  'floatingapp',
+  'floating.app',
+  'floatingwidget',
+  'floating.window',
+  'floatwindow',
+  'floaty',
+  'float.ball',
+  'floatball',
+  'assistivetouch',
+  'assistive.touch',
+  'easytouch',
+  'easy.touch',
+  'chathead',
+  'chat.head',
+  'bubble.notif',
+  'notifbubble',
+  'parallel.space',
+  'multipleaccounts',
+  'dualspace',
+  'dual.space',
+  'dualapp',
+  'appcloner',
+  'cloner',
+  'gameturbo',
+  'game.turbo',
+  'gamespace',
+  'game.space',
+  'gamebooster',
+  'game.boost',
+  'multiwindow',
+  'multi.window',
+  'splitscreen',
+  'split.screen',
+  'screenrecorder',
+  'screen.recorder',
+  'xrecorder',
+  'mobizen',
+  'pop.player',
+  'popupplayer',
+  'pip.video',
+  'overlay.touch',
+  'overlaybutton',
+  'sidebars',
+  'side.bar',
+  'toolbox.float',
+];
+
+/// Kata kunci pada NAMA TAMPIIL aplikasi yang menandakan alat floating khusus.
+/// Disengaja berupa frasa spesifik (bukan kata tunggal) supaya "Bubble
+/// Shooter" atau aplikasi biasa tidak ikut ditandai.
+const List<String> kDedicatedFloatingNameTokens = <String>[
+  'floatee',
+  'flapps',
+  'floating app',
+  'floating window',
+  'floating widget',
+  'floating ball',
+  'floating bubble',
+  'floating timer',
+  'floating clock',
+  'floating note',
+  'floating menu',
+  'float apps',
+  'float window',
+  'floaty',
+  'assistive touch',
+  'easy touch',
+  'easytouch',
+  'chat head',
+  'chathead',
+  'screen recorder',
+  'screenrecorder',
+  'screen recording',
+  'xrecorder',
+  'dual space',
+  'parallel space',
+  'multiple accounts',
+  'dual app',
+  'app cloner',
+  'game turbo',
+  'game space',
+  'game booster',
+  'game launcher',
+  'split screen',
+  'multi window',
+  'picture in picture',
+  'popup player',
+  'bubble notif',
+  'overlay button',
+  'sidebar tool',
+];
+
+/// Aplikasi yang tampak seperti alat floating lewat pola package longgar
+/// (`kFloatingPackagePatterns`) tetapi bukan alat mengambang sungguhan,
+/// sehingga tidak boleh memblokir ujian.
+const Set<String> kFloatingFalsePositivePackages = <String>{
+  'com.truecaller',
+  'com.callapp.contacts',
+};
+
+/// Kategori katalog yang termasuk alat floating khusus.
+const Set<String> kDedicatedFloatingCategories = <String>{
+  'System/Tools',
+};
+
+/// Kategori aplikasi harian yang secara DESAIN memang bisa menampilkan
+/// bubble/overlay (chat head Messenger, PiP YouTube, saran keyboard, dsb).
+///
+/// Aplikasi di kategori ini TIDAK boleh dianggap alat floating khusus hanya
+/// karena memegang izin overlay — kalau boleh, hampir setiap HP pengguna akan
+/// gagal pemeriksaan dan ujian tidak pernah bisa dimulai.
+const Set<String> kMainstreamOverlayCategories = <String>{
+  'Messaging',
+  'Video/Media',
+  'Keyboard',
+  'Browser',
+  'Cloud/Office',
+};
+
+/// Fakta mentah sebuah aplikasi yang diambil langsung dari perangkat lewat
+/// channel `hi_docs/security`.
+///
+/// Ini koreksi bug paling penting: keputusan blokir sebelumnya 100% bergantung
+/// pada kecocokan nama/package dengan katalog. Katalog tidak pernah lengkap
+/// (developer baru terus bermunculan, dan ID paket Floatee di katalog lama
+/// salah), sehingga alat floating yang benar-benar terpasang bisa lolos tanpa
+/// suara. Fakta "aplikasi ini memegang izin tampil di atas aplikasi lain" tidak
+/// bergantung pada katalog, dan bisa dicabut sendiri oleh pengguna.
+class FloatingFacts {
+  /// Memakai `SYSTEM_ALERT_WINDOW` di manifest.
+  final bool declaresOverlayPermission;
+
+  /// Izin overlay SUDAH diberikan (Settings > Apps > Display over other apps).
+  final bool overlayPermissionGranted;
+
+  /// Saat ini benar-benar sedang menayangkan jendela overlay.
+  final bool isFloatingActive;
+
+  /// Terpasang sebagai bagian sistem (preinstalled / FLAG_SYSTEM).
+  final bool isSystemApp;
+
+  const FloatingFacts({
+    this.declaresOverlayPermission = false,
+    this.overlayPermissionGranted = false,
+    this.isFloatingActive = false,
+    this.isSystemApp = false,
+  });
+
+  /// Benar-benar bisa tampil mengambang kapan saja.
+  bool get canFloat => overlayPermissionGranted || isFloatingActive;
+
+  static const FloatingFacts unknown = FloatingFacts();
+}
+
+/// Hasil klasifikasi satu aplikasi terpasang terhadap risiko floating.
+class FloatingClassification {
+  /// Entri katalog yang cocok (exact atau varian berprefiks sama).
+  final FloatingAppEntry? catalogEntry;
+
+  /// `true` bila ini ALAT FLOATING KHUSUS — fungsi utamanya menayangkan
+  /// jendela mengambang (Floatee, Floating Apps, Easy Touch, XRecorder,
+  /// Parallel Space, dsb).
+  final bool isDedicatedFloatingTool;
+
+  /// `true` bila aplikasi punya kemampuan bubble/overlay (katalog/pola longgar)
+  /// meskipun bukan alat khusus.
+  final bool hasFloatingCapability;
+
+  /// Tingkat risiko 1-3 (3 = paling berisiko untuk ujian).
+  final int riskLevel;
+
+  /// Kategori katalog, atau `'Floating tool'` bila tertangkap tanpa katalog.
+  final String category;
+
+  /// Alasan singkat mengapa aplikasi ditandai.
+  final String reason;
+
+  const FloatingClassification({
+    this.catalogEntry,
+    this.isDedicatedFloatingTool = false,
+    this.hasFloatingCapability = false,
+    this.riskLevel = 1,
+    this.category = '',
+    this.reason = '',
+  });
+
+  bool get isFlagged => isDedicatedFloatingTool || hasFloatingCapability;
+
+  /// Aplikasi harian biasa (WhatsApp, Gmail, keyboard, browser) yang hanya
+  /// punya kemampuan bubble — tidak memblokir selama tidak sedang tampil.
+  bool get isMainstreamCapable =>
+      hasFloatingCapability && !isDedicatedFloatingTool;
+
+  static const FloatingClassification none = FloatingClassification();
+}
+
+Map<String, FloatingAppEntry>? _catalogIndex;
+
+/// Indeks catalog (lowercase package -> entri), dibangun sekali saat dipakai.
+Map<String, FloatingAppEntry> get _catalogLookup {
+  final built = _catalogIndex;
+  if (built != null) return built;
+  final map = <String, FloatingAppEntry>{};
+  for (final entry in kFloatingAppCatalog) {
+    map[entry.androidPackage.toLowerCase()] = entry;
+  }
+  return _catalogIndex = map;
+}
+
+/// Cari entri katalog: exact match dulu, lalu varian dengan prefiks yang sama
+/// (`com.lwi.android.flapps` -> `com.lwi.android.flappsfull`).
+FloatingAppEntry? findCatalogEntry(String packageName) {
+  final lower = packageName.toLowerCase();
+  final catalog = _catalogLookup;
+  final exact = catalog[lower];
+  if (exact != null) return exact;
+
+  FloatingAppEntry? best;
+  for (final match in catalog.entries) {
+    if (!lower.startsWith(match.key)) continue;
+    final remainder = lower.substring(match.key.length);
+    // Varian hanya bila sisa karakternya "tempelan" tanpa titik:
+    // 'flapps' + 'full' ok; 'flapps' + '.plugin' dianggap package lain.
+    if (remainder.isEmpty || remainder.contains('.')) continue;
+    if (best == null || match.key.length > best.androidPackage.length) {
+      best = match.value;
+    }
+  }
+  return best;
+}
+
+bool _containsAnyToken(String haystack, List<String> needles) {
+  for (final needle in needles) {
+    if (haystack.contains(needle)) return true;
+  }
+  return false;
+}
+
+/// Klasifikasi satu aplikasi terpasang sebagai floating tool.
+///
+/// Murni (tidak menyentuh platform channel) sehingga bisa diuji satuan.
+///
+/// Urutan keputusan:
+/// 1. package aplikasi itu sendiri / package kritis  -> `none`
+/// 2. katalog `System/Tools`, token package, atau token nama -> alat khusus
+/// 3. **memegang izin overlay dan bukan aplikasi mainstream/sistem -> alat
+///    khusus** (aturan kemampuan; menjerat alat floating yang tidak ada di
+///    katalog — inilah penyebab bug "Floatee tidak terdeteksi")
+/// 4. sisanya hanya "punya kemampuan bubble" -> tidak memblokir
+FloatingClassification classifyFloatingTool({
+  required String packageName,
+  required String appName,
+  FloatingFacts facts = FloatingFacts.unknown,
+}) {
+  final pkg = packageName.toLowerCase();
+  final name = appName.toLowerCase();
+
+  if (pkg.isEmpty) return FloatingClassification.none;
+  if (isCriticalAllowed(pkg)) return FloatingClassification.none;
+  if (kFloatingFalsePositivePackages.contains(pkg)) {
+    return FloatingClassification.none;
+  }
+
+  final catalogMatch = findCatalogEntry(pkg);
+  final dedicatedByCatalog = catalogMatch != null &&
+      kDedicatedFloatingCategories.contains(catalogMatch.category);
+  final dedicatedByPackage =
+      _containsAnyToken(pkg, kDedicatedFloatingPackageTokens);
+  final dedicatedByName =
+      _containsAnyToken(name, kDedicatedFloatingNameTokens);
+  final loosePattern = matchesFloatingPattern(pkg);
+  final isMainstream = catalogMatch != null &&
+      kMainstreamOverlayCategories.contains(catalogMatch.category);
+
+  // Aturan kemampuan — tidak bergantung pada kelengkapan katalog.
+  // Aplikasi sistem dikecualikan: pengguna sering tidak bisa menghapus atau
+  // mencabut izin overlay bawaan OEM, dan memaksanya hanya mengunci orang
+  // dari ujian yang seharusnya bisa mereka kerjakan.
+  final dedicatedByCapability =
+      facts.canFloat && !isMainstream && !facts.isSystemApp;
+
+  final dedicated = dedicatedByCatalog ||
+      dedicatedByPackage ||
+      dedicatedByName ||
+      dedicatedByCapability;
+
+  if (!dedicated &&
+      catalogMatch == null &&
+      !loosePattern &&
+      !facts.canFloat) {
+    return FloatingClassification.none;
+  }
+
+  final reasons = <String>[];
+  if (dedicatedByName) reasons.add('nama aplikasi alat floating');
+  if (dedicatedByPackage) reasons.add('package alat floating');
+  if (dedicatedByCatalog) {
+    reasons.add('katalog ${catalogMatch.category}');
+  }
+  if (dedicatedByCapability) {
+    reasons.add(facts.isFloatingActive
+        ? 'sedang menayangkan overlay'
+        : 'memegang izin tampil di atas aplikasi lain');
+  }
+  if (!dedicated && catalogMatch != null) {
+    reasons.add('katalog ${catalogMatch.category}');
+  }
+  if (!dedicated && loosePattern) reasons.add('pola package overlay/bubble');
+  if (!dedicated && facts.isSystemApp && facts.canFloat) {
+    reasons.add('overlay bawaan sistem (tidak bisa dihapus)');
+  }
+
+  return FloatingClassification(
+    catalogEntry: catalogMatch,
+    isDedicatedFloatingTool: dedicated,
+    hasFloatingCapability: true,
+    riskLevel: dedicated
+        ? 3
+        : (catalogMatch?.riskLevel ?? (facts.canFloat ? 3 : 2)),
+    category:
+        catalogMatch?.category ?? (dedicated ? 'Floating tool' : 'Lainnya'),
+    reason: reasons.isEmpty ? 'kemampuan overlay/bubble' : reasons.join(' · '),
+  );
 }

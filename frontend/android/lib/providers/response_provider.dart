@@ -1,5 +1,6 @@
 ﻿import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -132,15 +133,37 @@ class ResponseProvider extends ChangeNotifier {
   }
 
   Future<void> saveGrade(String responseId, double total) async {
-    final response = getResponse(responseId);
-    if (response == null) return;
-    // TODO: kirim grade ke ApiClient, simpan lokal dulu
-    _saveSubmissions();
+    final idx = _responses.indexWhere((r) => r.id == responseId);
+    if (idx < 0) return;
+
+    final sub = _responses[idx];
+    _responses[idx] = sub.copyWith(score: total);
+
+    // Kirim ke server API
+    try {
+      await ApiClient.saveResponseGrade(
+        formId: sub.formId,
+        responseId: responseId,
+        totalScore: total,
+      );
+    } on ApiException catch (e) {
+      // Log error tapi tetap simpan lokal sebagai fallback
+      debugPrint('Grade API save failed: ${e.message}');
+    }
+
+    await _saveSubmissions();
     notifyListeners();
   }
 
   void rememberGrades(String responseId, Map<String, double> essayScores) {
-    // TODO: persistensi nilai essay per respons
+    final idx = _responses.indexWhere((r) => r.id == responseId);
+    if (idx < 0) return;
+
+    _responses[idx] = _responses[idx].copyWith(
+      essayScores: Map<String, double>.from(essayScores),
+    );
+
+    _saveSubmissions();
     notifyListeners();
   }
 

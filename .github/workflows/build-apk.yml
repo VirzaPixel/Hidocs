@@ -43,6 +43,27 @@ jobs:
         run:
           echo "$ENV_SECRET" > .env
 
+      # decode release keystore for APK signing (debug fallback if secrets missing)
+      - name: Setup Release Keystore
+        working-directory: ./frontend/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "⚠️ No keystore secret found — APK will be debug-signed"
+            exit 0
+          fi
+          
+          mkdir -p /tmp/keystores
+          echo "$KEYSTORE_BASE64" | base64 --decode > /tmp/keystores/hidocs-release.jks
+          printf 'storeFile=/tmp/keystores/hidocs-release.jks\n' > android/keystore.properties
+          printf 'storePassword=%s\n' "$STORE_PASSWORD" >> android/keystore.properties
+          printf 'keyAlias=%s\n' "$KEY_ALIAS" >> android/keystore.properties
+          printf 'keyPassword=%s\n' "$KEY_PASSWORD" >> android/keystore.properties
+
       # go to /frontend & install dependencies
       - name: Install Dependencies
         working-directory: ./frontend/android
@@ -66,7 +87,7 @@ jobs:
         if: success()
         working-directory: ./frontend/android
         run : |
-          flutter build apk --release
+          flutter build apk --release --build-number=${{ github.run_number }}
 
       # Upload Artifact
       - name: Upload APK Artifact

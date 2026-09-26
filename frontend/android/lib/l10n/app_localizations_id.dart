@@ -362,7 +362,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get loginScreenTitle => 'Masuk ke Akun';
 
   @override
-  String get loginScreenSubtitle => 'Silakan login untuk melanjutkan';
+  String get loginScreenSubtitle => 'Platform Ujian Teraman';
 
   @override
   String get wrongEmail => 'Email tidak valid';
@@ -1490,6 +1490,5 @@ class AppLocalizationsId extends AppLocalizations {
   String get categoryFilterHint => 'Filter kategori';
 
   @override
-  String get authFooterTagline =>
-      'HiDocs • Formulir Dinamis & Platform Asesmen Cerdas';
+  String get authFooterTagline => 'HiDocs • Platform Ujian Teraman';
 }

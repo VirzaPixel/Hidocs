@@ -349,6 +349,27 @@ class ApiClient {
     }
   }
 
+  // ---------------------------------------------------------------
+  // Grade / Skor
+  // ---------------------------------------------------------------
+
+  /// Simpan grade/score untuk satu response.
+  /// endpoint: POST /forms/{formId}/responses/{responseId}/grade
+  static Future<void> saveResponseGrade({
+    required String formId,
+    required String responseId,
+    required double totalScore,
+    Map<String, double>? essayScores,
+  }) async {
+    await post(
+      '/forms/$formId/responses/$responseId/grade',
+      body: {
+        'total_score': totalScore,
+        if (essayScores != null) 'essay_scores': essayScores,
+      },
+    );
+  }
+
   /// Konfirmasi siswa sudah membaca peringatan, sesi dilanjutkan.
   static Future<bool> acknowledgeWarning(String responseId) async {
     try {
@@ -356,6 +377,45 @@ class ApiClient {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Pengawasan ujian: pencabutan akses
+  // ---------------------------------------------------------------
+
+  /// Kabarkan ke backend bahwa siswa telah melanggar batas keluar.
+  /// Backend seharusnya menandai `access_revoked = true` pada sesi ini.
+  /// Bila endpoint belum ada di backend, method ini diam-diam gagal
+  /// (return false) tanpa crash.
+  static Future<bool> revokeExamAccess(String responseId) async {
+    try {
+      await post(
+        '/public/responses/$responseId/revoke-access',
+        body: {'reason': 'EXIT_LIMIT_EXCEEDED'},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Cek ke backend apakah akses ujian untuk email+form tertentu sudah
+  /// dicabut (karena pelanggaran keluar berulang). Return `true` bila
+  /// diizinkan; `false` bila dicabut. Graceful: bila endpoint belum ada,
+  /// anggap diizinkan agar user tidak terkunci.
+  static Future<bool> checkExamAccess(
+    String formSlug,
+    String respondentEmail,
+  ) async {
+    try {
+      final data = await get(
+        '/public/forms/${Uri.encodeComponent(formSlug)}/check-access?email=${Uri.encodeComponent(respondentEmail)}',
+      );
+      if (data is Map) return data['allowed'] != false;
+      return true;
+    } catch (_) {
+      return true;
     }
   }
 

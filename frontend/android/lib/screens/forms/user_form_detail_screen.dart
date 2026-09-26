@@ -1,21 +1,79 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/models/form_model.dart';
+import 'package:hi_docs/providers/auth_provider.dart';
+import 'package:hi_docs/providers/form_provider.dart';
 import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
 import 'package:hi_docs/screens/exam/exam_token_screen.dart';
 import 'package:hi_docs/screens/forms/fill_form_screen.dart';
+import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 
-class UserFormDetailScreen extends StatelessWidget {
+class UserFormDetailScreen extends StatefulWidget {
   final FormModel form;
 
   const UserFormDetailScreen({
     required this.form,
     super.key,
   });
+
+  @override
+  State<UserFormDetailScreen> createState() => _UserFormDetailScreenState();
+}
+
+class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
+  late FormModel _form;
+  bool _isLoading = true;
+  bool _accessRevoked = false;
+  bool _checkingAccess = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _form = widget.form;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDetail());
+  }
+
+  Future<void> _loadDetail() async {
+    final provider = Provider.of<FormProvider>(context, listen: false);
+    final detail = await provider.loadFormDetail(widget.form.id);
+    if (mounted && detail != null) {
+      setState(() {
+        _form = detail;
+        _isLoading = false;
+      });
+    } else if (mounted) {
+      setState(() => _isLoading = false);
+    }
+
+    // Cek apakah akses ujian sudah dicabut untuk email ini.
+    _checkAccess();
+  }
+
+  Future<void> _checkAccess() async {
+    if (!_form.isExam || !_form.hasAccessToken) return;
+
+    setState(() => _checkingAccess = true);
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final email = auth.currentUser?.email ?? '';
+    if (email.isEmpty) {
+      if (mounted) setState(() => _checkingAccess = false);
+      return;
+    }
+
+    final allowed = await ApiClient.checkExamAccess(_form.slug, email);
+    if (mounted) {
+      setState(() {
+        _accessRevoked = !allowed;
+        _checkingAccess = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +84,7 @@ class UserFormDetailScreen extends StatelessWidget {
     final secondaryTextColor =
         isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
 
-    final isExam = form.hasTimer;
+    final isExam = _form.hasTimer;
 
     return Scaffold(
       appBar: AppBar(
@@ -48,9 +106,7 @@ class UserFormDetailScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: Icon(
-                    isExam
-                        ? Icons.quiz_rounded
-                        : Icons.article_rounded,
+                    isExam ? Icons.quiz_rounded : Icons.article_rounded,
                     size: 40,
                     color: isExam ? AppTheme.warning : context.primary,
                   ),
@@ -58,7 +114,7 @@ class UserFormDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                form.title,
+                _form.title,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
@@ -67,14 +123,11 @@ class UserFormDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                isExam
-                    ? l10n.fillAsExam
-                    : l10n.formInfoSub,
+                isExam ? l10n.fillAsExam : l10n.formInfoSub,
                 style: TextStyle(
                     fontSize: 14, height: 1.5, color: secondaryTextColor),
               ),
               const SizedBox(height: 28),
-
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
@@ -99,25 +152,25 @@ class UserFormDetailScreen extends StatelessWidget {
                     _InfoRow(
                       icon: Icons.edit_document,
                       title: 'Judul Form',
-                      value: form.title,
+                      value: _form.title,
                     ),
                     const SizedBox(height: 14),
                     _InfoRow(
                       icon: Icons.help_outline_rounded,
                       title: 'Jumlah Soal',
-                      value: form.questions.isEmpty
+                      value: _isLoading
                           ? l10n.loading
-                          : l10n.nQuestions(form.questions.length),
+                          : l10n.nQuestions(_form.questions.length),
                     ),
                     if (isExam) ...[
                       const SizedBox(height: 14),
                       _InfoRow(
                         icon: Icons.timer_outlined,
                         title: l10n.infoExamTime,
-                        value: l10n.timerMinutesStr(form.timerMinutes),
+                        value: l10n.timerMinutesStr(_form.timerMinutes),
                       ),
                     ],
-                    if (form.hasAccessToken) ...[
+                    if (_form.hasAccessToken) ...[
                       const SizedBox(height: 14),
                       _InfoRow(
                         icon: Icons.vpn_key_rounded,
@@ -136,7 +189,6 @@ class UserFormDetailScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
@@ -174,48 +226,107 @@ class UserFormDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
 
+              // Jika akses sudah dicabut, tampilkan peringatan.
+              if (_accessRevoked) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppTheme.error.withValues(alpha: 0.30),
+                    ),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.gpp_bad_rounded,
+                        color: AppTheme.error,
+                        size: 20,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Akses ujian Anda telah dicabut karena pelanggaran '
+                          'keluar aplikasi melebihi batas. Hubungi pengawas '
+                          'untuk informasi lebih lanjut.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.5,
+                            color: AppTheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               SizedBox(
                 width: double.infinity,
                 height: 54,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    if (form.hasAccessToken) {
-                      Navigator.pushReplacement(
-                        context,
-                        CustomPageRoute(page: ExamTokenScreen(form: form),
+                  onPressed: _accessRevoked || _checkingAccess
+                      ? null
+                      : () {
+                          if (_form.hasAccessToken) {
+                            Navigator.pushReplacement(
+                              context,
+                              CustomPageRoute(
+                                  page: ExamTokenScreen(form: _form)),
+                            );
+                          } else if (_form.isExam) {
+                            Navigator.pushReplacement(
+                              context,
+                              CustomPageRoute(
+                                  page:
+                                      ExamLockdownGateScreen(form: _form)),
+                            );
+                          } else {
+                            Navigator.pushReplacement(
+                              context,
+                              CustomPageRoute(
+                                  page: FillFormScreen(form: _form)),
+                            );
+                          }
+                        },
+                  icon: _checkingAccess
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(
+                          _form.hasAccessToken
+                              ? Icons.vpn_key_rounded
+                              : Icons.play_arrow_rounded,
                         ),
-                      );
-                    } else if (form.isExam) {
-                      Navigator.pushReplacement(
-                        context,
-                        CustomPageRoute(
-                          page: ExamLockdownGateScreen(form: form),
-                        ),
-                      );
-                    } else {
-                      Navigator.pushReplacement(
-                        context,
-                        CustomPageRoute(page: FillFormScreen(form: form),
-                        ),
-                      );
-                    }
-                  },
-                  icon: Icon(
-                    form.hasAccessToken
-                        ? Icons.vpn_key_rounded
-                        : Icons.play_arrow_rounded,
-                  ),
                   label: Text(
-                    form.hasAccessToken
-                        ? l10n.enterTokenStart
-                        : l10n.startFill,
+                    _accessRevoked
+                        ? 'Akses Dicabut'
+                        : _checkingAccess
+                            ? l10n.loading
+                            : _form.hasAccessToken
+                                ? l10n.enterTokenStart
+                                : l10n.startFill,
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        form.hasAccessToken ? AppTheme.warning : context.primary,
+                    backgroundColor: _accessRevoked
+                        ? Colors.grey.shade400
+                        : _form.hasAccessToken
+                            ? AppTheme.warning
+                            : context.primary,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade400,
+                    disabledForegroundColor: Colors.white70,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15)),

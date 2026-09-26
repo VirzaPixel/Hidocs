@@ -53,4 +53,5 @@ flutter:
   assets:
     - .env
     - assets/logo.png
+    - assets/keluar.mp3
     - assets/templates/template_import.docx
