@@ -7,10 +7,10 @@ import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/providers/form_provider.dart';
 import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
-import 'package:hi_docs/screens/exam/exam_token_screen.dart';
 import 'package:hi_docs/screens/forms/fill_form_screen.dart';
 import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 
 class UserFormDetailScreen extends StatefulWidget {
@@ -170,7 +170,7 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                         value: l10n.timerMinutesStr(_form.timerMinutes),
                       ),
                     ],
-                    if (_form.hasAccessToken) ...[
+                    if (_form.hasExamToken) ...[
                       const SizedBox(height: 14),
                       _InfoRow(
                         icon: Icons.vpn_key_rounded,
@@ -272,13 +272,15 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                   onPressed: _accessRevoked || _checkingAccess
                       ? null
                       : () {
-                          if (_form.hasAccessToken) {
-                            Navigator.pushReplacement(
-                              context,
-                              CustomPageRoute(
-                                  page: ExamTokenScreen(form: _form)),
-                            );
-                          } else if (_form.isExam) {
+                          // ALUR (Revisi Lanjutan 8):
+                          //   detail form → GERBANG "Persiapan Ujian"
+                          //   (screening aplikasi + izin overlay + info volume)
+                          //   → LAYAR TOKEN (khusus tipe UJIAN)
+                          //   → PENGISIAN.
+                          //
+                          // Gerbang tidak lagi menuntut "sesi ujian terdaftar";
+                          // sesi dicatat di layar token lewat `verify-token`.
+                          if (_form.isExam) {
                             Navigator.pushReplacement(
                               context,
                               CustomPageRoute(
@@ -303,8 +305,8 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                           ),
                         )
                       : Icon(
-                          _form.hasAccessToken
-                              ? Icons.vpn_key_rounded
+                          _form.isExam
+                              ? Icons.shield_moon_rounded
                               : Icons.play_arrow_rounded,
                         ),
                   label: Text(
@@ -312,8 +314,10 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                         ? 'Akses Dicabut'
                         : _checkingAccess
                             ? l10n.loading
-                            : _form.hasAccessToken
-                                ? l10n.enterTokenStart
+                            : _form.isExam
+                                ? (l10n.isIndonesian
+                                    ? 'Persiapan Ujian'
+                                    : 'Exam Setup')
                                 : l10n.startFill,
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w700),
@@ -321,7 +325,7 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _accessRevoked
                         ? Colors.grey.shade400
-                        : _form.hasAccessToken
+                        : _form.isExam
                             ? AppTheme.warning
                             : context.primary,
                     foregroundColor: Colors.white,

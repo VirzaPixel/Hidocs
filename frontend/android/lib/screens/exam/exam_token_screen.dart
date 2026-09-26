@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
-import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
+import 'package:hi_docs/screens/forms/fill_form_screen.dart';
 import 'package:hi_docs/services/api/api_client.dart';
+import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 
 class ExamTokenScreen extends StatefulWidget {
@@ -30,7 +32,7 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
   String _responseId = '';
 
   /// Token ujian memakai field `examToken` (bukan accessToken form QR-only).
-  /// Bila form tidak punya token ujian, gerbang dilewati.
+  /// Form bertoken ujian (`is_token_protected`) wajib mengisi token di sini.
   bool get _formHasToken =>
       widget.form.hasExamToken || widget.form.isTokenProtected;
 
@@ -40,11 +42,22 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
     super.dispose();
   }
 
+  /// Kode uuid nol. Backend mengirim ini saat sesi belum dibuat — misalnya
+  /// pengguna belum login sehingga `respondent_email` kosong. Nilai ini BUKAN
+  /// sesi yang sah, jadi diperlakukan sebagai "tidak ada response id".
+  static const String _zeroUuid = '00000000-0000-0000-0000-000000000000';
+
+  static String _cleanSessionId(Object? value) {
+    final id = (value ?? '').toString().trim();
+    return id == _zeroUuid ? '' : id;
+  }
+
+  /// Lanjut ke pengisian soal dengan membawa token + response id sesi ujian.
   void _proceed() {
     Navigator.pushReplacement(
       context,
       CustomPageRoute(
-        page: ExamLockdownGateScreen(
+        page: FillFormScreen(
           form: widget.form,
           preEnteredToken: _enteredToken,
           responseId: _responseId,
@@ -56,20 +69,22 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
   Future<void> _verify() async {
     if (_isChecking) return;
 
-    if (!_formHasToken) {
-      _proceed();
+    final input = _tokenCtrl.text.trim();
+    final hasToken = _formHasToken;
+
+    if (hasToken && input.isEmpty) {
+      setState(() => _error = true);
       return;
     }
-
-    final input = _tokenCtrl.text.trim();
 
     setState(() {
       _isChecking = true;
       _error = false;
     });
 
-    // Selalu verifikasi ke backend supaya sesi ujian terdaftar dan
-    // `response_id` didapat untuk telemetry/autosave.
+    // Selalu hubungi `verify-token`: di sinilah server mencatat sesi ujian
+    // (mengembalikan `response_id`) yang dipakai autosave, telemetry
+    // pelanggaran, dan pantauan pengawas.
     try {
       final data = await ApiClient.post(
         '/public/forms/${Uri.encodeComponent(widget.form.slug)}/verify-token',
@@ -80,13 +95,12 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
       );
       if (!mounted) return;
 
-      if (data is Map &&
-          (data['valid'] == true || data['response_id'] != null)) {
+      if (data is Map) {
         _enteredToken = input;
-        _responseId = (data['response_id'] ?? '').toString();
+        _responseId = _cleanSessionId(data['response_id']);
         if (_responseId.isEmpty && data['session_state'] is Map) {
           _responseId =
-              (data['session_state']['response_id'] ?? '').toString();
+              _cleanSessionId(data['session_state']['response_id']);
         }
         final st = (data['session_token'] ?? '').toString();
         if (st.isNotEmpty) ApiClient.examSessionToken = st;
@@ -94,21 +108,38 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
         return;
       }
 
-      // Backend menolak → tampilkan error (jangan lanjut).
-      setState(() {
-        _isChecking = false;
-        _error = true;
-        _attempts++;
-      });
+      _failVerification();
     } catch (_) {
       if (!mounted) return;
 
-      setState(() {
-        _isChecking = false;
-        _error = true;
-        _attempts++;
-      });
+      // Form tanpa token ujian: jangan mengunci siswa hanya karena pencatatan
+      // sesi gagal (mis. jaringan) — token bukan syarat untuk form ini.
+      if (!hasToken) {
+        _proceed();
+        return;
+      }
+
+      _failVerification();
     }
+  }
+
+  void _failVerification() {
+    setState(() {
+      _isChecking = false;
+      _error = true;
+      _attempts++;
+    });
+  }
+
+  /// Batal / kembali dari layar token.
+  ///
+  /// Gerbang persiapan sudah mengaktifkan penguncian (volume penuh + alarm
+  /// keluar) sebelum tiba di sini, jadi saat siswa membatalkan itu dilepas
+  /// kembali supaya tidak meninggalkan volume terkunci pada 100%.
+  Future<void> _exit() async {
+    await ExamLockdownService.release();
+    if (!mounted) return;
+    Navigator.pop(context);
   }
 
   String _respondentEmail() {
@@ -127,7 +158,7 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
         title: Text(l10n.enterToken),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _exit,
         ),
       ),
       body: SingleChildScrollView(
@@ -135,7 +166,7 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
         child: Column(
           children: [
             const SizedBox(height: 16),
-            _StepIndicator(current: 1, total: 2, dark: isDark),
+            _StepIndicator(current: 2, total: 2, dark: isDark),
             const SizedBox(height: 16),
             Container(
               width: 88,
@@ -169,31 +200,34 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: AppTheme.warning.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.vpn_key_rounded, size: 15, color: AppTheme.warning),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.whichToken,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.warning,
+            // Badge token hanya muncul bila form memang menuntut token.
+            if (_formHasToken)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppTheme.warning.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.vpn_key_rounded,
+                        size: 15, color: AppTheme.warning),
+                    const SizedBox(width: 6),
+                    Text(
+                      l10n.whichToken,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.warning,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 28),
             Container(
               padding: const EdgeInsets.all(22),
@@ -207,7 +241,11 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    l10n.authTokenTitle,
+                    _formHasToken
+                        ? l10n.authTokenTitle
+                        : (l10n.isIndonesian
+                            ? 'Konfirmasi Masuk Ujian'
+                            : 'Exam Entry Confirmation'),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -218,7 +256,13 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    l10n.askTokenFrom,
+                    _formHasToken
+                        ? l10n.askTokenFrom
+                        : (l10n.isIndonesian
+                            ? 'Form ini tidak memerlukan token. Tekan '
+                                '"Lanjutkan" untuk mulai mengerjakan soal.'
+                            : 'This form has no token. Press "Continue" to '
+                                'start answering.'),
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? AppTheme.darkTextMuted : AppTheme.textMuted,
@@ -305,7 +349,7 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
             ),
             const SizedBox(height: 12),
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: _exit,
               child: Text(
                 l10n.cancel,
                 style: TextStyle(

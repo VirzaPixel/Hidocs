@@ -640,11 +640,17 @@ class SecurityBridge(
 //
 // Format: Triple(package, label tampilan, tingkat risiko 1-3).
 private val kKnownFloatingApps: List<Triple<String, String, Int>> = listOf(
-    // Alat floating khusus (case pengguna): Floatee & Floating Apps
-    Triple("com.floatee.app", "Floatee", 3),
-    Triple("com.floatee.android", "Floatee", 3),
+    // Alat floating khusus (case pengguna): Floatee & Floating Apps.
+    // ID paket di bawah adalah applicationId ASLI (terverifikasi Play Store).
+    // `com.floatee.app` / `com.floatee.android` dari revisi sebelumnya TIDAK
+    // PERNAH ada di Play Store (404) — aplikasi sungguhannya bernama
+    // `com.maika.floatee`, jadi entri palsu itu dibuang supaya label tidak
+    // menyesatkan. Deteksi di Dart tetap memakai kata kunci `floatee`, jadi
+    // varian ID baru pun tetap tertangkap.
+    Triple("com.maika.floatee", "Floatee", 3),
     Triple("com.lwi.android.flapps", "Floating Apps", 3),
     Triple("com.lwi.android.flappsfull", "Floating Apps Full", 3),
+    Triple("com.lwi.android.flappsplugin", "Floating Apps Plugin", 3),
     Triple("com.floating.apps.box", "Floating Apps Box", 3),
     Triple("com.flutter.floatingapps", "Floating Apps", 3),
     // Assistive touch / float button

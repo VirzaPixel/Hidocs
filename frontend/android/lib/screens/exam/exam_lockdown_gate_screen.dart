@@ -4,6 +4,7 @@ import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
+import 'package:hi_docs/screens/exam/exam_token_screen.dart';
 import 'package:hi_docs/screens/forms/fill_form_screen.dart';
 import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
@@ -12,25 +13,23 @@ import 'package:hi_docs/utils/theme_context.dart';
 
 /// Gerbang wajib sebelum mengerjakan ujian.
 ///
-/// Memeriksa dua proses persiapan yang terpisah (Revisi Lanjutan 6):
-///  1. Aplikasi floating yang SEDANG AKTIF menampilkan bubble/jendela
-///     mengambang (harus bersih).
+/// Sesuai "Revisi Lanjutan 8", halaman ini FOKUS hanya pada tiga hal:
+///  1. Screening aplikasi floating yang terpasang/aktif (harus bersih).
 ///  2. Izin "tampil di atas aplikasi lain" untuk HiDocs.
+///  3. Informasi volume HP (informasi pasif + alarm keluar).
 ///
-/// "Mode Sunyi Total" (DND) SUDAH DIHAPUS. Gantinya: saat tombol "Mulai Ujian"
-/// ditekan, volume media perangkat dibuat AUTO FULL; saat keluar/selesai
-/// ujian, volume dipulihkan ke nilai semula.
+/// Syarat "sesi ujian terdaftar (response id)" DIHAPUS dari halaman ini.
+/// Pencatatan sesi terjadi di langkah berikutnya, yaitu layar token
+/// ([ExamTokenScreen]) lewat endpoint `verify-token`. Urutan alurnya:
 ///
-/// Selama belum semua terpenuhi, tombol "Mulai Ujian" terkunci.
+///   detail form → GERBANG ini → layar token (tipe ujian) → pengisian.
+///
+/// Selama syarat 1 dan 2 belum terpenuhi, tombol "Mulai Ujian" terkunci.
 class ExamLockdownGateScreen extends StatefulWidget {
   final FormModel form;
-  final String preEnteredToken;
-  final String responseId;
 
   const ExamLockdownGateScreen({
     required this.form,
-    this.preEnteredToken = '',
-    this.responseId = '',
     super.key,
   });
 
@@ -43,11 +42,6 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
   LockdownReadiness? _readiness;
   bool _loading = true;
   bool _engaging = false;
-
-  /// Form yang mewajibkan token harus punya sesi terdaftar supaya
-  /// pengawasan (telemetry/autosave) benar-benar aktif.
-  bool get _sessionReady =>
-      !widget.form.hasExamToken || widget.responseId.isNotEmpty;
 
   @override
   void initState() {
@@ -81,9 +75,15 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     });
   }
 
+  /// Lanjut dari halaman persiapan ke langkah berikutnya.
+  ///
+  /// Alur baru: gerbang ini TIDAK lagi memeriksa sesi terdaftar. Untuk tipe
+  /// ujian, langkah berikutnya adalah layar token ([ExamTokenScreen]) — di
+  /// sanalah token dimasukkan dan sesi ujian dicatat lewat `verify-token`.
+  /// Form non-ujian langsung masuk ke pengisian.
   Future<void> _startExam() async {
     final ready = _readiness;
-    if (ready == null || !ready.isReady || !_sessionReady || _engaging) {
+    if (ready == null || !ready.isReady || _engaging) {
       return;
     }
 
@@ -94,11 +94,9 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     Navigator.pushReplacement(
       context,
       CustomPageRoute(
-        page: FillFormScreen(
-          form: widget.form,
-          preEnteredToken: widget.preEnteredToken,
-          responseId: widget.responseId,
-        ),
+        page: widget.form.formType == FormType.exam
+            ? ExamTokenScreen(form: widget.form)
+            : FillFormScreen(form: widget.form),
       ),
     );
   }
@@ -108,7 +106,7 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     final l10n = AppLocalizations.of(context);
     final isDark = context.isDark;
     final ready = _readiness;
-    final isReady = (ready?.isReady ?? false) && _sessionReady;
+    final isReady = ready?.isReady ?? false;
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
@@ -186,7 +184,6 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
                   _ChecklistSummary(
                     ready: ready,
                     dark: isDark,
-                    sessionReady: _sessionReady,
                   ),
                 ],
               ),
@@ -196,6 +193,12 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
         isEngaging: _engaging,
         onStart: _startExam,
         onRefresh: _refresh,
+        // Tipe ujian lanjut ke layar token, bukan langsung pengisian.
+        readyLabel: widget.form.formType == FormType.exam
+            ? (l10n.isIndonesian
+                ? 'Lanjut Ke Token Ujian'
+                : 'Continue to Exam Token')
+            : (l10n.isIndonesian ? 'Mulai Ujian' : 'Start Exam'),
       ),
     );
   }
@@ -209,9 +212,9 @@ class _GateStepIndicator extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _stepDot(1, done: true),
+        _stepDot(1, active: true),
         _stepLine(),
-        _stepDot(2, active: true),
+        _stepDot(2),
       ],
     );
   }
@@ -880,12 +883,10 @@ class _RequirementCard extends StatelessWidget {
 class _ChecklistSummary extends StatelessWidget {
   final LockdownReadiness? ready;
   final bool dark;
-  final bool sessionReady;
 
   const _ChecklistSummary({
     required this.ready,
     required this.dark,
-    required this.sessionReady,
   });
 
   @override
@@ -902,12 +903,6 @@ class _ChecklistSummary extends StatelessWidget {
       (
         l10n.isIndonesian ? 'Izin overlay HiDocs' : 'HiDocs overlay permission',
         r?.overlayPermissionOk ?? false,
-      ),
-      (
-        l10n.isIndonesian
-            ? 'Sesi ujian terdaftar (response id aktif)'
-            : 'Exam session registered (response id)',
-        sessionReady,
       ),
     ];
 
@@ -963,17 +958,12 @@ class _ChecklistSummary extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             l10n.isIndonesian
-                ? 'Catatan: "sesi ujian terdaftar" berarti server sudah '
-                      'mencatat percobaan ujian Anda (punya response id). '
-                      'Tanpa sesi itu, autosave dan laporan pelanggaran tidak '
-                      'bisa terhubung, sehingga form bertoken mengunci tombol '
-                      '"Mulai Ujian". Untuk form tanpa token, syarat ini '
-                      'otomatis terpenuhi.'
-                : 'Note: "exam session registered" means the backend already '
-                      'recorded your attempt (a response id). Without it, '
-                      'autosave and violation reports cannot be attached, so '
-                      'token-protected forms keep "Start Exam" locked. Forms '
-                      'without a token satisfy this automatically.',
+                ? 'Catatan: halaman ini hanya memeriksa perangkat (aplikasi '
+                      'floating dan izin overlay). Bila sudah bersih, lanjutkan '
+                      'ke langkah berikutnya untuk memasukkan token ujian.'
+                : 'Note: this page only checks the device (floating apps and '
+                      'overlay permission). Once clean, continue to the next '
+                      'step to enter the exam token.',
             style: TextStyle(
               fontSize: 11.5,
               height: 1.45,
@@ -1008,11 +998,16 @@ class _BottomAction extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onRefresh;
 
+  /// Teks tombol utama saat semua syarat terpenuhi — mengarah ke langkah
+  /// berikutnya (layar token untuk tipe ujian, pengisian untuk survei).
+  final String readyLabel;
+
   const _BottomAction({
     required this.isReady,
     required this.isEngaging,
     required this.onStart,
     required this.onRefresh,
+    required this.readyLabel,
   });
 
   @override
@@ -1078,7 +1073,7 @@ class _BottomAction extends StatelessWidget {
                   : const Icon(Icons.lock_rounded, size: 19),
               label: Text(
                 isReady
-                    ? (l10n.isIndonesian ? 'Mulai Ujian' : 'Start Exam')
+                    ? readyLabel
                     : (l10n.isIndonesian
                         ? 'Syarat Belum Lengkap'
                         : 'Requirements Incomplete'),
