@@ -28,7 +28,6 @@ import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
-import 'package:audioplayers/audioplayers.dart';
 
 class FillFormScreen extends StatefulWidget {
   final FormModel form;
@@ -83,13 +82,20 @@ class _FillFormScreenState extends State<FillFormScreen>
   bool get _examMode => widget.form.isExam;
 
   final ScrollController _numberStripController = ScrollController();
-  AudioPlayer? _alarmPlayer;
+
+  /// Bunyikan alarm keluar lewat native (assets/keluar.mp3).
+  ///
+  /// Sengaja bukan audioplayers: saat siswa keluar aplikasi, engine Flutter
+  /// bisa sempat dijeda sehingga suaranya tidak pernah keluar. Native
+  /// MediaPlayer (USAGE_ALARM) tetap berbunyi dan tidak terpengaruh volume
+  /// media yang di-mute.
+  void _soundExitAlarm() {
+    ExamSecurityService.playExitAlarm();
+  }
 
   @override
   void initState() {
     super.initState();
-    
-    _alarmPlayer = AudioPlayer();
 
     _questions = List<QuestionModel>.from(
       widget.form.questions,
@@ -102,7 +108,6 @@ class _FillFormScreenState extends State<FillFormScreen>
     _responseId = widget.responseId.isNotEmpty ? widget.responseId : null;
 
     if (_examMode) {
-      _alarmPlayer?.setSource(AssetSource('keluar.mp3'));
       WidgetsBinding.instance.addObserver(this);
 
       ExamViolationReporter.register(_handleReportedViolation);
@@ -174,7 +179,6 @@ class _FillFormScreenState extends State<FillFormScreen>
 
   @override
   void dispose() {
-    _alarmPlayer?.dispose();
     _timer?.cancel();
 
     if (_examMode) {
@@ -205,6 +209,9 @@ class _FillFormScreenState extends State<FillFormScreen>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
+        // Pengganti native onPause: pastikan alarm keluar tetap berbunyi
+        // walau hook platform tidak sempat terpanggil.
+        _soundExitAlarm();
         _violationCount++;
         _reportViolation(
           'APP_BACKGROUNDED',
@@ -243,7 +250,10 @@ class _FillFormScreenState extends State<FillFormScreen>
 
   Future<void> _refreshLockdown() async {
     if (!_examMode || _accessRevoked) return;
-    final readiness = await ExamLockdownService.evaluate();
+    //evaluateLive: hanya overlay yang SEDANG tampil yang dihitung, supaya
+    //aplikasi floating yang hanya terpasang tidak memicu pelanggaran tiap
+    //kali aplikasi kembali ke depan.
+    final readiness = await ExamLockdownService.evaluateLive();
     if (!mounted) return;
     if (!readiness.isReady) {
       _violationCount++;
@@ -275,7 +285,7 @@ class _FillFormScreenState extends State<FillFormScreen>
   Future<void> _periodicFloatingScan() async {
     if (!_examMode || _accessRevoked || _submitted) return;
     try {
-      final screening = await ExamSecurityService.screenFloatingApps();
+      final screening = await ExamSecurityService.screenActiveFloatingApps();
       if (!mounted || screening.isClean) return;
 
       _violationCount++;
@@ -284,7 +294,7 @@ class _FillFormScreenState extends State<FillFormScreen>
         message:
             'Aplikasi floating terdeteksi aktif selama ujian. '
             'Pelanggaran ke-$_violationCount. '
-            'Aplikasi: ${screening.suspicious.map((a) => a.displayName).join(', ')}',
+            'Aplikasi: ${screening.blocking.map((a) => a.displayName).join(', ')}',
       );
 
       if (_violationCount >= kMaxExitViolations) {
@@ -1106,14 +1116,8 @@ class _FillFormScreenState extends State<FillFormScreen>
         if (didPop) return;
 
         if (_examMode) {
-          // BUNYIKAN ALARM KELUAR 🚨
-          try {
-            await _alarmPlayer?.stop();
-            await _alarmPlayer?.setVolume(1.0);
-            await _alarmPlayer?.play(AssetSource('keluar.mp3'));
-          } catch (e) {
-            debugPrint("Failed to play alarm: \$e");
-          }
+          // BUNYIKAN ALARM KELUAR (assets/keluar.mp3, diputar oleh native).
+          _soundExitAlarm();
 
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(

@@ -32,6 +32,28 @@ class MainActivity : FlutterActivity() {
         pendingLink = intent.dataString
     }
 
+    /**
+     * Siswa meninggalkan aplikasi ujian (tombol Home, Recents, ganti aplikasi,
+     * layar notifikasi): bunyikan assets/keluar.mp3 dari SISI NATIVE.
+     *
+     * Kalau menunggu callback lifecycle dari Dart, suara sering tidak sempat
+     * keluar karena engine Flutter sudah dijeda saat aktivitas paused.
+     */
+    override fun onUserLeaveHint() {
+        securityBridge?.onUserLeftActivity()
+        super.onUserLeaveHint()
+    }
+
+    override fun onPause() {
+        securityBridge?.onUserLeftActivity()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        securityBridge?.onUserReturned()
+    }
+
     override fun onDestroy() {
         securityBridge?.dispose()
         securityBridge = null
