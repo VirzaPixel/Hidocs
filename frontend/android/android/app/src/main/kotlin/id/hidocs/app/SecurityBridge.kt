@@ -25,6 +25,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.OnApplyWindowInsetsListener
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -334,13 +335,16 @@ class SecurityBridge(
     /**
      * Listener event-driven untuk perubahan inset window.
      *
-     * Watchdog polling (700 ms) masih menyisakan jeda: bar bisa muncul
-     * selama hampir 700 ms sebelum ditutup lagi. Listener ini bereaksi
-     * SEKETIKA setiap kali sistem melaporkan perubahan inset — termasuk
-     * saat status bar atau nav bar dimunculkan oleh gestur tepi — sehingga
-     * bar ditutup sebelum pengguna sempat berinteraksi dengannya.
+     * Watchdog polling (150 ms) masih menyisakan jeda: bar bisa muncul
+     * sesaat sebelum putaran berikutnya. Listener ini bereaksi SEKETIKA
+     * setiap kali sistem melaporkan perubahan inset — termasuk saat status
+     * bar atau nav bar dimunculkan oleh gestur tepi — sehingga bar ditutup
+     * sebelum pengguna sempat berinteraksi dengannya.
+     *
+     * Tipe eksplisit `OnApplyWindowInsetsListener` (bukan `ViewCompat.`-nya)
+     * diperlukan agar Kotlin bisa meng-infer parameter lambda dengan benar.
      */
-    private val insetListener = ViewCompat.OnApplyWindowInsetsListener { _, insets ->
+    private val insetListener = OnApplyWindowInsetsListener { _, insets ->
         if (fullscreenLocked && insets.isVisible(WindowInsetsCompat.Type.systemBars())) {
             // Bar baru saja muncul — sembunyikan lagi seketika.
             activity.window.decorView.post { applyFullscreenLock(true) }
