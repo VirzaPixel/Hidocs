@@ -141,52 +141,6 @@ class BatteryInfo {
   const BatteryInfo({required this.level, required this.charging});
 }
 
-/// Kesiapan Lock Task Mode (kiosk sejati) di perangkat ini.
-///
-/// Lock Task Mode hanya terkunci sungguhan bila aplikasi berstatus **device
-/// owner** — lihat `tool/exam_device_owner.sh`. Tanpa status itu,
-/// `startLockTask()` berhenti pada dialog persetujuan screen pinning yang
-/// masih bisa dibatalkan siswa.
-class KioskReadiness {
-  /// HiDocs sudah menjadi device owner (kunci sejati bisa dipakai).
-  final bool deviceOwner;
-
-  /// Device admin HiDocs aktif (opsional; bukan syarat Lock Task).
-  final bool adminActive;
-
-  /// Paket HiDocs terdaftar di allowlist Lock Task (`setLockTaskPackages`).
-  final bool whitelisted;
-
-  /// `ActivityManager.getLockTaskModeState()`: 0 none, 1 pinned, 2 locked.
-  final int lockTaskState;
-
-  /// Lock Task Mode sedang aktif pada proses ini.
-  final bool kioskActive;
-
-  const KioskReadiness({
-    required this.deviceOwner,
-    required this.adminActive,
-    required this.whitelisted,
-    required this.lockTaskState,
-    required this.kioskActive,
-  });
-
-  /// Nilai aman untuk platform non-Android / channel tidak tersedia.
-  static const KioskReadiness unsupported = KioskReadiness(
-    deviceOwner: false,
-    adminActive: false,
-    whitelisted: false,
-    lockTaskState: 0,
-    kioskActive: false,
-  );
-
-  /// Kunci sejati tersedia di perangkat ini.
-  bool get available => deviceOwner;
-
-  /// Perangkat sedang benar-benar terkunci (kiosk penuh, bukan pinned).
-  bool get locked => lockTaskState == 2;
-}
-
 
 class InstalledAppInfo {
   final String packageName;
@@ -646,57 +600,6 @@ class ExamSecurityService {
       await _channel.invokeMethod<bool>('setExamSessionActive', {
         'active': active,
       });
-    } catch (_) {}
-  }
-
-  // ---------------------------------------------------------------
-  // Lock Task Mode — kiosk sejati (butuh status device owner)
-  // ---------------------------------------------------------------
-
-  /// Kesiapan Lock Task Mode di perangkat ini.
-  ///
-  /// `available` hanya `true` bila HiDocs sudah menjadi **device owner**;
-  /// tanpa itu `startLockTask()` tidak pernah masuk mode terkunci dan hanya
-  /// menjadi dialog screen pinning. Nilai ini dibaca halaman persiapan ujian
-  /// supaya bisa memberi tahu guru/siswa bahwa HP belum diprovision.
-  ///
-  /// Kegagalan channel (mis. build native lama yang belum punya method ini)
-  /// dilaporkan sebagai TIDAK siap — sama seperti [canDrawOverlays] — supaya
-  /// aplikasi tidak pernah menyangka perangkat terkunci padahal tidak.
-  static Future<KioskReadiness> getKioskReadiness() async {
-    if (!_isAndroid) return KioskReadiness.unsupported;
-    try {
-      final raw = await _channel.invokeMethod<Object?>('getLockTaskReport');
-      if (raw is Map) {
-        return KioskReadiness(
-          deviceOwner: raw['deviceOwner'] == true,
-          adminActive: raw['adminActive'] == true,
-          whitelisted: raw['whitelisted'] == true,
-          lockTaskState: (raw['lockTaskState'] as num?)?.toInt() ?? 0,
-          kioskActive: raw['kioskActive'] == true,
-        );
-      }
-      return KioskReadiness.unsupported;
-    } catch (_) {
-      return KioskReadiness.unsupported;
-    }
-  }
-
-  /// Masuk Lock Task Mode. `true` hanya bila perangkat benar-benar terkunci.
-  static Future<bool> startKiosk() async {
-    if (!_isAndroid) return false;
-    try {
-      return await _channel.invokeMethod<bool>('startKiosk') ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Keluar dari Lock Task Mode (dipanggil saat ujian selesai/ditinggalkan).
-  static Future<void> stopKiosk() async {
-    if (!_isAndroid) return;
-    try {
-      await _channel.invokeMethod<bool>('stopKiosk');
     } catch (_) {}
   }
 

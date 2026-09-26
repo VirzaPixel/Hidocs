@@ -6,7 +6,7 @@ import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/providers/form_provider.dart';
-import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
+import 'package:hi_docs/screens/exam/exam_token_screen.dart';
 import 'package:hi_docs/screens/forms/fill_form_screen.dart';
 import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
@@ -272,20 +272,24 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                   onPressed: _accessRevoked || _checkingAccess
                       ? null
                       : () {
-                          // ALUR (Revisi Lanjutan 8):
-                          //   detail form → GERBANG "Persiapan Ujian"
-                          //   (screening aplikasi + izin overlay + info volume)
-                          //   → LAYAR TOKEN (khusus tipe UJIAN)
+                          // ALUR (Revisi Lanjutan 10):
+                          //   detail form → LAYAR TOKEN (khusus tipe UJIAN)
+                          //   → GERBANG "Persiapan Ujian" (screening aplikasi
+                          //     floating + izin overlay)
                           //   → PENGISIAN.
                           //
-                          // Gerbang tidak lagi menuntut "sesi ujian terdaftar";
-                          // sesi dicatat di layar token lewat `verify-token`.
+                          // Screening floating SENGAJA ditempatkan paling
+                          // akhir: kalau dijalankan lebih dulu, siswa masih
+                          // mampir di layar token setelah lolos pemeriksaan —
+                          // di situ ia bisa keluar aplikasi, memasang aplikasi
+                          // floating, lalu kembali dengan hasil screening yang
+                          // sudah basi. Sesi ujian sendiri dicatat di layar
+                          // token lewat `verify-token`.
                           if (_form.isExam) {
                             Navigator.pushReplacement(
                               context,
                               CustomPageRoute(
-                                  page:
-                                      ExamLockdownGateScreen(form: _form)),
+                                  page: ExamTokenScreen(form: _form)),
                             );
                           } else {
                             Navigator.pushReplacement(
@@ -315,9 +319,15 @@ class _UserFormDetailScreenState extends State<UserFormDetailScreen> {
                         : _checkingAccess
                             ? l10n.loading
                             : _form.isExam
-                                ? (l10n.isIndonesian
-                                    ? 'Persiapan Ujian'
-                                    : 'Exam Setup')
+                                // Revisi Lanjutan 10: langkah pertama ujian
+                                // adalah layar token, jadi labelnya mengikuti.
+                                ? (_form.hasExamToken || _form.isTokenProtected
+                                    ? (l10n.isIndonesian
+                                        ? 'Masukkan Token Ujian'
+                                        : 'Enter Exam Token')
+                                    : (l10n.isIndonesian
+                                        ? 'Persiapan Ujian'
+                                        : 'Exam Setup'))
                                 : l10n.startFill,
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w700),

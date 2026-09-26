@@ -50,6 +50,31 @@ import java.io.File
  *  - "Mode Sunyi Total" (DND) DIHAPUS. Gantinya: volume media dimaksimalkan
  *    (AUTO FULL) saat ujian dimulai, dipulihkan saat ujian selesai, dan
  *    `assets/keluar.mp3` dibunyikan lewat native ketika siswa keluar aplikasi.
+ *
+ * REVISI LANJUTAN 9 — penguncian TANPA provisioning:
+ *  - Seluruh jalur **Lock Task Mode / device owner DIHAPUS**. Mengunci layar
+ *    Android sejati hanya mungkin bila aplikasi berstatus device owner, dan
+ *    status itu tidak bisa diminta dari dalam aplikasi: harus lewat ADB atau
+ *    provisioning QR sebelum aplikasi pernah dipakai. Menyuruh guru/siswa
+ *    menjalankan skrip `adb` jelas tidak realistis, jadi jalur itu dibuang.
+ *    (Sebagai catatan teknis: `lockTaskMode="if_whitelisted"` TANPA allowlist
+ *    hanya memunculkan dialog persetujuan screen pinning — lihat dokumentasi
+ *    atribut `lockTaskMode` di SDK — sehingga tidak berguna tanpa provisioning.)
+ *  - Penggantinya adalah penguncian berlapis yang bekerja di SEMUA perangkat:
+ *      1. [applyFullscreenLock] — status bar + nav bar disembunyikan permanen.
+ *      2. [pullTaskToFront] — task HiDocs sendiri ditarik kembali ke depan
+ *         begitu siswa menekan Home/Recents (lihat [onUserLeftActivity]),
+ *         memakai `ActivityManager.getAppTasks()` + `AppTask.moveToFront()`.
+ *         Keduanya menyangkut task MILIK SENDIRI sehingga tidak butuh izin
+ *         apa pun dan tidak pernah melempar `SecurityException` — berbeda
+ *         dengan `getRunningTasks`/`moveTaskToFront` yang menuntut
+ *         `REORDER_TASKS` (sudah diverifikasi pada `android.jar`).
+ *      3. Alarm `assets/keluar.mp3` + telemetry pelanggaran milik Dart.
+ *  - Perlu dilaporkan jujur: tanpa device owner, sistem Android tetap boleh
+ *    memindahkan aplikasi ke latar (mis. pengguna menekan Home dua kali cepat
+ *    atau membuka panel notifikasi dari lockscreen). Yang bisa dijamin adalah
+ *    aplikasi KEMBALI ke depan dalam hitungan milidetik dan setiap
+ *    pelanggaran tercatat — bukan larangan mutlak dari sistem operasi.
  */
 class SecurityBridge(
     private val activity: Activity,
@@ -90,16 +115,16 @@ class SecurityBridge(
     val isFullscreenLocked: Boolean get() = fullscreenLocked
 
     /**
-     * `true` bila aplikasi ini sudah pernah masuk Lock Task Mode.
+     * `true` bila penarikan kembali ke depan sedang diminta aktif.
      *
-     * Dipakai untuk membedakan "kiosk sedang dijeda" dari "kiosk memang tidak
-     * pernah aktif", sehingga alarm keluar tidak dibunyikan pada perangkat
-     * yang tidak diprovision sebagai device owner.
+     * Dipakai [MainActivity.onUserLeaveHint] untuk memutuskan apakah task
+     * perlu ditarik kembali: saat siswa baru memasukkan token atau menutup
+     * aplikasi dari halaman gerbang, task TIDAK boleh ditarik-tarik lagi.
      */
-    private var kioskActive = false
+    private var examConfinementActive = false
 
-    /** `true` bila kiosk pernah diaktifkan pada proses ini. */
-    val isKioskActive: Boolean get() = kioskActive
+    /** `true` bila mode penguncian ujian sedang aktif pada proses ini. */
+    val isExamConfinementActive: Boolean get() = examConfinementActive
 
     fun register() {
         channel.setMethodCallHandler { call, result ->
@@ -146,13 +171,6 @@ class SecurityBridge(
                     result.success(openAppSettings(call.argument("packageName")))
                 }
                 "isDeviceAdminActive" -> result.success(isDeviceAdminActive())
-                // Lock Task Mode (kiosk sejati, butuh status device owner).
-                "startKiosk" -> result.success(startKiosk())
-                "stopKiosk" -> {
-                    stopKiosk()
-                    result.success(true)
-                }
-                "getLockTaskReport" -> result.success(lockTaskReport())
                 // Kunci tampilan penuh saat mengerjakan (status bar + nav bar).
                 "setFullscreenLock" -> {
                     setFullscreenLock(call.argument("enabled") ?: false)
@@ -183,7 +201,7 @@ class SecurityBridge(
         disableSecure()
         releaseExitAlarm()
         exitAlarmArmed = false
-        kioskActive = false
+        examConfinementActive = false
         channel.setMethodCallHandler(null)
     }
 
@@ -215,24 +233,10 @@ class SecurityBridge(
      * gestur tepi (tarik panel notifikasi, geser nav bar) sewaktu-waktu
      * memunculkan system bar sementara, dan tanpa penguncian ulang bar itu
      * tidak pernah hilang lagi.
-     *
-     * Sekaligus memeriksa Lock Task Mode: bila sesi ujian masih berjalan tapi
-     * mode terkunci sudah lepas (mis. sempat dipaksa keluar sistem), kiosk
-     * dibangun ulang di sini. Ini menggantikan callback
-     * `onLockTaskModeExiting` — callback itu TIDAK tersedia di `Activity`
-     * (telah diverifikasi pada `android.jar`), sedangkan focus-change selalu
-     * terpanggil ketika aplikasi kembali ke depan.
      */
     fun reapplyFullscreenLock() {
         if (fullscreenLocked) applyFullscreenLock(true)
-        if (examSessionActive && !isLockTaskLocked()) {
-            startKiosk()
-        }
     }
-
-    /** `true` bila Lock Task Mode sedang aktif (pinned maupun locked). */
-    private fun isLockTaskLocked(): Boolean =
-        lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE
 
     private fun applyFullscreenLock(enabled: Boolean) {
         activity.runOnUiThread {
@@ -261,160 +265,65 @@ class SecurityBridge(
         }
     }
 
-    // ---------- Lock Task Mode: kiosk sejati (device owner) ----------
+    // ---------- Penarikan task sendiri ke depan (tanpa provisioning) ----------
 
     /**
-     * Status Lock Task Mode saat ini (`ActivityManager.getLockTaskModeState()`).
+     * Tarik task HiDocs sendiri kembali ke depan jika siswa mencoba keluar.
      *
-     * `LOCK_TASK_MODE_NONE` (0) = tidak terkunci, `LOCK_TASK_MODE_PINNED` (1) =
-     * screen pinning biasa (masih bisa keluar dengan tahan Back+Recents),
-     * `LOCK_TASK_MODE_LOCKED` (2) = kiosk penuh.
+     * Kenapa TIDAK memakai `lockTaskMode`. Mengunci layar Android sejati hanya
+     * mungkin bila aplikasi berstatus device owner, dan status itu hanya bisa
+     * diberikan lewat ADB/QR provisioning di luar aplikasi — tidak realistis
+     * untuk guru maupun siswa. Tanpa status itu,
+     * `lockTaskMode="if_whitelisted"` hanya memunculkan dialog persetujuan
+     * screen pinning yang tetap bisa dibatalkan pengguna.
+     *
+     * Kenapa `getAppTasks()` dan bukan `getRunningTasks()`:
+     *  - `getRunningTasks()` dideklarasikan melempar `SecurityException` dan
+     *    hanya boleh untuk aplikasi sistem / pemegang `REORDER_TASKS`;
+     *  - `getAppTasks()` tidak punya anotasi izin apa pun dan hanya
+     *    mengembalikan task MILIK APLIKASI SENDIRI, sehingga legal dipakai
+     *    aplikasi biasa (diverifikasi langsung pada `android.jar`).
+     *
+     * Kembalikan `true` bila permintaan pemindahan diterima sistem.
      */
-    private fun lockTaskState(): Int = try {
-        (activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
-            .lockTaskModeState
-    } catch (_: Exception) {
-        ActivityManager.LOCK_TASK_MODE_NONE
-    }
-
-    /**
-     * Laporan kesiapan kiosk untuk halaman persiapan ujian.
-     *
-     * Urutan pemeriksaan penting: API `DevicePolicyManager` yang menyangkut
-     * Lock Task (`isLockTaskPermitted`, `setLockTaskPackages`) melempar
-     * `SecurityException` bila aplikasi BUKAN device owner, jadi seluruhnya
-     * hanya dipanggil setelah status device owner dipastikan.
-     */
-    fun lockTaskReport(): Map<String, Any?> {
-        val dpm = devicePolicyManager()
-        val owner = try {
-            dpm?.isDeviceOwnerApp(activity.packageName) == true
-        } catch (_: Exception) {
-            false
-        }
-        val whitelisted = if (owner) {
-            try {
-                dpm?.isLockTaskPermitted(activity.packageName) == true
-            } catch (_: Exception) {
-                false
-            }
-        } else {
-            false
-        }
-
-        return mapOf(
-            "deviceOwner" to owner,
-            "adminActive" to isDeviceAdminActive(),
-            "whitelisted" to whitelisted,
-            "lockTaskState" to lockTaskState(),
-            "kioskActive" to kioskActive,
-        )
-    }
-
-    /**
-     * Masuk Lock Task Mode (kiosk sejati).
-     *
-     * Tanpa status device owner, `startLockTask()` hanya memunculkan dialog
-     * persetujuan screen pinning (lihat dokumentasi atribut `lockTaskMode`:
-     * "otherwise the user will be presented with a dialog to approve entering
-     * pinned mode"). Karena itu langkah berikut dijalankan lebih dulu:
-     *
-     *  1. daftarkan paket ini sebagai task yang boleh dikunci
-     *     (`setLockTaskPackages`) — hanya berhasil sebagai device owner;
-     *  2. batasi fitur sistem ke informasi sistem saja
-     *     (`LOCK_TASK_FEATURE_SYSTEM_INFO`): jam + baterai tetap tampil, sedang
-     *     Home, Recents, notifikasi, dan panel tindakan global dimatikan;
-     *  3. `startLockTask()` — masuk seketika karena paket sudah terdaftar.
-     *
-     * Kembalikan `true` HANYA bila Lock Task Mode benar-benar aktif, supaya
-     * pemanggil tidak menyangka perangkat terkunci padahal masih bebas.
-     */
-    fun startKiosk(): Boolean {
+    fun pullTaskToFront(): Boolean {
+        if (!examConfinementActive) return false
         return try {
-            val dpm = devicePolicyManager()
-            if (dpm != null && dpm.isDeviceOwnerApp(activity.packageName)) {
-                val admin = adminComponent()
-                dpm.setLockTaskPackages(admin, arrayOf(activity.packageName))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    dpm.setLockTaskFeatures(
-                        admin,
-                        DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO,
-                    )
-                }
-            }
-            activity.startLockTask()
-            kioskActive = lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE
-            kioskActive
+            val am = activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val tasks = am.appTasks
+            if (tasks.isEmpty()) return false
+            // Task utama HiDocs ada di depan daftar; `moveToFront()` membawa
+            // seluruh task (termasuk halaman Flutter yang sedang terbuka)
+            // kembali ke depan tanpa menghancurkan state di dalamnya.
+            tasks.first().moveToFront()
+            true
         } catch (_: Exception) {
+            // Sistem bisa menolak bila pemanggilan terjadi tepat saat transisi
+            // (mis. sedang berpindah dari lockscreen). Alarm keluar tetap
+            // berbunyi sebagai lapisan berikutnya.
             false
         }
     }
-
-    /**
-     * Keluar dari Lock Task Mode dan hapus whitelist paket.
-     *
-     * Dipanggil saat ujian selesai/ditinggalkan supaya HP kembali normal dan
-     * ujian berikutnya benar-benar memulai kiosk dari awal.
-     */
-    fun stopKiosk() {
-        try {
-            activity.stopLockTask()
-        } catch (_: Exception) {
-        }
-        kioskActive = false
-        try {
-            val dpm = devicePolicyManager()
-            if (dpm != null && dpm.isDeviceOwnerApp(activity.packageName)) {
-                dpm.setLockTaskPackages(adminComponent(), emptyArray())
-            }
-        } catch (_: Exception) {
-        }
-    }
-
-    /**
-     * Bersihkan sisa kiosk dari proses sebelumnya.
-     *
-     * Kalau aplikasi sempat dibunuh/keluar saat masih terkunci, paket bisa
-     * masih terdaftar; dipanggil saat sesi ditandai tidak aktif lagi.
-     */
-    fun clearStaleKiosk() {
-        kioskActive = false
-        try {
-            val dpm = devicePolicyManager()
-            if (dpm != null && dpm.isDeviceOwnerApp(activity.packageName)) {
-                dpm.setLockTaskPackages(adminComponent(), emptyArray())
-            }
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun devicePolicyManager(): DevicePolicyManager? =
-        activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
-
-    private fun adminComponent(): ComponentName =
-        ComponentName(activity, ExamDeviceAdminReceiver::class.java)
-
-    // ---------- Sesi ujian aktif ----------
 
     /**
      * Nyalakan/matikan penanda "siswa sedang mengerjakan soal".
      *
-     * Dipakai sebagai penjaga alarm keluar: [onUserLeftActivity] hanya
-     * berbunyi bila penanda ini `true`. Halaman gerbang dan layar token
-     * memanggilnya dengan `false`, sehingga suara alarm tidak pernah bunyi
-     * sebelum ujian benar-benar dimulai.
+     * Dipakai untuk DUA hal:
+     *  1. penjaga alarm keluar — [onUserLeftActivity] hanya berbunyi bila
+     *     penanda ini `true`, sehingga halaman gerbang dan layar token
+     *     (yang memanggilnya dengan `false`) selalu sunyi;
+     *  2. penjaga penarikan task — [pullTaskToFront] menolak bekerja bila
+     *     penanda ini `false`, supaya aplikasi yang memang sedang ditutup
+     *     siswa dari halaman gerbang tidak ditarik-tarik kembali.
      */
     fun setExamSessionActive(active: Boolean) {
         examSessionActive = active
+        examConfinementActive = active
         if (!active) {
             // Berhenti berbunyi + lepaskan SENJATA, supaya tidak ada
             // suara yang masih menggantung saat pindah halaman.
             exitAlarmArmed = false
             stopExitAlarm()
-            // Sisa kiosk dari percobaan sebelumnya (mis. aplikasi sempat
-            // ditutup paksa saat masih terkunci) dibersihkan supaya sesi
-            // berikutnya mulai dari kondisi bersih.
-            clearStaleKiosk()
         }
     }
 
@@ -1085,6 +994,10 @@ private fun knownFloatingLabel(pkg: String): String {
         // membuat halaman masukan token benar-benar sunyi: siswa boleh
         // menutup aplikasi di sana tanpa alarm.
         if (exitAlarmArmed && examSessionActive) playExitAlarm()
+        // Lapisan penguncian: begitu siswa menekan Home/Recents di tengah
+        // ujian, task HiDocs langsung ditarik kembali ke depan. Tanpa
+        // provisioning apa pun — lihat [pullTaskToFront].
+        pullTaskToFront()
     }
 
     /** Panggilan dari MainActivity: pengguna kembali, hentikan alarm. */
@@ -1214,6 +1127,19 @@ private fun knownFloatingLabel(pkg: String): String {
     }
 
     // ---------- Device admin ----------
+    // Status device owner / admin TIDAK lagi dipakai untuk mengunci ujian
+    // (lihat catatan REVISI LANJUTAN 9 di kepala kelas): mengunci lewat jalur
+    // itu menuntut provisioning ADB/QR di luar aplikasi, yang tidak realistis
+    // dibebankan ke guru maupun siswa. Yang tersisa hanya PEMBACAAN status
+    // supaya halaman persiapan ujian bisa menampilkan keadaan apa adanya bila
+    // perangkat kebetulan sudah diprovision pihak sekolah — bukan syarat
+    // wajib untuk mulai ujian.
+
+    private fun devicePolicyManager(): DevicePolicyManager? =
+        activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+
+    private fun adminComponent(): ComponentName =
+        ComponentName(activity, ExamDeviceAdminReceiver::class.java)
 
     private fun isDeviceAdminActive(): Boolean {
         return try {

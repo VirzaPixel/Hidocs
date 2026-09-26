@@ -4,32 +4,55 @@ import 'package:hi_docs/app_theme.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
-import 'package:hi_docs/screens/exam/exam_token_screen.dart';
 import 'package:hi_docs/screens/forms/fill_form_screen.dart';
 import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 import 'package:hi_docs/utils/theme_context.dart';
 
-/// Gerbang wajib sebelum mengerjakan ujian.
+/// Gerbang wajib — LANGKAH TERAKHIR sebelum soal ujian dimuat.
 ///
-/// Sesuai "Revisi Lanjutan 8", halaman ini FOKUS hanya pada tiga hal:
+/// Halaman ini FOKUS hanya pada tiga hal:
 ///  1. Screening aplikasi floating yang terpasang/aktif (harus bersih).
 ///  2. Izin "tampil di atas aplikasi lain" untuk HiDocs.
-///  3. Informasi volume HP (informasi pasif + alarm keluar).
+///  3. Informasi penguncian layar ujian (status bar + tombol navigasi
+///     disembunyikan, aplikasi menarik diri kembali ke depan) dan alarm
+///     keluar — semuanya berjalan dari dalam aplikasi, TANPA provisioning
+///     perangkat.
 ///
-/// Syarat "sesi ujian terdaftar (response id)" DIHAPUS dari halaman ini.
-/// Pencatatan sesi terjadi di langkah berikutnya, yaitu layar token
-/// ([ExamTokenScreen]) lewat endpoint `verify-token`. Urutan alurnya:
+/// URUTAN ALUR (Revisi Lanjutan 10):
 ///
-///   detail form → GERBANG ini → layar token (tipe ujian) → pengisian.
+///   detail form → layar token → GERBANG ini → pengisian soal.
+///
+/// Sesi ujian dicatat LEBIH DULU di layar token ([ExamTokenScreen]) lewat
+/// endpoint `verify-token`; token + `response_id` hasilnya dibawa ke halaman
+/// ini sebagai [preEnteredToken] dan [responseId].
+///
+/// Alasan urutan ini: screening aplikasi floating harus menjadi hal TERAKHIR
+/// yang diperiksa sebelum soal dimuat. Kalau gerbang dijalankan lebih dulu,
+/// siswa masih mampir di layar token setelah lolos screening — di sana ia
+/// bebas keluar aplikasi, memasang aplikasi floating (mis. Floatee), lalu
+/// kembali dan masuk ujian dengan hasil screening yang sudah BASI. Dengan
+/// gerbang di akhir, halaman ini juga otomatis memeriksa ulang setiap kali
+/// aplikasi kembali fokus, sehingga aplikasi floating yang baru dipasang
+/// langsung terdeteksi dan tombol mulai tetap terkunci.
 ///
 /// Selama syarat 1 dan 2 belum terpenuhi, tombol "Mulai Ujian" terkunci.
 class ExamLockdownGateScreen extends StatefulWidget {
   final FormModel form;
 
+  /// Token ujian yang sudah diverifikasi di layar token (boleh kosong untuk
+  /// form tanpa token). Diteruskan apa adanya ke [FillFormScreen].
+  final String preEnteredToken;
+
+  /// Id respons sesi ujian yang dicatat backend saat `verify-token`. Dipakai
+  /// autosave, telemetry pelanggaran, dan pantauan pengawas.
+  final String responseId;
+
   const ExamLockdownGateScreen({
     required this.form,
+    this.preEnteredToken = '',
+    this.responseId = '',
     super.key,
   });
 
@@ -40,8 +63,18 @@ class ExamLockdownGateScreen extends StatefulWidget {
 class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     with WidgetsBindingObserver {
   LockdownReadiness? _readiness;
-  bool _loading = true;
   bool _engaging = false;
+
+  /// Sedang menjalankan ulang screening (mis. saat kembali dari layar Settings
+  /// atau tombol "Periksa Ulang"). Dipakai untuk menutup celah balapan:
+  /// tombol "Mulai Ujian" HARUS mati selama pemeriksaan berjalan, karena
+  /// hasil [_readiness] yang masih terpampang bisa saja SUDAH BASI —
+  /// siswa baru saja memasang aplikasi floating di layar Settings.
+  bool _refreshing = false;
+
+  /// Hasil pemeriksaan pernah dijalankan sedikitnya sekali. Sebelum ini,
+  /// layar dianggap belum punya kesimpulan apa pun, jadi tombol mulai mati.
+  bool _hasEvaluated = false;
 
   @override
   void initState() {
@@ -69,43 +102,51 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
   }
 
   Future<void> _refresh() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
+    if (!mounted || _refreshing) return;
+    setState(() => _refreshing = true);
     final result = await ExamLockdownService.evaluate();
     if (!mounted) return;
     setState(() {
       _readiness = result;
-      _loading = false;
+      _refreshing = false;
+      _hasEvaluated = true;
     });
   }
 
-  /// Lanjut dari halaman persiapan ke langkah berikutnya.
+  /// Lanjut dari gerbang ini ke pengisian soal — LANGKAH TERAKHIR.
   ///
-  /// Alur baru: gerbang ini TIDAK lagi memeriksa sesi terdaftar. Untuk tipe
-  /// ujian, langkah berikutnya adalah layar token ([ExamTokenScreen]) — di
-  /// sanalah token dimasukkan dan sesi ujian dicatat lewat `verify-token`.
-  /// Form non-ujian langsung masuk ke pengisian.
+  /// Alur (Revisi Lanjutan 10): token sudah diverifikasi dan sesi sudah
+  /// tercatat di layar token, jadi halaman ini hanya tinggal memastikan
+  /// perangkat bersih lalu membuka pengisian dengan membawa [responseId].
+  ///
+  /// `engage()` (volume penuh + alarm keluar) tetap SENGAJA tidak dipanggil
+  /// di sini: yang menyalakannya adalah [FillFormScreen] saat siswa benar-benar
+  /// mulai mengisi.
   Future<void> _startExam() async {
     final ready = _readiness;
-    if (ready == null || !ready.isReady || _engaging) {
+    // [_refreshing] ikut dijaga: saat screening ulang sedang berjalan, hasil
+    // yang terpampang belum boleh dipercaya — siswa bisa saja baru memasang
+    // aplikasi floating di layar Settings lalu kembali ke sini.
+    if (ready == null ||
+        !_hasEvaluated ||
+        _refreshing ||
+        !ready.isReady ||
+        _engaging) {
       return;
     }
 
     setState(() => _engaging = true);
 
-    // CATATAN: `engage()` SENGAJA tidak dipanggil di sini. Halaman ini hanya
-    // memeriksa perangkat (read-only). Volume penuh + alarm keluar baru
-    // dinyalakan oleh [FillFormScreen] saat siswa benar-benar mulai mengisi —
-    // kalau dipasang di sini, suara alarm keluar ikut berbunyi saat siswa
-    // masih di layar masukan token.
     if (!mounted) return;
 
     Navigator.pushReplacement(
       context,
       CustomPageRoute(
-        page: widget.form.formType == FormType.exam
-            ? ExamTokenScreen(form: widget.form)
-            : FillFormScreen(form: widget.form),
+        page: FillFormScreen(
+          form: widget.form,
+          preEnteredToken: widget.preEnteredToken,
+          responseId: widget.responseId,
+        ),
       ),
     );
   }
@@ -115,7 +156,10 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     final l10n = AppLocalizations.of(context);
     final isDark = context.isDark;
     final ready = _readiness;
-    final isReady = ready?.isReady ?? false;
+    // Kesimpulan lama SENGAJA tidak dipercaya selama pemeriksaan ulang
+    // berjalan: tombol tetap terkunci sampai hasil baru benar-benar tiba.
+    final isReady =
+        _hasEvaluated && !_refreshing && (ready?.isReady ?? false);
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
@@ -129,7 +173,7 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _loading && ready == null
+      body: !_hasEvaluated && ready == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _refresh,
@@ -185,24 +229,17 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
 
                   _SectionTitle(
                     title: l10n.isIndonesian
-                        ? 'Proses 3 — Kunci Kiosk (Device Owner)'
-                        : 'Step 3 — Kiosk Lock (Device Owner)',
+                        ? 'Proses 3 — Kunci Layar Ujian'
+                        : 'Step 3 — Exam Screen Lock',
                     subtitle: l10n.isIndonesian
-                        ? 'Saat siswa mengerjakan, tombol Home, daftar aplikasi '
-                              'terbaru, dan panel notifikasi dimatikan total. '
-                              'Jam + baterai tetap tampil dari sistem.'
-                        : 'While working, Home, Recents, and the notification '
-                              'panel are fully disabled. Clock + battery stay '
-                              'visible from the system.',
+                        ? 'Saat siswa mengerjakan, status bar dan tombol '
+                              'navigasi disembunyikan, dan aplikasi otomatis '
+                              'kembali ke depan bila siswa mencoba keluar.'
+                        : 'While working, the status bar and navigation '
+                              'buttons are hidden, and the app pulls itself '
+                              'back to the front if the student tries to leave.',
                   ),
                   const SizedBox(height: 10),
-                  _KioskCard(kiosk: ready?.kiosk, dark: isDark),
-                  const SizedBox(height: 20),
-
-                  // "Fitur volume otomatis" (kartu interaktif + tombol tes)
-                  // DIHAPUS sesuai permintaan. Yang tersisa hanya informasi:
-                  // volume media dibuat 100% otomatis saat mengerjakan ujian
-                  // dan dipulihkan saat keluar, serta alarm keluar berbunyi.
                   _ExamNoticeCard(dark: isDark),
                   const SizedBox(height: 24),
 
@@ -216,14 +253,12 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
       bottomNavigationBar: _BottomAction(
         isReady: isReady,
         isEngaging: _engaging,
+        isRefreshing: _refreshing,
         onStart: _startExam,
         onRefresh: _refresh,
-        // Tipe ujian lanjut ke layar token, bukan langsung pengisian.
-        readyLabel: widget.form.formType == FormType.exam
-            ? (l10n.isIndonesian
-                ? 'Lanjut Ke Token Ujian'
-                : 'Continue to Exam Token')
-            : (l10n.isIndonesian ? 'Mulai Ujian' : 'Start Exam'),
+        // Gerbang ini sekarang SELALU langkah terakhir sebelum soal dimuat,
+        // jadi labelnya seragam untuk ujian maupun survei.
+        readyLabel: l10n.isIndonesian ? 'Mulai Ujian' : 'Start Exam',
       ),
     );
   }
@@ -234,12 +269,15 @@ class _GateStepIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Alur (Revisi Lanjutan 10): 1) masukkan token → 2) persiapan ujian.
+    // Token sudah selesai saat halaman ini tampil, jadi langkah 1 ditandai
+    // selesai dan langkah 2 aktif.
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _stepDot(1, active: true),
+        _stepDot(1, done: true),
         _stepLine(),
-        _stepDot(2),
+        _stepDot(2, active: true),
       ],
     );
   }
@@ -385,10 +423,12 @@ class _ExamNoticeCard extends StatelessWidget {
       (
         Icons.lock_rounded,
         l10n.isIndonesian
-            ? 'Layar ujian juga dikunci: screenshot dan preview di daftar '
-                  'aplikasi terbaru diblokir.'
-            : 'The exam screen is also secured: screenshots and recents '
-                  'previews are blocked.',
+            ? 'Status bar dan tombol navigasi disembunyikan, dan aplikasi '
+                  'otomatis kembali ke depan bila Anda mencoba keluar. '
+                  'Screenshot tetap diblokir.'
+            : 'The status bar and navigation buttons are hidden, and the app '
+                  'pulls itself back to the front if you try to leave. '
+                  'Screenshots stay blocked.',
       ),
     ];
 
@@ -905,201 +945,6 @@ class _RequirementCard extends StatelessWidget {
   }
 }
 
-/// Kartu kesiapan kunci kiosk (Lock Task Mode).
-///
-/// Status device owner TIDAK bisa diaktifkan dari dalam aplikasi — Android
-/// hanya mengizinkan lewat provisioning (ADB/QR). Jadi kartu ini tidak
-/// menawarkan tombol "Aktifkan", melainkan menampilkan langkah yang harus
-/// dijalankan teknisi/guru supaya tidak ada harapan palsu.
-class _KioskCard extends StatelessWidget {
-  final KioskReadiness? kiosk;
-  final bool dark;
-
-  const _KioskCard({required this.kiosk, required this.dark});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final k = kiosk;
-    final owner = k?.deviceOwner ?? false;
-    final color = owner ? AppTheme.success : AppTheme.error;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: dark ? AppTheme.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: owner
-              ? color.withValues(alpha: 0.35)
-              : (dark ? AppTheme.darkBorder : AppTheme.border),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(
-                  owner ? Icons.lock_rounded : Icons.lock_open_rounded,
-                  color: color,
-                  size: 21,
-                ),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.isIndonesian
-                          ? 'Kunci Kiosk Sejati'
-                          : 'True Kiosk Lock',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: dark
-                            ? AppTheme.darkTextPrimary
-                            : AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      owner
-                          ? (l10n.isIndonesian
-                              ? 'HP siap: Home, Recents, dan panel notifikasi '
-                                    'akan dimatikan selama ujian.'
-                              : 'Device ready: Home, Recents, and the '
-                                    'notification panel are disabled during the exam.')
-                          : (l10n.isIndonesian
-                              ? 'HP belum diprovision sebagai device owner. '
-                                    'Tanpa ini siswa masih bisa keluar dari '
-                                    'aplikasi.'
-                              : 'Device is not provisioned as device owner. '
-                                    'Without it, students can still leave the app.'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.35,
-                        color: dark
-                            ? AppTheme.darkTextMuted
-                            : AppTheme.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                owner
-                    ? Icons.check_circle_rounded
-                    : Icons.error_outline_rounded,
-                color: color,
-                size: 24,
-              ),
-            ],
-          ),
-          if (owner && (k?.adminActive ?? false)) ...[
-            const SizedBox(height: 10),
-            Text(
-              l10n.isIndonesian
-                  ? 'Device admin aktif — penegakan tambahan siap.'
-                  : 'Device admin active — extra enforcement ready.',
-              style: TextStyle(
-                fontSize: 11.5,
-                height: 1.45,
-                color:
-                    dark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-              ),
-            ),
-          ],
-          if (!owner) ...[
-            const SizedBox(height: 12),
-            _KioskProvisionHint(dark: dark),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Petunjuk provisioning device owner (tidak bisa dari dalam aplikasi).
-class _KioskProvisionHint extends StatelessWidget {
-  final bool dark;
-
-  const _KioskProvisionHint({required this.dark});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.error.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.error.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.build_rounded, size: 15, color: AppTheme.error),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  l10n.isIndonesian
-                      ? 'Diperlukan aksi dari teknisi/guru'
-                      : 'Requires technician/teacher action',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            l10n.isIndonesian
-                ? 'Hubungkan HP ke komputer dengan USB debugging aktif, lalu '
-                      'jalankan skrip di bawah dari folder frontend/android. '
-                      'Buka ulang aplikasi setelah itu agar izin kiosk dikenali.'
-                : 'Connect the phone to a computer with USB debugging enabled, '
-                      'then run the script below from the frontend/android '
-                      'folder. Relaunch the app afterwards so the kiosk '
-                      'permission is recognized.',
-            style: TextStyle(
-              fontSize: 11.5,
-              height: 1.45,
-              color: dark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SelectableText(
-            'tool/exam_device_owner.sh',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'monospace',
-              color: dark ? AppTheme.accent : AppTheme.primary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ChecklistSummary extends StatelessWidget {
   final LockdownReadiness? ready;
   final bool dark;
@@ -1116,8 +961,8 @@ class _ChecklistSummary extends StatelessWidget {
     final items = <(String, bool)>[
       (
         l10n.isIndonesian
-            ? 'Tidak ada aplikasi floating terdeteksi'
-            : 'No floating app detected',
+            ? 'Screening aplikasi floating'
+            : 'Floating app screening',
         r?.floatingAppsClean ?? false,
       ),
       (
@@ -1126,9 +971,12 @@ class _ChecklistSummary extends StatelessWidget {
       ),
       (
         l10n.isIndonesian
-            ? 'Kunci kiosk aktif (device owner)'
-            : 'Kiosk lock ready (device owner)',
-        r?.kiosk.deviceOwner ?? false,
+            ? 'Kunci layar ujian siap'
+            : 'Exam screen lock ready',
+        // Selalu siap: penguncian dikerjakan dari dalam aplikasi (status bar
+        // disembunyikan + task ditarik kembali ke depan). Sebelumnya baris ini
+        // menuntut status device owner yang harus diprovision lewat ADB.
+        r != null,
       ),
     ];
 
@@ -1185,11 +1033,11 @@ class _ChecklistSummary extends StatelessWidget {
           Text(
             l10n.isIndonesian
                 ? 'Catatan: halaman ini hanya memeriksa perangkat (aplikasi '
-                      'floating dan izin overlay). Bila sudah bersih, lanjutkan '
-                      'ke langkah berikutnya untuk memasukkan token ujian.'
+                      'floating dan izin overlay). Bila sudah bersih, tekan '
+                      '"Mulai Ujian" untuk membuka soal.'
                 : 'Note: this page only checks the device (floating apps and '
-                      'overlay permission). Once clean, continue to the next '
-                      'step to enter the exam token.',
+                      'overlay permission). Once clean, tap "Start Exam" to '
+                      'open the questions.',
             style: TextStyle(
               fontSize: 11.5,
               height: 1.45,
@@ -1224,13 +1072,19 @@ class _BottomAction extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onRefresh;
 
-  /// Teks tombol utama saat semua syarat terpenuhi — mengarah ke langkah
-  /// berikutnya (layar token untuk tipe ujian, pengisian untuk survei).
+  /// Teks tombol utama saat semua syarat terpenuhi. Gerbang ini SELALU
+  /// langkah terakhir sebelum soal dimuat (Revisi Lanjutan 10): token sudah
+  /// diverifikasi di layar sebelumnya, jadi labelnya seragam → pengisian soal.
   final String readyLabel;
+
+  /// Sedang menjalankan screening ulang. Tombol "Periksa Ulang" ikut mati dan
+  /// ikonnya berputar supaya siswa tidak menekan berkali-kali.
+  final bool isRefreshing;
 
   const _BottomAction({
     required this.isReady,
     required this.isEngaging,
+    required this.isRefreshing,
     required this.onStart,
     required this.onRefresh,
     required this.readyLabel,
@@ -1261,8 +1115,14 @@ class _BottomAction extends StatelessWidget {
           Expanded(
             flex: 4,
             child: OutlinedButton.icon(
-              onPressed: isEngaging ? null : onRefresh,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
+              onPressed: isEngaging || isRefreshing ? null : onRefresh,
+              icon: isRefreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 18),
               label: Text(
                 l10n.isIndonesian ? 'Periksa Ulang' : 'Re-check',
                 maxLines: 1,

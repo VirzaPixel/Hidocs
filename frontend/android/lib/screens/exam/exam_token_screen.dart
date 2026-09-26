@@ -8,7 +8,7 @@ import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/models/form_model.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
-import 'package:hi_docs/screens/forms/fill_form_screen.dart';
+import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
 import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
@@ -42,7 +42,7 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
 
     // Halaman masukan token BUKAN bagian dari sesi ujian. Semua fitur
     // "kunci" (alarm keluar, volume penuh, FLAG_SECURE, layar penuh)
-    // baru boleh aktif di [FillFormScreen]. Pemanggilan ini juga
+    // baru boleh aktif di layar pengisian soal. Pemanggilan ini juga
     // membersihkan sisa penguncian dari percobaan sebelumnya, sehingga
     // menutup aplikasi di halaman ini benar-benar SUNYI — tidak ada
     // suara alarm.
@@ -65,12 +65,17 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
     return id == _zeroUuid ? '' : id;
   }
 
-  /// Lanjut ke pengisian soal dengan membawa token + response id sesi ujian.
+  /// Lanjut ke GERBANG persiapan ujian dengan membawa token + response id.
+  ///
+  /// Urutan alur (Revisi Lanjutan 10): token diverifikasi lebih dulu di sini
+  /// (sekaligus mencatat sesi ujian di server), BARU gerbang persiapan
+  /// menjalankan screening aplikasi floating sebagai langkah terakhir sebelum
+  /// soal dimuat. [ExamLockdownGateScreen] yang membuka [FillFormScreen].
   void _proceed() {
     Navigator.pushReplacement(
       context,
       CustomPageRoute(
-        page: FillFormScreen(
+        page: ExamLockdownGateScreen(
           form: widget.form,
           preEnteredToken: _enteredToken,
           responseId: _responseId,
@@ -146,9 +151,9 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
 
   /// Batal / kembali dari layar token.
   ///
-  /// Tidak perlu melepas penguncian apa pun: halaman-gerbang tidak lagi
-  /// menyalakan volume/alarm, dan [FillFormScreen] yang-radio-aktif selama
-  /// penguncian itu tidak pernah dibangun sampai token diterima.
+  /// Tidak perlu melepas penguncian apa pun: halaman ini tidak pernah
+  /// menyalakan volume/alarm, dan layar pengisian soal baru dibuka setelah
+  /// gerbang persiapan terlewati.
   void _exit() {
     Navigator.pop(context);
   }
@@ -177,7 +182,7 @@ class _ExamTokenScreenState extends State<ExamTokenScreen> {
         child: Column(
           children: [
             const SizedBox(height: 16),
-            _StepIndicator(current: 2, total: 2, dark: isDark),
+            _StepIndicator(current: 1, total: 2, dark: isDark),
             const SizedBox(height: 16),
             Container(
               width: 88,

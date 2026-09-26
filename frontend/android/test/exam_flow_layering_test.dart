@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,21 +7,36 @@ import 'package:provider/provider.dart';
 
 import 'package:hi_docs/l10n/app_localizations.dart';
 import 'package:hi_docs/models/form_model.dart';
+import 'package:hi_docs/models/question_model.dart';
+import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/providers/form_provider.dart';
+import 'package:hi_docs/providers/response_provider.dart';
 import 'package:hi_docs/screens/exam/exam_lockdown_gate_screen.dart';
 import 'package:hi_docs/screens/exam/exam_token_screen.dart';
+import 'package:hi_docs/screens/forms/fill_form_screen.dart';
 import 'package:hi_docs/screens/forms/user_form_detail_screen.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
 
-/// Regresi untuk urutan alur ujian (Revisi Lanjutan 8):
+/// Regresi untuk urutan alur ujian (Revisi Lanjutan 10):
 ///
-///   detail form → gerbang "Persiapan Ujian" → layar token → pengisian
+///   detail form → layar token → gerbang "Persiapan Ujian" → pengisian
 ///
-/// Dua hal yang diverifikasi di sini:
-///  1. Tombol detail form bertuliskan "Persiapan Ujian" untuk tipe ujian.
-///  2. Gerbang TIDAK lagi menuntut "sesi ujian terdaftar" dan melempar ke
-///     layar token (bukan langsung ke pengisian).
-FormModel _buildForm({required FormType type, bool tokenProtected = false}) {
+/// Tiga hal yang diverifikasi di sini:
+///  1. Tombol detail form membuka LAYAR TOKEN lebih dulu (bukan gerbang).
+///  2. Layar token melempar ke gerbang persiapan setelah token diterima.
+///  3. Gerbang TIDAK lagi menuntut "sesi ujian terdaftar", dan tombolnya
+///     langsung membuka pengisian soal.
+///  4. Selama screening ulang berjalan, tombol gerbang TERKUNCI — hasil
+///     screening lama tidak boleh dipercaya.
+///
+/// Alasan urutannya: screening aplikasi floating harus menjadi langkah
+/// TERAKHIR sebelum soal dimuat, supaya siswa tidak bisa memanfaatkan layar
+/// token untuk memasang aplikasi floating setelah lolos pemeriksaan.
+FormModel _buildForm({
+  required FormType type,
+  bool tokenProtected = false,
+  List<QuestionModel>? questions,
+}) {
   final now = DateTime(2026, 1, 1);
   return FormModel(
     id: 'form-1',
@@ -33,12 +50,39 @@ FormModel _buildForm({required FormType type, bool tokenProtected = false}) {
     scheduledOpen: now,
     scheduledClose: now.add(const Duration(days: 365)),
     createdAt: now,
+    questions: questions ?? const <QuestionModel>[],
+  );
+}
+
+/// Form ujian dengan SATU soal pilihan ganda.
+///
+/// Dipakai untuk membuktikan gerbang benar-benar membuka halaman pengisian:
+/// [FillFormScreen] tanpa soal akan langsung menutup dirinya sendiri
+/// (auto-pop), sehingga hasil navigasinya tidak bisa dites.
+FormModel _buildFormWithQuestion({required FormType type}) {
+  return _buildForm(
+    type: type,
+    questions: <QuestionModel>[
+      QuestionModel(
+        id: 'q-1',
+        type: QuestionType.multipleChoice,
+        text: 'Berapa hasil dari 2 + 2?',
+        options: <OptionModel>[
+          OptionModel(id: 'o-1', text: '4', isCorrect: true),
+          OptionModel(id: 'o-2', text: '5'),
+        ],
+      ),
+    ],
   );
 }
 
 Widget _wrap(Widget home) {
-  return ChangeNotifierProvider<FormProvider>(
-    create: (_) => FormProvider(),
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<FormProvider>(create: (_) => FormProvider()),
+      ChangeNotifierProvider<ResponseProvider>(create: (_) => ResponseProvider()),
+      ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+    ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -77,12 +121,28 @@ Map<String, Object?> _cleanScreeningPayload() => <String, Object?>{
       'totalInstalled': 48,
     };
 
-/// Tiruan channel keamanan native: HP dianggap SIAP (device owner aktif,
-/// tidak ada aplikasi mengganggu, izin overlay ada).
+/// Payload tiruan: Floatee (alat floating khusus) terpasang di perangkat.
+Map<String, Object?> _floateeScreeningPayload() => <String, Object?>{
+      'apps': <Map<String, Object?>>[
+        <String, Object?>{
+          'packageName': 'com.maika.floatee',
+          'appName': 'Floatee',
+          'isSystem': false,
+          'isFloatingActive': false,
+          'declaresOverlayPermission': true,
+          'overlayPermissionGranted': true,
+          'isRunning': false,
+        },
+      ],
+      'totalInstalled': 49,
+    };
+
+/// Tiruan channel keamanan native: HP dianggap SIAP (tidak ada aplikasi
+/// mengganggu, izin overlay ada).
 ///
-/// Sejak kunci kiosk ditambahkan, halaman persiapan ujian menuntut status
-/// device owner. Tanpa tiruan ini `getLockTaskReport` gagal dan tombol mulai
-/// tetap nonaktif, sehingga pengujian alur tidak bisa berjalan.
+/// Tidak ada lagi tiruan status kiosk/device owner: sejak Revisi Lanjutan 9
+/// penguncian ujian dikerjakan dari dalam aplikasi, jadi halaman persiapan
+/// hanya perlu screening bersih + izin overlay.
 void _mockReadySecurityChannel(WidgetTester tester) {
   const channel = MethodChannel('id.hidocs.app/security');
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
@@ -93,14 +153,6 @@ void _mockReadySecurityChannel(WidgetTester tester) {
         return _cleanScreeningPayload();
       case 'canDrawOverlays':
         return true;
-      case 'getLockTaskReport':
-        return <String, Object?>{
-          'deviceOwner': true,
-          'adminActive': true,
-          'whitelisted': true,
-          'lockTaskState': 2,
-          'kioskActive': true,
-        };
       default:
         return null;
     }
@@ -132,7 +184,8 @@ Future<void> _pumpUntil(
 }
 
 void main() {
-  testWidgets('detail form ujian menawarkan "Persiapan Ujian" lalu ke gerbang',
+  testWidgets(
+      'detail form ujian membuka LAYAR TOKEN lebih dulu (bukan gerbang)',
       (tester) async {
     _useTallScreen(tester);
     await tester.pumpWidget(_wrap(UserFormDetailScreen(form: _buildForm(
@@ -142,40 +195,76 @@ void main() {
 
     await _pumpUntil(
       tester,
-      () => find.text('Persiapan Ujian').evaluate().isNotEmpty,
+      () => find.text('Masukkan Token Ujian').evaluate().isNotEmpty,
     );
 
-    expect(find.text('Persiapan Ujian'), findsOneWidget);
-    // Layar token TIDAK dibuka langsung dari detail form.
-    expect(find.byType(ExamTokenScreen), findsNothing);
+    // Langkah pertama ujian adalah token — labelnya mengikuti.
+    expect(find.text('Masukkan Token Ujian'), findsOneWidget);
 
-    await tester.tap(find.text('Persiapan Ujian'));
+    await tester.tap(find.text('Masukkan Token Ujian'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(ExamTokenScreen), findsOneWidget);
+    // Gerbang persiapan TIDAK dibuka lebih dulu: screening floating harus
+    // menjadi langkah terakhir sebelum soal dimuat.
+    expect(find.byType(ExamLockdownGateScreen), findsNothing);
+  });
+
+  testWidgets(
+      'layar token melempar ke gerbang persiapan, bukan langsung ke pengisian',
+      (tester) async {
+    _useTallScreen(tester);
+    _asAndroid(tester);
+    _mockReadySecurityChannel(tester);
+
+    // Form TANPA token dipakai supaya jalurnya tidak bergantung pada balasan
+    // `verify-token`: pada form seperti ini kegagalan pencatatan sesi tidak
+    // mengunci siswa, dan halaman berikutnya (gerbang) tetap dibuka.
+    await tester.pumpWidget(_wrap(
+      ExamTokenScreen(form: _buildForm(type: FormType.exam)),
+    ));
+
+    await _pumpUntil(
+      tester,
+      () =>
+          find.widgetWithText(ElevatedButton, 'Lanjutkan').evaluate().isNotEmpty,
+    );
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Lanjutkan'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byType(ExamLockdownGateScreen), findsOneWidget);
-    expect(find.byType(ExamTokenScreen), findsNothing);
+    expect(find.byType(FillFormScreen), findsNothing);
   });
 
   testWidgets(
       'gerbang persiapan tidak lagi menuntut sesi ujian terdaftar '
-      'dan lanjutnya ke layar token', (tester) async {
+      'dan langsung membuka pengisian soal', (tester) async {
     _useTallScreen(tester);
     _asAndroid(tester);
     _mockReadySecurityChannel(tester);
     await tester.pumpWidget(_wrap(ExamLockdownGateScreen(
-      form: _buildForm(type: FormType.exam, tokenProtected: true),
+      form: _buildFormWithQuestion(type: FormType.exam),
+      preEnteredToken: 'ABCD12',
+      responseId: 'resp-123',
     )));
 
-    // Tunggu hasil evaluasi (screening + izin overlay + kiosk) di UI.
+    // Tunggu hasil evaluasi (screening + izin overlay) di UI.
     await _pumpUntil(
       tester,
-      () =>
-          find.text('Tidak ada aplikasi floating terdeteksi').evaluate().isNotEmpty,
+      () => find
+          .text('Tidak ada aplikasi floating yang terdeteksi menghalangi ujian.')
+          .evaluate()
+          .isNotEmpty,
     );
 
     // Syarat "sesi ujian terdaftar" sudah dihapus dari ringkasan.
-    expect(find.text('Tidak ada aplikasi floating terdeteksi'), findsOneWidget);
+    expect(
+      find.text('Tidak ada aplikasi floating yang terdeteksi menghalangi ujian.'),
+      findsOneWidget,
+    );
     expect(find.text('Izin overlay HiDocs'), findsOneWidget);
     expect(find.text('Sesi ujian terdaftar (response id aktif)'), findsNothing);
     expect(
@@ -185,15 +274,17 @@ void main() {
       findsNothing,
     );
 
-    // Syarat BARU: kunci kiosk (device owner) ikut diperiksa & dilaporkan.
-    expect(find.text('Kunci kiosk aktif (device owner)'), findsOneWidget);
-    expect(find.text('Kunci Kiosk Sejati'), findsOneWidget);
+    // Penguncian ujian TIDAK lagi menuntut device owner/kiosk, jadi tidak ada
+    // lagi kartu provisioning maupun syaratnya di ringkasan gerbang.
+    expect(find.text('Kunci Kiosk Sejati'), findsNothing);
+    expect(find.text('Kunci kiosk aktif (device owner)'), findsNothing);
+    expect(find.text('tool/exam_device_owner.sh'), findsNothing);
+    expect(find.text('Kunci layar ujian siap'), findsOneWidget);
 
-    // Tombol utama mengarah ke layar token, bukan langsung pengisian.
-    final startButton = find.widgetWithText(ElevatedButton,
-        'Syarat Belum Lengkap');
-    final nextButton =
-        find.widgetWithText(ElevatedButton, 'Lanjut Ke Token Ujian');
+    // Gerbang adalah langkah terakhir: tombolnya langsung membuka pengisian.
+    final startButton =
+        find.widgetWithText(ElevatedButton, 'Syarat Belum Lengkap');
+    final nextButton = find.widgetWithText(ElevatedButton, 'Mulai Ujian');
     expect(startButton, findsNothing);
     expect(nextButton, findsOneWidget);
 
@@ -201,8 +292,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.byType(ExamTokenScreen), findsOneWidget);
+    expect(find.byType(FillFormScreen), findsOneWidget);
     expect(find.byType(ExamLockdownGateScreen), findsNothing);
+
+    // Token + response id dari layar token ikut sampai ke pengisian.
+    final fill = tester.widget<FillFormScreen>(find.byType(FillFormScreen));
+    expect(fill.preEnteredToken, 'ABCD12');
+    expect(fill.responseId, 'resp-123');
+
+    // Bersihkan pohon widget supaya timer milik halaman pengisian
+    // (bilah status + autosave) tidak tertinggal saat tes selesai.
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('gerbang memakai label "Mulai Ujian" untuk tipe survei',
@@ -217,10 +317,13 @@ void main() {
     await _pumpUntil(
       tester,
       () =>
-          find.text('Tidak ada aplikasi floating terdeteksi').evaluate().isNotEmpty,
+          find.text('Tidak ada aplikasi floating yang terdeteksi menghalangi ujian.').evaluate().isNotEmpty,
     );
 
-    expect(find.text('Tidak ada aplikasi floating terdeteksi'), findsOneWidget);
+    expect(
+      find.text('Tidak ada aplikasi floating yang terdeteksi menghalangi ujian.'),
+      findsOneWidget,
+    );
     expect(find.text('Izin overlay HiDocs'), findsOneWidget);
     expect(
       find.widgetWithText(ElevatedButton, 'Mulai Ujian'),
@@ -229,12 +332,13 @@ void main() {
   });
 
   testWidgets(
-      'tanpa device owner gerbang menahan tombol mulai dan menampilkan '
-      'petunjuk provisioning', (tester) async {
+      'HP biasa tanpa provisioning tetap bisa lanjut ke pengisian soal',
+      (tester) async {
     _useTallScreen(tester);
     _asAndroid(tester);
-    // Channel keamanan sengaja dibiarkan tanpa `getLockTaskReport`: kesiapan
-    // kiosk dianggap tidak tersedia (HP belum diprovision).
+    // Channel keamanan sengaja dibiarkan MINIMAL: hanya screening bersih dan
+    // izin overlay. Tidak ada `getLockTaskReport` — penguncian ujian tidak
+    // boleh lagi bergantung pada provisioning device owner.
     const channel = MethodChannel('id.hidocs.app/security');
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
         (call) async {
@@ -260,22 +364,101 @@ void main() {
     await _pumpUntil(
       tester,
       () => find
-          .text('Diperlukan aksi dari teknisi/guru')
+          .widgetWithText(ElevatedButton, 'Mulai Ujian')
           .evaluate()
           .isNotEmpty,
     );
 
-    // Syarat kiosk belum terpenuhi → tombol utama tetap nonaktif.
+    // Tombol utama AKTIF: syaratnya hanya screening + izin overlay.
+    expect(
+      find.widgetWithText(ElevatedButton, 'Mulai Ujian'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(ElevatedButton, 'Syarat Belum Lengkap'),
+      findsNothing,
+    );
+    // Tidak ada lagi permintaan aksi teknisi/guru maupun skrip ADB.
+    expect(find.text('Diperlukan aksi dari teknisi/guru'), findsNothing);
+    expect(find.text('tool/exam_device_owner.sh'), findsNothing);
+    expect(find.text('Kunci layar ujian siap'), findsOneWidget);
+  });
+
+  testWidgets(
+      'selama screening ulang berjalan tombol gerbang TERKUNCI '
+      '(hasil lama tidak dipercaya)', (tester) async {
+    _useTallScreen(tester);
+    _asAndroid(tester);
+
+    // Panggilan screening ke-2 sengaja DITAHAN sampai tes selesai memeriksa
+    // keadaan UI; inilah yang meniru "siswa baru kembali dari layar Settings".
+    final secondScanGate = Completer<void>();
+    var scanCount = 0;
+
+    const channel = MethodChannel('id.hidocs.app/security');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+        (call) async {
+      switch (call.method) {
+        case 'getInstalledApps':
+          scanCount++;
+          if (scanCount == 1) return _cleanScreeningPayload();
+          await secondScanGate.future;
+          // Floatee baru saja dipasang di layar Settings.
+          return _floateeScreeningPayload();
+        case 'getActiveFloatingApps':
+          return _cleanScreeningPayload();
+        case 'canDrawOverlays':
+          return true;
+        default:
+          return null;
+      }
+    });
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await tester.pumpWidget(_wrap(ExamLockdownGateScreen(
+      form: _buildFormWithQuestion(type: FormType.exam),
+      preEnteredToken: 'ABCD12',
+      responseId: 'resp-123',
+    )));
+
+    // Screening pertama bersih → tombol "Mulai Ujian" aktif.
+    await _pumpUntil(
+      tester,
+      () => find
+          .widgetWithText(ElevatedButton, 'Mulai Ujian')
+          .evaluate()
+          .isNotEmpty,
+    );
+    expect(find.widgetWithText(ElevatedButton, 'Mulai Ujian'), findsOneWidget);
+
+    // Siswa keluar-masuk aplikasi (mis. dari layar Settings) → screening ulang.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    // REGRESI: hasil screening lama TIDAK boleh dipakai untuk membuka ujian
+    // selama pemeriksaan baru belum selesai.
     expect(
       find.widgetWithText(ElevatedButton, 'Syarat Belum Lengkap'),
       findsOneWidget,
     );
-    expect(
-      find.widgetWithText(ElevatedButton, 'Lanjut Ke Token Ujian'),
-      findsNothing,
+    expect(find.widgetWithText(ElevatedButton, 'Mulai Ujian'), findsNothing);
+
+    // Screening baru selesai: Floatee terdeteksi → tombol tetap terkunci.
+    secondScanGate.complete();
+    await _pumpUntil(
+      tester,
+      () => find.text('Floatee').evaluate().isNotEmpty,
     );
-    // Petunjuk provisioning ditampilkan supaya teknisi tahu langkahnya.
-    expect(find.text('Diperlukan aksi dari teknisi/guru'), findsOneWidget);
-    expect(find.text('tool/exam_device_owner.sh'), findsOneWidget);
+
+    expect(find.text('Floatee'), findsOneWidget);
+    expect(
+      find.widgetWithText(ElevatedButton, 'Syarat Belum Lengkap'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(ElevatedButton, 'Mulai Ujian'), findsNothing);
+    expect(find.byType(FillFormScreen), findsNothing);
   });
 }
