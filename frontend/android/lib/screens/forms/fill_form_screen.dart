@@ -127,8 +127,12 @@ class _FillFormScreenState extends State<FillFormScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     ExamSecurityService.setFullscreenLock(true);
 
+    // Observer lifecycle selalu didaftarkan — baik exam maupun non-exam —
+    // supaya status bar bisa dikunci ulang saat aplikasi kembali ke foreground.
+    // Untuk non-exam, hanya blok `resumed` yang aktif (tanpa violation tracking).
+    WidgetsBinding.instance.addObserver(this);
+
     if (_examMode) {
-      WidgetsBinding.instance.addObserver(this);
 
       ExamViolationReporter.register(_handleReportedViolation);
 
@@ -204,9 +208,12 @@ class _FillFormScreenState extends State<FillFormScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     ExamSecurityService.setFullscreenLock(false);
 
+    // Observer selalu didaftarkan di initState (exam maupun non-exam),
+    // jadi selalu di-unregister di sini.
+    WidgetsBinding.instance.removeObserver(this);
+
     if (_examMode) {
       _autosaveTimer?.cancel();
-      WidgetsBinding.instance.removeObserver(this);
       ExamViolationReporter.unregister();
       ExamLockdownService.release();
     }
@@ -1182,9 +1189,9 @@ class _FillFormScreenState extends State<FillFormScreen>
         if (didPop) return;
 
         if (_examMode) {
-          // BUNYIKAN ALARM KELUAR (assets/keluar.mp3, diputar oleh native).
-          _soundExitAlarm();
-
+          // Tombol Back TIDAK bisa mengeluarkan siswa dari ujian (canPop: false).
+          // Cukup tampilkan peringatan — TANPA membunyikan alarm, karena user
+          // tidak benar-benar keluar aplikasi, hanya menekan Back.
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

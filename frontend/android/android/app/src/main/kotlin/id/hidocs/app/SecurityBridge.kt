@@ -259,9 +259,16 @@ class SecurityBridge(
      * gestur tepi (tarik panel notifikasi, geser nav bar) sewaktu-waktu
      * memunculkan system bar sementara, dan tanpa penguncian ulang bar itu
      * tidak pernah hilang lagi.
+     *
+     * Juga me-restart watchdog dan inset listener yang mungkin berhenti saat
+     * aktivitas sempat di-pause (view ter-detach, postDelayed tidak berjalan).
      */
     fun reapplyFullscreenLock() {
-        if (fullscreenLocked) applyFullscreenLock(true)
+        if (!fullscreenLocked) return
+        applyFullscreenLock(true)
+        // Restart watchdog + listener: saat app kembali dari background,
+        // postDelayed yang lama sudah tidak berjalan lagi.
+        startSystemBarWatchdog()
     }
 
     private fun applyFullscreenLock(enabled: Boolean) {
@@ -1352,9 +1359,11 @@ private fun knownFloatingLabel(pkg: String): String {
         /**
          * Selang pemeriksaan [systemBarWatchdog].
          *
-         * Dipilih pendek (700 ms) karena tujuannya menutup system bar yang baru
+         * Dipilih pendek (150 ms) karena tujuannya menutup system bar yang baru
          * saja digeser keluar; terlalu panjang membuat status bar sempat
-         * terlihat cukup lama untuk menekan notifikasi.
+         * terlihat cukup lama untuk menekan notifikasi. Inset listener
+         * [startInsetListener] bekerja event-driven sehingga reaksinya
+         * lebih cepat dari interval polling ini.
          */
         private const val SYSTEM_BAR_WATCHDOG_MS = 150L
     }
