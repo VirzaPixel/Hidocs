@@ -71,6 +71,7 @@ class SecurityOverlayWidget extends StatelessWidget {
   final String warningText;
   final int? violationCount;
   final int? maxViolations;
+  final VoidCallback? onAcknowledge;
 
   const SecurityOverlayWidget({
     super.key,
@@ -78,67 +79,96 @@ class SecurityOverlayWidget extends StatelessWidget {
     this.warningText = 'Peringatan Keamanan Ujian! Fokus layar terdeteksi berpindah.',
     this.violationCount,
     this.maxViolations,
+    this.onAcknowledge,
   });
 
   @override
   Widget build(BuildContext context) {
     if (!isVisible) return const SizedBox.shrink();
 
-    return Container(
-      color: Colors.black.withValues(alpha: 0.85),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.shield_outlined,
-            color: Colors.redAccent,
-            size: 64,
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'AKSES DIKUNCI',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
+    return GestureDetector(
+      // Absorb semua tap agar tombol di bawah overlay tidak bisa disentuh
+      onTap: () {},
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.92),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.shield_outlined,
+              color: Colors.redAccent,
+              size: 64,
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            warningText,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-          if (violationCount != null && maxViolations != null) ...[
             const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.redAccent.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Text(
-                'Pelanggaran: $violationCount / $maxViolations',
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                ),
+            const Text(
+              'AKSES DIKUNCI',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
               ),
             ),
+            const SizedBox(height: 12),
+            Text(
+              warningText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            if (violationCount != null && maxViolations != null) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  'Pelanggaran: $violationCount / $maxViolations',
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+            if (onAcknowledge != null) ...[
+              const SizedBox(height: 36),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onAcknowledge,
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: Text(
+                    'Saya Mengerti, Lanjutkan'
+                    '${violationCount != null && maxViolations != null ? ' ($violationCount/$maxViolations)' : ''}',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

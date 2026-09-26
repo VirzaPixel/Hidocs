@@ -292,6 +292,11 @@ class _FillFormScreenState extends State<FillFormScreen>
           'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
           'Sisa $remaining kesempatan lagi, setelah itu akses ujian akan dibatalkan.';
     });
+    // Paksa fullscreen lock kembali aktif: saat app baru kembali dari
+    // background, status bar sempat bisa dimunculkan. Kunci ulang sekarang
+    // supaya overlay peringatan tidak bisa di-dismiss lewat notifikasi.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    ExamSecurityService.setFullscreenLock(true);
   }
 
   /// Revoke akses dan submit otomatis karena pelanggaran melebihi batas.
@@ -1682,36 +1687,15 @@ class _FillFormScreenState extends State<FillFormScreen>
         ],
       ),
           if (_examMode) ...[
-            SecurityOverlayWidget(
-              isVisible: _overlayWarningVisible,
-              warningText: _overlayWarningText,
-              violationCount: _violationCount,
-              maxViolations: kMaxExitViolations,
-            ),
-            if (_overlayWarningVisible)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 48,
-                child: Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _acknowledgeWarning,
-                    icon: const Icon(Icons.check_rounded, size: 18),
-                    label: Text(
-                      'Saya Mengerti, Lanjutkan ($_violationCount/$kMaxExitViolations)',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.error,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ),
+            Positioned.fill(
+              child: SecurityOverlayWidget(
+                isVisible: _overlayWarningVisible,
+                warningText: _overlayWarningText,
+                violationCount: _violationCount,
+                maxViolations: kMaxExitViolations,
+                onAcknowledge: _overlayWarningVisible ? _acknowledgeWarning : null,
               ),
+            ),
           ],
         ],
       ),
