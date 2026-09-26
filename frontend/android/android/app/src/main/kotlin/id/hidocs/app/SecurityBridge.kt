@@ -17,7 +17,6 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Process
-import android.permission.PermissionChecker
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -299,7 +298,13 @@ class SecurityBridge(
                 pkg.startsWith("com.android.") ||
                 pkg.startsWith("android.")
 
-    /** Aplikasi mendeklarasikan izin tampil-di-atas di manifest-nya. */
+    /**
+     * Aplikasi mendeklarasikan izin tampil-di-atas di manifest-nya.
+     *
+     * WAJIB dipanggil dengan `PackageInfo` yang dimuat memakai flag
+     * [PackageManager.GET_PERMISSIONS], karena `requestedPermissions` hanya
+     * terisi bila flag itu dipakai.
+     */
     private fun declaresOverlay(pi: PackageInfo): Boolean {
         val requested = pi.requestedPermissions ?: return false
         for (p in requested) {
@@ -309,12 +314,32 @@ class SecurityBridge(
     }
 
     /**
+     * `PackageInfo` lengkap dengan daftar izin yang diminta aplikasi [pkg].
+     *
+     * `getInstalledPackages`/`getInstalledApplications` saja tidak membawa
+     * `requestedPermissions`, jadi pemanggilan eksplisit dengan
+     * [PackageManager.GET_PERMISSIONS] diperlukan sebelum [declaresOverlay]
+     * dan [overlayGrantedFor] dipakai.
+     */
+    private fun packageInfoWithPermissions(pkg: String): PackageInfo? = try {
+        activity.packageManager.getPackageInfo(
+            pkg,
+            PackageManager.GET_PERMISSIONS,
+        )
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
      * Apakah izin overlay aplikasi [pkg] sedang diizinkan.
      *
      * Dua jalur karena tidak ada satu API pun yang dijamin mengembalikan
      * mode app-op aplikasi lain untuk aplikasi non-sistem:
-     *  1. `requestedPermissionsFlags` (dibawa oleh `getInstalledPackages`)
-     *  2. `PermissionChecker` (API 29+) sebagai cadangan.
+     *  1. `requestedPermissionsFlags` (dibawa oleh `getInstalledPackages`
+     *     dengan flag `GET_PERMISSIONS`).
+     *  2. `AppOpsManager.unsafeCheckOpNoThrow` (API 29+, cocok dengan minSdk
+     *     proyek ini) sebagai cadangan — inilah sumber kebenaran untuk izin
+     *     khusus "tampil di atas aplikasi lain".
      */
     private fun overlayGrantedFor(pi: PackageInfo, pkg: String): Boolean {
         try {
@@ -333,13 +358,15 @@ class SecurityBridge(
         }
         return try {
             val uid = pi.applicationInfo?.uid ?: return false
-            val res = PermissionChecker.checkPermission(
-                activity,
-                Manifest.permission.SYSTEM_ALERT_WINDOW,
-                pkg,
+            val appOps = activity.getSystemService(Context.APP_OPS_SERVICE)
+                    as AppOpsManager
+            @Suppress("DEPRECATION")
+            val mode = appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
                 uid,
+                pkg,
             )
-            res == PermissionChecker.RESULT_ALLOWED
+            mode == AppOpsManager.MODE_ALLOWED
         } catch (_: Exception) {
             false
         }
@@ -493,9 +520,12 @@ class SecurityBridge(
             val event = android.app.usage.UsageEvents.Event()
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
-                if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
-                    event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_START_DELIVERED
-                ) {
+                // Catatan: `UsageEvents.Event` hanya punya ACTIVITY_RESUMED,
+                // ACTIVITY_PAUSED, dan ACTIVITY_STOPPED (tidak ada
+                // ACTIVITY_START_DELIVERED di android.jar mana pun), jadi
+                // hanya ACTIVITY_RESUMED yang dipakai sebagai penanda
+                // "sedang tampil di foreground".
+                if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
                     event.packageName?.let(out::add)
                 }
             }

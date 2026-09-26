@@ -6,6 +6,10 @@ gradle-wrapper.jar
 /local.properties
 GeneratedPluginRegistrant.java
 .cxx/
+# Sesi/artefak kompilasi Kotlin (mis. .kotlin/sessions/*.salive) — jangan
+# pernah ikut ter-commit karena berisi salinan status compiler lokal.
+/.kotlin/
+**/.kotlin/
 
 # Remember to never publicly share your keystore.
 # See https://flutter.dev/to/reference-keystore
