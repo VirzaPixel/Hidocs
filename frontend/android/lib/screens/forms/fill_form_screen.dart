@@ -88,6 +88,27 @@ class _FillFormScreenState extends State<FillFormScreen>
 
   bool get _examMode => widget.form.isExam;
 
+  bool _backWarnVisible = false;
+  DateTime? _lastBackWarnAt;
+  Timer? _backWarnTimer;
+
+  void _showBackWarning() {
+    final now = DateTime.now();
+    if (_lastBackWarnAt != null &&
+        now.difference(_lastBackWarnAt!) < const Duration(seconds: 4)) {
+      return;
+    }
+    _lastBackWarnAt = now;
+    if (!mounted) return;
+    setState(() => _backWarnVisible = true);
+    _backWarnTimer?.cancel();
+    _backWarnTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() => _backWarnVisible = false);
+      }
+    });
+  }
+
   final ScrollController _numberStripController = ScrollController();
 
   /// Bunyikan alarm keluar lewat native (assets/keluar.mp3).
@@ -217,6 +238,8 @@ class _FillFormScreenState extends State<FillFormScreen>
       ExamViolationReporter.unregister();
       ExamLockdownService.release();
     }
+
+    _backWarnTimer?.cancel();
 
     _numberStripController.dispose();
 
@@ -1195,19 +1218,8 @@ class _FillFormScreenState extends State<FillFormScreen>
 
         if (_examMode) {
           // Tombol Back TIDAK bisa mengeluarkan siswa dari ujian (canPop: false).
-          // Cukup tampilkan peringatan — TANPA membunyikan alarm, karena user
-          // tidak benar-benar keluar aplikasi, hanya menekan Back.
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '⚠ PERINGATAN! Anda tidak diperbolehkan keluar dari sesi ujian yang sedang berlangsung.',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              backgroundColor: AppTheme.error,
-              duration: Duration(seconds: 4),
-            ),
-          );
+          // Tampilkan peringatan di atas button kirim jawaban (tidak nyepam).
+          _showBackWarning();
         } else {
           // Konfirmasi keluar untuk non-ujian
           final confirm = await showDialog<bool>(
@@ -1683,6 +1695,7 @@ class _FillFormScreenState extends State<FillFormScreen>
                 () => _showQuestionPanel(context),
             onToggleFlag:
                 () => _toggleFlag(_current),
+            showBackWarning: _backWarnVisible,
           ),
         ],
       ),
@@ -2187,6 +2200,7 @@ class _NavBar
   final VoidCallback onSubmit;
   final VoidCallback onOpenPanel;
   final VoidCallback onToggleFlag;
+  final bool showBackWarning;
 
   const _NavBar({
     required this.current,
@@ -2198,6 +2212,7 @@ class _NavBar
     required this.onSubmit,
     required this.onOpenPanel,
     required this.onToggleFlag,
+    this.showBackWarning = false,
   });
 
   @override
@@ -2290,6 +2305,37 @@ class _NavBar
                 ),
               ),
             ],
+            if (showBackWarning) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppTheme.error.withValues(alpha: 0.35)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 16, color: AppTheme.error),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Peringatan! Anda tidak diperbolehkan keluar dari sesi ujian yang sedang berlangsung.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             Row(
               children: [
                 SizedBox(

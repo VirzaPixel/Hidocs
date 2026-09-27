@@ -614,10 +614,22 @@ class SecurityBridge(
     private fun maximizeExamVolume(): Boolean {
         return try {
             val am = activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            val current = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-            if (savedExamVolume < 0) savedExamVolume = current
-            am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
+            // Naikkan semua stream yang relevan supaya alarm + soal audio terdengar
+            // meskipun user sebelumnya mute notifikasi atau media.
+            listOf(
+                AudioManager.STREAM_MUSIC,
+                AudioManager.STREAM_RING,
+                AudioManager.STREAM_NOTIFICATION,
+                AudioManager.STREAM_ALARM,
+            ).forEach { stream ->
+                try {
+                    val max = am.getStreamMaxVolume(stream)
+                    if (stream == AudioManager.STREAM_MUSIC && savedExamVolume < 0) {
+                        savedExamVolume = am.getStreamVolume(stream)
+                    }
+                    am.setStreamVolume(stream, max, 0)
+                } catch (_: Exception) {}
+            }
             true
         } catch (_: Exception) {
             false
