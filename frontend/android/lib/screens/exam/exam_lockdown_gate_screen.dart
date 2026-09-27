@@ -10,21 +10,43 @@ import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 import 'package:hi_docs/utils/theme_context.dart';
 
-/// Gerbang wajib sebelum mengerjakan ujian.
+/// Gerbang wajib — LANGKAH TERAKHIR sebelum soal ujian dimuat.
 ///
-/// Memeriksa dua proses persiapan yang terpisah (Revisi Lanjutan 6):
-///  1. Aplikasi floating yang SEDANG AKTIF menampilkan bubble/jendela
-///     mengambang (harus bersih).
+/// Halaman ini FOKUS hanya pada tiga hal:
+///  1. Screening aplikasi floating yang terpasang/aktif (harus bersih).
 ///  2. Izin "tampil di atas aplikasi lain" untuk HiDocs.
+///  3. Informasi penguncian layar ujian (status bar + tombol navigasi
+///     disembunyikan, aplikasi menarik diri kembali ke depan) dan alarm
+///     keluar — semuanya berjalan dari dalam aplikasi, TANPA provisioning
+///     perangkat.
 ///
-/// "Mode Sunyi Total" (DND) SUDAH DIHAPUS. Gantinya: saat tombol "Mulai Ujian"
-/// ditekan, volume media perangkat dibuat AUTO FULL; saat keluar/selesai
-/// ujian, volume dipulihkan ke nilai semula.
+/// URUTAN ALUR (Revisi Lanjutan 10):
 ///
-/// Selama belum semua terpenuhi, tombol "Mulai Ujian" terkunci.
+///   detail form → layar token → GERBANG ini → pengisian soal.
+///
+/// Sesi ujian dicatat LEBIH DULU di layar token ([ExamTokenScreen]) lewat
+/// endpoint `verify-token`; token + `response_id` hasilnya dibawa ke halaman
+/// ini sebagai [preEnteredToken] dan [responseId].
+///
+/// Alasan urutan ini: screening aplikasi floating harus menjadi hal TERAKHIR
+/// yang diperiksa sebelum soal dimuat. Kalau gerbang dijalankan lebih dulu,
+/// siswa masih mampir di layar token setelah lolos screening — di sana ia
+/// bebas keluar aplikasi, memasang aplikasi floating (mis. Floatee), lalu
+/// kembali dan masuk ujian dengan hasil screening yang sudah BASI. Dengan
+/// gerbang di akhir, halaman ini juga otomatis memeriksa ulang setiap kali
+/// aplikasi kembali fokus, sehingga aplikasi floating yang baru dipasang
+/// langsung terdeteksi dan tombol mulai tetap terkunci.
+///
+/// Selama syarat 1 dan 2 belum terpenuhi, tombol "Mulai Ujian" terkunci.
 class ExamLockdownGateScreen extends StatefulWidget {
   final FormModel form;
+
+  /// Token ujian yang sudah diverifikasi di layar token (boleh kosong untuk
+  /// form tanpa token). Diteruskan apa adanya ke [FillFormScreen].
   final String preEnteredToken;
+
+  /// Id respons sesi ujian yang dicatat backend saat `verify-token`. Dipakai
+  /// autosave, telemetry pelanggaran, dan pantauan pengawas.
   final String responseId;
 
   const ExamLockdownGateScreen({
@@ -41,18 +63,27 @@ class ExamLockdownGateScreen extends StatefulWidget {
 class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     with WidgetsBindingObserver {
   LockdownReadiness? _readiness;
-  bool _loading = true;
   bool _engaging = false;
 
-  /// Form yang mewajibkan token harus punya sesi terdaftar supaya
-  /// pengawasan (telemetry/autosave) benar-benar aktif.
-  bool get _sessionReady =>
-      !widget.form.hasExamToken || widget.responseId.isNotEmpty;
+  /// Sedang menjalankan ulang screening (mis. saat kembali dari layar Settings
+  /// atau tombol "Periksa Ulang"). Dipakai untuk menutup celah balapan:
+  /// tombol "Mulai Ujian" HARUS mati selama pemeriksaan berjalan, karena
+  /// hasil [_readiness] yang masih terpampang bisa saja SUDAH BASI —
+  /// siswa baru saja memasang aplikasi floating di layar Settings.
+  bool _refreshing = false;
+
+  /// Hasil pemeriksaan pernah dijalankan sedikitnya sekali. Sebelum ini,
+  /// layar dianggap belum punya kesimpulan apa pun, jadi tombol mulai mati.
+  bool _hasEvaluated = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Halaman ini BUKAN sesi ujian: pastikan tidak ada alarm keluar maupun
+    // kunci layar yang masih menyala dari percobaan sebelumnya, sehingga
+    // siswa boleh menutup aplikasi tanpa suara alarm.
+    ExamLockdownService.ensureIdle();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
@@ -71,24 +102,56 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
   }
 
   Future<void> _refresh() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
+    if (!mounted || _refreshing) return;
+    setState(() => _refreshing = true);
     final result = await ExamLockdownService.evaluate();
     if (!mounted) return;
     setState(() {
       _readiness = result;
-      _loading = false;
+      _refreshing = false;
+      _hasEvaluated = true;
     });
   }
 
+  /// Lanjut dari gerbang ini ke pengisian soal — LANGKAH TERAKHIR.
+  ///
+  /// Alur (Revisi Lanjutan 10): token sudah diverifikasi dan sesi sudah
+  /// tercatat di layar token, jadi halaman ini hanya tinggal memastikan
+  /// perangkat bersih lalu membuka pengisian dengan membawa [responseId].
+  ///
+  /// `engage()` (volume penuh + alarm keluar) tetap SENGAJA tidak dipanggil
+  /// di sini: yang menyalakannya adalah [FillFormScreen] saat siswa benar-benar
+  /// mulai mengisi.
   Future<void> _startExam() async {
     final ready = _readiness;
-    if (ready == null || !ready.isReady || !_sessionReady || _engaging) {
+    // [_refreshing] ikut dijaga: saat screening ulang sedang berjalan, hasil
+    // yang terpampang belum boleh dipercaya — siswa bisa saja baru memasang
+    // aplikasi floating di layar Settings lalu kembali ke sini.
+    if (ready == null ||
+        !_hasEvaluated ||
+        _refreshing ||
+        !ready.isReady ||
+        _engaging) {
       return;
     }
 
     setState(() => _engaging = true);
-    await ExamLockdownService.engage();
+
+    if (!mounted) return;
+
+    // Nyalakan screen pinning DARI SINI — di halaman gerbang, yang bukan
+    // bagian sesi ujian. Alasannya penting:
+    //  - Android menampilkan dialog persetujuan "Pin app?" untuk aplikasi yang
+    //    belum di-allowlist device owner. Bila dipicu saat siswa sudah
+    //    mengerjakan, app akan kehilangan fokus dan tercatat sebagai
+    //    pelanggaran keluar + alarm berbunyi. Di gerbang, dialog itu aman.
+    //  - Setelah tersemat, siswa tidak bisa membuka Home/Recents maupun
+    //    menarik panel notifikasi; keluar hanya lewat gestur Back+Recents,
+    //    yang tercatat sebagai pelanggaran.
+    // Hasilnya diabaikan dengan sengaja: bila siswa menolak atau ROM menolak,
+    // penguncian berlapis lain (system bar tersembunyi + task ditarik kembali
+    // + alarm) tetap bekerja, jadi ujian jangan sampai terhalang karenanya.
+    await ExamSecurityService.startExamLockTask();
     if (!mounted) return;
 
     Navigator.pushReplacement(
@@ -108,7 +171,10 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
     final l10n = AppLocalizations.of(context);
     final isDark = context.isDark;
     final ready = _readiness;
-    final isReady = (ready?.isReady ?? false) && _sessionReady;
+    // Kesimpulan lama SENGAJA tidak dipercaya selama pemeriksaan ulang
+    // berjalan: tombol tetap terkunci sampai hasil baru benar-benar tiba.
+    final isReady =
+        _hasEvaluated && !_refreshing && (ready?.isReady ?? false);
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
@@ -122,7 +188,7 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _loading && ready == null
+      body: !_hasEvaluated && ready == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _refresh,
@@ -176,17 +242,25 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
                   ),
                   const SizedBox(height: 20),
 
-                  // "Fitur volume otomatis" (kartu interaktif + tombol tes)
-                  // DIHAPUS sesuai permintaan. Yang tersisa hanya informasi:
-                  // volume media dibuat 100% otomatis saat mengerjakan ujian
-                  // dan dipulihkan saat keluar, serta alarm keluar berbunyi.
+                  _SectionTitle(
+                    title: l10n.isIndonesian
+                        ? 'Proses 3 — Kunci Layar Ujian'
+                        : 'Step 3 — Exam Screen Lock',
+                    subtitle: l10n.isIndonesian
+                        ? 'Saat siswa mengerjakan, status bar dan tombol '
+                              'navigasi disembunyikan, dan aplikasi otomatis '
+                              'kembali ke depan bila siswa mencoba keluar.'
+                        : 'While working, the status bar and navigation '
+                              'buttons are hidden, and the app pulls itself '
+                              'back to the front if the student tries to leave.',
+                  ),
+                  const SizedBox(height: 10),
                   _ExamNoticeCard(dark: isDark),
                   const SizedBox(height: 24),
 
                   _ChecklistSummary(
                     ready: ready,
                     dark: isDark,
-                    sessionReady: _sessionReady,
                   ),
                 ],
               ),
@@ -194,8 +268,12 @@ class _ExamLockdownGateScreenState extends State<ExamLockdownGateScreen>
       bottomNavigationBar: _BottomAction(
         isReady: isReady,
         isEngaging: _engaging,
+        isRefreshing: _refreshing,
         onStart: _startExam,
         onRefresh: _refresh,
+        // Gerbang ini sekarang SELALU langkah terakhir sebelum soal dimuat,
+        // jadi labelnya seragam untuk ujian maupun survei.
+        readyLabel: l10n.isIndonesian ? 'Mulai Ujian' : 'Start Exam',
       ),
     );
   }
@@ -206,6 +284,9 @@ class _GateStepIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Alur (Revisi Lanjutan 10): 1) masukkan token → 2) persiapan ujian.
+    // Token sudah selesai saat halaman ini tampil, jadi langkah 1 ditandai
+    // selesai dan langkah 2 aktif.
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -357,10 +438,14 @@ class _ExamNoticeCard extends StatelessWidget {
       (
         Icons.lock_rounded,
         l10n.isIndonesian
-            ? 'Layar ujian juga dikunci: screenshot dan preview di daftar '
-                  'aplikasi terbaru diblokir.'
-            : 'The exam screen is also secured: screenshots and recents '
-                  'previews are blocked.',
+            ? 'Status bar dan tombol navigasi disembunyikan. Setelah Anda '
+                  'menekan tombol mulai, Android akan menampilkan konfirmasi '
+                  '"Sematkan aplikasi?"; setujui agar panel notifikasi tidak '
+                  'bisa ditarik selama ujian. Screenshot tetap diblokir.'
+            : 'The status bar and navigation buttons are hidden. After you '
+                  'press start, Android shows a "Pin app?" confirmation; '
+                  'accept it so the notification shade cannot be pulled down '
+                  'during the exam. Screenshots stay blocked.',
       ),
     ];
 
@@ -880,12 +965,10 @@ class _RequirementCard extends StatelessWidget {
 class _ChecklistSummary extends StatelessWidget {
   final LockdownReadiness? ready;
   final bool dark;
-  final bool sessionReady;
 
   const _ChecklistSummary({
     required this.ready,
     required this.dark,
-    required this.sessionReady,
   });
 
   @override
@@ -895,8 +978,8 @@ class _ChecklistSummary extends StatelessWidget {
     final items = <(String, bool)>[
       (
         l10n.isIndonesian
-            ? 'Tidak ada aplikasi floating terdeteksi'
-            : 'No floating app detected',
+            ? 'Screening aplikasi floating'
+            : 'Floating app screening',
         r?.floatingAppsClean ?? false,
       ),
       (
@@ -905,9 +988,15 @@ class _ChecklistSummary extends StatelessWidget {
       ),
       (
         l10n.isIndonesian
-            ? 'Sesi ujian terdaftar (response id aktif)'
-            : 'Exam session registered (response id)',
-        sessionReady,
+            ? 'Kunci layar ujian (system bar + sematan)'
+            : 'Exam screen lock (system bars + pinning)',
+        // Status bar/nav bar disembunyikan memakai
+        // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE (bar hanya muncul sesaat dan
+        // tidak interaktif) + watchdog yang menutup ulang bar, lalu screen
+        // pinning dipasang agar panel notifikasi benar-benar tidak bisa
+        // ditarik. Semuanya dikerjakan dari dalam aplikasi, tanpa provisioning
+        // ADB/device owner yang dulu dituntut baris ini.
+        r != null,
       ),
     ];
 
@@ -963,17 +1052,12 @@ class _ChecklistSummary extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             l10n.isIndonesian
-                ? 'Catatan: "sesi ujian terdaftar" berarti server sudah '
-                      'mencatat percobaan ujian Anda (punya response id). '
-                      'Tanpa sesi itu, autosave dan laporan pelanggaran tidak '
-                      'bisa terhubung, sehingga form bertoken mengunci tombol '
-                      '"Mulai Ujian". Untuk form tanpa token, syarat ini '
-                      'otomatis terpenuhi.'
-                : 'Note: "exam session registered" means the backend already '
-                      'recorded your attempt (a response id). Without it, '
-                      'autosave and violation reports cannot be attached, so '
-                      'token-protected forms keep "Start Exam" locked. Forms '
-                      'without a token satisfy this automatically.',
+                ? 'Catatan: halaman ini hanya memeriksa perangkat (aplikasi '
+                      'floating dan izin overlay). Bila sudah bersih, tekan '
+                      '"Mulai Ujian" untuk membuka soal.'
+                : 'Note: this page only checks the device (floating apps and '
+                      'overlay permission). Once clean, tap "Start Exam" to '
+                      'open the questions.',
             style: TextStyle(
               fontSize: 11.5,
               height: 1.45,
@@ -1008,11 +1092,22 @@ class _BottomAction extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onRefresh;
 
+  /// Teks tombol utama saat semua syarat terpenuhi. Gerbang ini SELALU
+  /// langkah terakhir sebelum soal dimuat (Revisi Lanjutan 10): token sudah
+  /// diverifikasi di layar sebelumnya, jadi labelnya seragam → pengisian soal.
+  final String readyLabel;
+
+  /// Sedang menjalankan screening ulang. Tombol "Periksa Ulang" ikut mati dan
+  /// ikonnya berputar supaya siswa tidak menekan berkali-kali.
+  final bool isRefreshing;
+
   const _BottomAction({
     required this.isReady,
     required this.isEngaging,
+    required this.isRefreshing,
     required this.onStart,
     required this.onRefresh,
+    required this.readyLabel,
   });
 
   @override
@@ -1040,8 +1135,14 @@ class _BottomAction extends StatelessWidget {
           Expanded(
             flex: 4,
             child: OutlinedButton.icon(
-              onPressed: isEngaging ? null : onRefresh,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
+              onPressed: isEngaging || isRefreshing ? null : onRefresh,
+              icon: isRefreshing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 18),
               label: Text(
                 l10n.isIndonesian ? 'Periksa Ulang' : 'Re-check',
                 maxLines: 1,
@@ -1078,7 +1179,7 @@ class _BottomAction extends StatelessWidget {
                   : const Icon(Icons.lock_rounded, size: 19),
               label: Text(
                 isReady
-                    ? (l10n.isIndonesian ? 'Mulai Ujian' : 'Start Exam')
+                    ? readyLabel
                     : (l10n.isIndonesian
                         ? 'Syarat Belum Lengkap'
                         : 'Requirements Incomplete'),

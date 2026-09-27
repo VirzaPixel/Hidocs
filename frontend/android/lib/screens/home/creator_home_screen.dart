@@ -33,7 +33,6 @@ class CreatorHomeScreen extends StatefulWidget {
 
 class _CreatorHomeScreenState extends State<CreatorHomeScreen>
     with WidgetsBindingObserver {
-  int _tab = 0;
   Timer? _autoCloseTimer;
 
   @override
@@ -73,61 +72,13 @@ class _CreatorHomeScreenState extends State<CreatorHomeScreen>
   Widget build(BuildContext context) {
     final auth         = Provider.of<AuthProvider>(context);
     final formProvider = Provider.of<FormProvider>(context);
-    final l10n = AppLocalizations.of(context);
 
-    final List<Widget> screens = [
-      _DashboardTab(
-        auth: auth,
-        formProvider: formProvider,
-        onViewAll: () {
-          setState(() {
-            _tab = 1;
-          });
-        },
-      ),
-      _FormsTab(
-        formProvider: formProvider
-      ),
-      const SettingsScreen(isCreatorMode: true),
-    ];
-
-    return Scaffold(
-      body: screens[_tab],
-      floatingActionButton: _tab == 1
-          ? FloatingActionButton.extended(
-              onPressed: () => Navigator.push(context,
-                  CustomPageRoute(page: const CreateFormScreen())),
-              backgroundColor: context.primary,
-              elevation: 3,
-              icon: const Icon(Icons.add_rounded, color: Colors.white),
-              label: Text(l10n.isIndonesian ? 'Form Baru' : 'New Form',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w700)),
-            )
-          : null,
-      bottomNavigationBar: _BottomNav(
-        currentIndex: _tab,
-        onTap: (i) {
-          setState(() => _tab = i);
-          if (mounted) {
-            context.read<FormProvider>().loadForms();
-          }
-        },
-        items: [
-          _NavItem(
-              icon: Icons.space_dashboard_outlined,
-              activeIcon: Icons.space_dashboard_rounded,
-              label: l10n.home),
-          _NavItem(
-              icon: Icons.article_outlined,
-              activeIcon: Icons.article_rounded,
-              label: l10n.isIndonesian ? 'Form' : 'Forms'),
-          _NavItem(
-              icon: Icons.settings_outlined,
-              activeIcon: Icons.settings_rounded,
-              label: l10n.profile),
-        ],
-      ),
+    return _DashboardTab(
+      auth: auth,
+      formProvider: formProvider,
+      onViewAll: () {
+        // Tampilkan dialog/bottom sheet atau navigasi ke layar semua form jika dibutuhkan
+      },
     );
   }
 }
@@ -1252,57 +1203,3 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _NavItem {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  const _NavItem(
-      {required this.icon,
-      required this.activeIcon,
-      required this.label});
-}
-
-class _BottomNav extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final List<_NavItem> items;
-  const _BottomNav(
-      {required this.currentIndex,
-      required this.onTap,
-      required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.surfaceCard,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-            color: isDark ? AppTheme.darkBorder : AppTheme.border),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black
-                  .withValues(alpha: isDark ? 0.30 : 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 6)),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: BottomNavigationBar(
-          currentIndex: currentIndex,
-          onTap: onTap,
-          items: items
-              .map((i) => BottomNavigationBarItem(
-                    icon: Icon(i.icon),
-                    activeIcon: Icon(i.activeIcon),
-                    label: i.label,
-                  ))
-              .toList(),
-        ),
-      ),
-    );
-  }
-}

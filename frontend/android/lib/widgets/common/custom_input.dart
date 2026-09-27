@@ -18,6 +18,11 @@ class CustomInput extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
 
+  /// Warna aksen (border fokus + ikon). `null` = ikut warna tema global.
+  /// Halaman login/daftar mengoper `AppTheme.primary` agar warnanya tetap
+  /// biru bawaan dan tidak ikut berubah saat pengguna memilih custom tema.
+  final Color? accentColor;
+
   const CustomInput({
     required this.controller,
     required this.label,
@@ -32,6 +37,7 @@ class CustomInput extends StatelessWidget {
     this.onChanged,
     this.readOnly = false,
     this.onTap,
+    this.accentColor,
     super.key,
   });
 
@@ -79,7 +85,9 @@ class CustomInput extends StatelessWidget {
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                  color: isDark ? const Color(0xFF4A90D9) : context.primary,
+                  color: isDark
+                      ? const Color(0xFF4A90D9)
+                      : (accentColor ?? context.primary),
                   width: 2)),
           errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),

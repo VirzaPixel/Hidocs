@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,7 +28,9 @@ import 'package:hi_docs/services/api/api_client.dart';
 import 'package:hi_docs/services/security/exam_lockdown_service.dart';
 import 'package:hi_docs/services/security/exam_security_service.dart';
 import 'package:hi_docs/l10n/app_localizations.dart';
+import 'package:hi_docs/l10n/l10n_extension.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
+import 'package:hi_docs/utils/submit_payload.dart';
 
 class FillFormScreen extends StatefulWidget {
   final FormModel form;
@@ -72,14 +75,39 @@ class _FillFormScreenState extends State<FillFormScreen>
   bool _overlayWarningVisible = false;
   String _overlayWarningText = '';
   int _violationCount = 0;
+
+  /// `true` selama aplikasi sedang berada di luar foreground dalam SATU
+  /// episode. Mencegah satu kali keluar dihitung beberapa kali.
+  bool _exitEpisode = false;
+
   Timer? _autosaveTimer;
-  Timer? _floatingScanTimer;
   bool _accessRevoked = false;
   final Set<String> _dirtyQuestions = {};
   final Set<String> _unsavedQuestions = {};
   bool get _hasUnsaved => _unsavedQuestions.isNotEmpty;
 
   bool get _examMode => widget.form.isExam;
+
+  bool _backWarnVisible = false;
+  DateTime? _lastBackWarnAt;
+  Timer? _backWarnTimer;
+
+  void _showBackWarning() {
+    final now = DateTime.now();
+    if (_lastBackWarnAt != null &&
+        now.difference(_lastBackWarnAt!) < const Duration(seconds: 4)) {
+      return;
+    }
+    _lastBackWarnAt = now;
+    if (!mounted) return;
+    setState(() => _backWarnVisible = true);
+    _backWarnTimer?.cancel();
+    _backWarnTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() => _backWarnVisible = false);
+      }
+    });
+  }
 
   final ScrollController _numberStripController = ScrollController();
 
@@ -107,8 +135,25 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     _responseId = widget.responseId.isNotEmpty ? widget.responseId : null;
 
+    // Status bar HP disembunyikan selama mengisi. Dua lapis dipakai bersama:
+    //  1. `immersiveSticky` dari Flutter — CATATAN PENTING: pada targetSdk 36
+    //     (nilai proyek ini) Flutter memaksa `edgeToEdge` dan mengabaikan mode
+    //     ini, jadi ia hanya berfungsi sebagai cadangan untuk targetSdk lama;
+    //  2. kunci native `setFullscreenLock` (WindowInsetsControllerCompat) —
+    //     INILAH yang benar-benar bekerja di perangkat: bar disembunyikan
+    //     dengan BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE (hanya muncul sesaat,
+    //     overlay tidak interaktif) plus watchdog yang menutup ulang bar.
+    // Informasinya — jam + baterai — disediakan aplikasi sendiri lewat
+    // [_DeviceStatusBar].
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    ExamSecurityService.setFullscreenLock(true);
+
+    // Observer lifecycle selalu didaftarkan — baik exam maupun non-exam —
+    // supaya status bar bisa dikunci ulang saat aplikasi kembali ke foreground.
+    // Untuk non-exam, hanya blok `resumed` yang aktif (tanpa violation tracking).
+    WidgetsBinding.instance.addObserver(this);
+
     if (_examMode) {
-      WidgetsBinding.instance.addObserver(this);
 
       ExamViolationReporter.register(_handleReportedViolation);
 
@@ -119,13 +164,12 @@ class _FillFormScreenState extends State<FillFormScreen>
         (_) => _flushAutosave(),
       );
 
-      // Skorulasi berkala (setiap 30 detik) untuk mendeteksi aplikasi
-      // floating baru yang mungkin muncul selama ujian berlangsung.
-      _floatingScanTimer = Timer.periodic(
-        const Duration(seconds: 30),
-        (_) => _periodicFloatingScan(),
-      );
-
+      // CATATAN (Revisi Lanjutan 9): skoring aplikasi floating SETELAH
+      // ujian dimulai DIHAPUS. Deteksi floating hanya dijalankan sekali di
+      // halaman "Persiapan Ujian" (screening penuh). Selama mengerjakan,
+      // aplikasi tidak boleh memunculkan notifikasi floating — free-riding
+      // pada sinyal yang salah membuat '=' deteksi hantu' dan nama baik
+      // aplikasi rusak.
       _restoreExamSession();
     }
 
@@ -181,13 +225,21 @@ class _FillFormScreenState extends State<FillFormScreen>
   void dispose() {
     _timer?.cancel();
 
+    // Kembalikan status bar sistem seperti semula saat meninggalkan halaman.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    ExamSecurityService.setFullscreenLock(false);
+
+    // Observer selalu didaftarkan di initState (exam maupun non-exam),
+    // jadi selalu di-unregister di sini.
+    WidgetsBinding.instance.removeObserver(this);
+
     if (_examMode) {
       _autosaveTimer?.cancel();
-      _floatingScanTimer?.cancel();
-      WidgetsBinding.instance.removeObserver(this);
       ExamViolationReporter.unregister();
       ExamLockdownService.release();
     }
+
+    _backWarnTimer?.cancel();
 
     _numberStripController.dispose();
 
@@ -209,38 +261,29 @@ class _FillFormScreenState extends State<FillFormScreen>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        // Pengganti native onPause: pastikan alarm keluar tetap berbunyi
-        // walau hook platform tidak sempat terpanggil.
+      case AppLifecycleState.hidden:
+        // Android mengirim `inactive` → `hidden` → `paused` untuk SATU kali
+        // keluar aplikasi. Tanpa [_exitEpisode] ketiganya terhitung sebagai
+        // tiga pelanggaran terpisah sehingga satu keluar saja langsung
+        // mencabut akses ujian. [_exitEpisode] memastikan satu episode keluar
+        // = satu pelanggaran, dan direset begitu aplikasi kembali aktif.
+        if (_exitEpisode) return;
+        _exitEpisode = true;
+
+        // Alarm keluar tetap berbunyi walau hook platform tidak sempat
+        // terpanggil (native juga memicunya sendiri dari onPause).
         _soundExitAlarm();
-        _violationCount++;
-        _reportViolation(
-          'APP_BACKGROUNDED',
-          message:
-              'Aplikasi ujian ditinggalkan (state: $state). Pelanggaran ke-$_violationCount.',
-        );
-        if (_violationCount >= kMaxExitViolations) {
-          _revokeAndSubmit();
-        } else if (mounted) {
-          final remaining = kMaxExitViolations - _violationCount;
-          setState(() {
-            _overlayWarningVisible = true;
-            _overlayWarningText =
-                'Anda terdeteksi keluar dari aplikasi ujian.\n'
-                'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
-                'Sisa $remaining kesempatan lagi, setelah itu akses ujian akan dibatalkan.';
-          });
-        }
+        _registerExitViolation(state);
         break;
 
       case AppLifecycleState.resumed:
-        _refreshLockdown();
-        break;
-
-      case AppLifecycleState.hidden:
-        _reportViolation(
-          'WINDOW_BLUR',
-          message: 'Aplikasi ujian tidak lagi menjadi fokus.',
-        );
+        // Episodenya sudah selesai — hitungan berikutnya kembali dari nol.
+        _exitEpisode = false;
+        // Kunci native sudah dipasang, tapi saat app dijeda sistem bisa
+        // melepas status bar. Pastikan immersive + kunci native aktif lagi
+        // setiap kali app kembali ke depan.
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        ExamSecurityService.setFullscreenLock(true);
         break;
 
       case AppLifecycleState.detached:
@@ -248,70 +291,35 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
   }
 
-  Future<void> _refreshLockdown() async {
-    if (!_examMode || _accessRevoked) return;
-    //evaluateLive: hanya overlay yang SEDANG tampil yang dihitung, supaya
-    //aplikasi floating yang hanya terpasang tidak memicu pelanggaran tiap
-    //kali aplikasi kembali ke depan.
-    final readiness = await ExamLockdownService.evaluateLive();
+  /// Catat satu pelanggaran "keluar aplikasi" lalu tampilkan peringatannya.
+  Future<void> _registerExitViolation(AppLifecycleState state) async {
+    if (_accessRevoked || _submitted) return;
+
+    _violationCount++;
+    _reportViolation(
+      'APP_BACKGROUNDED',
+      message: 'Aplikasi ujian ditinggalkan (state: $state). '
+          'Pelanggaran ke-$_violationCount dari $kMaxExitViolations.',
+    );
+
+    if (_violationCount >= kMaxExitViolations) {
+      await _revokeAndSubmit();
+      return;
+    }
     if (!mounted) return;
-    if (!readiness.isReady) {
-      _violationCount++;
-      _reportViolation(
-        'LOCKDOWN_VIOLATION',
-        message:
-            'Syarat penguncian dilanggar (${readiness.unmetRequirements.join(', ')}). '
-            'Pelanggaran ke-$_violationCount.',
-      );
-      if (_violationCount >= kMaxExitViolations) {
-        _revokeAndSubmit();
-      } else {
-        final remaining = kMaxExitViolations - _violationCount;
-        setState(() {
-          _overlayWarningVisible = true;
-          _overlayWarningText =
-              'Syarat penguncian ujian dilanggar '
-              '(${readiness.unmetRequirements.join(', ')}).\n'
-              'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
-              'Sisa $remaining kesempatan. '
-              'Kembalikan kondisi perangkat lalu tekan "Saya Mengerti, Lanjutkan".';
-        });
-      }
-    }
-  }
-
-  /// Scan floating app berkala (dipanggil oleh timer).
-  /// Sama seperti _refreshLockdown tapi hanya fokus pada floating apps.
-  Future<void> _periodicFloatingScan() async {
-    if (!_examMode || _accessRevoked || _submitted) return;
-    try {
-      final screening = await ExamSecurityService.screenActiveFloatingApps();
-      if (!mounted || screening.isClean) return;
-
-      _violationCount++;
-      _reportViolation(
-        'FLOATING_APP_DETECTED',
-        message:
-            'Aplikasi floating terdeteksi aktif selama ujian. '
-            'Pelanggaran ke-$_violationCount. '
-            'Aplikasi: ${screening.blocking.map((a) => a.displayName).join(', ')}',
-      );
-
-      if (_violationCount >= kMaxExitViolations) {
-        _revokeAndSubmit();
-      } else {
-        final remaining = kMaxExitViolations - _violationCount;
-        setState(() {
-          _overlayWarningVisible = true;
-          _overlayWarningText =
-              'Aplikasi mengambang/floating terdeteksi aktif.\n'
-              'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
-              'Tutup aplikasi tersebut. Sisa $remaining kesempatan.';
-        });
-      }
-    } catch (_) {
-      // Scan gagal — diam saja, jangan ganggu user.
-    }
+    final remaining = kMaxExitViolations - _violationCount;
+    setState(() {
+      _overlayWarningVisible = true;
+      _overlayWarningText =
+          'Anda terdeteksi keluar dari aplikasi ujian.\n'
+          'Pelanggaran ke-$_violationCount dari $kMaxExitViolations. '
+          'Sisa $remaining kesempatan lagi, setelah itu akses ujian akan dibatalkan.';
+    });
+    // Paksa fullscreen lock kembali aktif: saat app baru kembali dari
+    // background, status bar sempat bisa dimunculkan. Kunci ulang sekarang
+    // supaya overlay peringatan tidak bisa di-dismiss lewat notifikasi.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    ExamSecurityService.setFullscreenLock(true);
   }
 
   /// Revoke akses dan submit otomatis karena pelanggaran melebihi batas.
@@ -329,7 +337,6 @@ class _FillFormScreenState extends State<FillFormScreen>
 
     _timer?.cancel();
     _autosaveTimer?.cancel();
-    _floatingScanTimer?.cancel();
 
     if (mounted) {
       setState(() {
@@ -552,6 +559,96 @@ class _FillFormScreenState extends State<FillFormScreen>
     return _controllers[questionId]!;
   }
 
+  /// Tampilkan kegagalan pengiriman sebagai ALERT yang benar-benar terbaca.
+  ///
+  /// Sebelumnya kegagalan hanya muncul sebagai SnackBar sekejap. Pesannya
+  /// sering generik ("Invalid request payload") dan hilang sebelum sempat
+  /// dibaca, sehingga pengguna merasa aplikasinya rusak tanpa tahu penyebab
+  /// atau apa yang harus dilakukan. Dialog ini bertahan sampai ditutup dan
+  /// menyediakan tombol "Salin pesan" agar isinya bisa dilaporkan ke pengawas.
+  void _showSubmitError(String message) {
+    if (!mounted) return;
+
+    final l10n = AppLocalizations.of(context);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l10n.isIndonesian
+                      ? 'Pengiriman jawaban gagal. Baca penjelasannya.'
+                      : 'Submitting answers failed. See the explanation.',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(
+          Icons.error_outline_rounded,
+          color: AppTheme.error,
+          size: 36,
+        ),
+        title: Text(
+          l10n.isIndonesian
+              ? 'Jawaban gagal dikirim'
+              : 'Answers could not be sent',
+        ),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            message,
+            style: const TextStyle(fontSize: 13.5, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    l10n.isIndonesian
+                        ? 'Pesan galat disalin.'
+                        : 'Error message copied.',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: Text(l10n.isIndonesian ? 'Salin pesan' : 'Copy message'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.isIndonesian ? 'Coba lagi' : 'Try again'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _autoSubmit() {
     if (_submitted || _isSubmitting) return;
 
@@ -632,6 +729,35 @@ class _FillFormScreenState extends State<FillFormScreen>
       }
     }
 
+    // --- Penjaga payload: sebab "Invalid request payload" yang paling sering ---
+    //
+    // Backend mem-binding `respondent_email` sebagai `required,email`, jadi
+    // permintaan TANPA email selalu dibalas `400 "Invalid request payload"`.
+    // Ini bisa terjadi bila siswa membuka form lewat QR/tautan dalam keadaan
+    // belum login (rute `/scan-form`, `/link-input`, dan deep-link `/f/<slug>`
+    // tidak dijaga login). Lebih baik dicegah di sini dengan pesan yang jelas
+    // daripada membiarkan server menolak dengan kalimat buntu.
+    final auth = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    );
+
+    final respondentEmail = auth.currentUser?.email.trim() ?? '';
+
+    if (respondentEmail.isEmpty) {
+      _showSubmitError(
+        l10n.isIndonesian
+            ? 'Jawaban tidak dikirim: Anda belum masuk, sehingga server tidak '
+                  'tahu siapa pengirimnya. Masuk (login) dulu dengan akun yang '
+                  'punya email, lalu tekan Kirim Jawaban kembali. Jawaban Anda '
+                  'saat ini masih tersimpan di perangkat ini.'
+            : 'Answers were not sent: you are not signed in, so the server '
+                  'cannot identify the respondent. Sign in first, then submit '
+                  'again. Your current answers are still kept on this device.',
+      );
+      return;
+    }
+
     _timer?.cancel();
 
     setState(() {
@@ -639,11 +765,6 @@ class _FillFormScreenState extends State<FillFormScreen>
     });
 
     final formProvider = Provider.of<FormProvider>(
-      context,
-      listen: false,
-    );
-
-    final auth = Provider.of<AuthProvider>(
       context,
       listen: false,
     );
@@ -713,10 +834,16 @@ class _FillFormScreenState extends State<FillFormScreen>
       }
     }
 
+    // Buang baris yang tidak mungkin diterima backend SEBELUM dikirim.
+    // Satu `question_id` non-UUID membuat `ShouldBindJSON` menolak SELURUH
+    // body dengan `400 "Invalid request payload"`, sehingga seluruh jawaban
+    // ikut hilang. Lihat [sanitizeSubmitAnswers].
+    final safeAnswers = sanitizeSubmitAnswers(answers);
+
     final result = await formProvider.submitForm(
       widget.form.id,
-      respondentEmail: auth.currentUser?.email ?? '',
-      answers: answers,
+      respondentEmail: respondentEmail,
+      answers: safeAnswers,
       auto: auto,
       token: _token,
       responseId: _responseId ?? '',
@@ -727,8 +854,7 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
 
     if (result == null) {
-      final errorMessage = formProvider.error ??
-          l10n.failSendResp;
+      final errorMessage = formProvider.error ?? l10n.failSendResp;
 
       formProvider.clearError();
 
@@ -736,32 +862,7 @@ class _FillFormScreenState extends State<FillFormScreen>
         _isSubmitting = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  errorMessage,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppTheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+      _showSubmitError(errorMessage);
 
       return;
     }
@@ -790,7 +891,7 @@ class _FillFormScreenState extends State<FillFormScreen>
       formTitle: widget.form.title,
       responseId: (result['response_id'] ?? '').toString(),
       respondentId: auth.currentUser?.id ?? '',
-      respondentEmail: auth.currentUser?.email ?? '',
+      respondentEmail: respondentEmail,
       answers: Map<String, dynamic>.from(_answers),
       totalScore: (result['total_score'] as num?)?.toDouble(),
       submittedAt:
@@ -1116,20 +1217,9 @@ class _FillFormScreenState extends State<FillFormScreen>
         if (didPop) return;
 
         if (_examMode) {
-          // BUNYIKAN ALARM KELUAR (assets/keluar.mp3, diputar oleh native).
-          _soundExitAlarm();
-
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '⚠ PERINGATAN! Anda tidak diperbolehkan keluar dari sesi ujian yang sedang berlangsung.',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              backgroundColor: AppTheme.error,
-              duration: Duration(seconds: 4),
-            ),
-          );
+          // Tombol Back TIDAK bisa mengeluarkan siswa dari ujian (canPop: false).
+          // Tampilkan peringatan di atas button kirim jawaban (tidak nyepam).
+          _showBackWarning();
         } else {
           // Konfirmasi keluar untuk non-ujian
           final confirm = await showDialog<bool>(
@@ -1162,7 +1252,24 @@ class _FillFormScreenState extends State<FillFormScreen>
                 ? AppTheme.darkBg
                 : AppTheme.surfaceLight,
 
-        appBar: AppBar(
+        // ---------------------------------------------------------------
+        // Bilah sistem bikinan aplikasi (Revisi Lanjutan 9).
+        //
+        // Halaman pengisian menutupi status bar HP, jadi jam + baterai
+        // ditampilkan aplikasi sendiri tepat di atas AppBar. Tingginya
+        // dijumlahkan dengan tinggi AppBar sehingga totalnya tetap satu
+        // baris setinggi status bar — tidak memakan ruang extra.
+        // ---------------------------------------------------------------
+        appBar: PreferredSize(
+          preferredSize: Size.fromHeight(
+            kToolbarHeight + _DeviceStatusBar.heightOf(context),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DeviceStatusBar(themeColor: widget.form.themeColor),
+              Expanded(
+                child: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor:
             FormTheme.resolvePrimary(context, widget.form.themeColor),
@@ -1235,8 +1342,12 @@ class _FillFormScreenState extends State<FillFormScreen>
                 isWarning: isWarn,
               ),
             ),
-        ],
-      ),
+          ],
+        ),
+              ),
+            ],
+          ),
+        ),
 
       body: Stack(
         children: [
@@ -1584,40 +1695,20 @@ class _FillFormScreenState extends State<FillFormScreen>
                 () => _showQuestionPanel(context),
             onToggleFlag:
                 () => _toggleFlag(_current),
+            showBackWarning: _backWarnVisible,
           ),
         ],
       ),
           if (_examMode) ...[
-            SecurityOverlayWidget(
-              isVisible: _overlayWarningVisible,
-              warningText: _overlayWarningText,
-              violationCount: _violationCount,
-              maxViolations: kMaxExitViolations,
-            ),
-            if (_overlayWarningVisible)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 48,
-                child: Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _acknowledgeWarning,
-                    icon: const Icon(Icons.check_rounded, size: 18),
-                    label: Text(
-                      'Saya Mengerti, Lanjutkan ($_violationCount/$kMaxExitViolations)',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.error,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ),
+            Positioned.fill(
+              child: SecurityOverlayWidget(
+                isVisible: _overlayWarningVisible,
+                warningText: _overlayWarningText,
+                violationCount: _violationCount,
+                maxViolations: kMaxExitViolations,
+                onAcknowledge: _overlayWarningVisible ? _acknowledgeWarning : null,
               ),
+            ),
           ],
         ],
       ),
@@ -1733,6 +1824,13 @@ class _FillFormScreenState extends State<FillFormScreen>
         return _YesNoAnswer(
           value:
               _answers[q.id] as String?,
+          // `_answers` menyimpan **ID opsi** hasil [_yesNoOptionId], bukan teks
+          // 'yes'/'no'. ID itu harus diresolusi lebih dulu supaya penyorotan
+          // pilihan cocok dengan jawaban yang benar-benar tersimpan.
+          yesOptionId:
+              _yesNoOptionId(q, true),
+          noOptionId:
+              _yesNoOptionId(q, false),
           onSelect: (yes) {
             setState(() {
               _answers[q.id] =
@@ -1777,29 +1875,204 @@ class _FillFormScreenState extends State<FillFormScreen>
     }
   }
 
+  /// ID opsi yang mewakili "Ya"/"Tidak" pada soal [q].
+  ///
+  /// Halaman pengisian menyimpan jawaban sebagai **ID opsi**
+  /// (`selected_option_id` di backend), bukan teks 'yes'/'no'. Karena itu
+  /// pemetaan id ⇄ tombol harus dihitung dari [q.options] dan TIDAK boleh
+  /// mengandalkan teks mentah — itulah bug yang membuat tombol Ya/Tidak
+  /// tampak "tidak bisa dipencet" (jawaban tersimpan, tapi tidak tersorot).
+  ///
+  /// Urutan pencarian teks: 'ya'/'yes'/'true'/'benar' untuk "Ya", dan
+  /// 'tidak'/'no'/'false'/'salah' untuk "Tidak". Bila label tidak standar
+  /// (mis. hasil AI "Opsi A"/"Opsi B"), urutan opsi dipakai sebagai cadangan:
+  /// opsi pertama = Ya, opsi terakhir = Tidak.
   String? _yesNoOptionId(
     QuestionModel q,
     bool yes,
   ) {
     for (final opt in q.options) {
       final t = opt.text.trim().toLowerCase();
-      if (yes &&
-          (t == 'yes' || t == 'ya')) {
+      if (yes && _yesTokens.contains(t)) {
         return opt.id;
       }
-      if (!yes &&
-          (t == 'no' || t == 'tidak')) {
+      if (!yes && _noTokens.contains(t)) {
         return opt.id;
       }
     }
 
-    if (q.options.isNotEmpty) {
+    if (q.options.length >= 2) {
       return yes
           ? q.options.first.id
           : q.options.last.id;
     }
 
+    // Satu opsi (atau tidak ada): tidak ada pasangan Ya/Tidak yang sah, jadi
+    // jangan mengarang id. Tombolnya akan tampil nonaktif.
     return null;
+  }
+}
+
+/// Bilah informasi ringkas bikinan aplikasi (jam + baterai) untuk halaman
+/// pengisian.
+///
+/// Halaman pengisian menyembunyikan status bar HP, jadi widget ini
+/// menggantinya. Sengaja TIDAK meniru status bar sungguhan (jarak, ikon
+/// besar, huruf lebar) — yang dipakai hanya dua informasi yang benar-benar
+/// dibutuhkan siswa: jam sekarang dan sisa baterai, masing-masing di dalam
+/// "pill" kecil yang rapi.
+///
+/// Jam disegarkan tiap 20 detik. Baterai dibaca lewat channel native
+/// `id.hidocs.app/security` (`getBatteryInfo`); bila tidak tersedia
+/// (non-Android) chip baterainya disembunyikan dan jam tetap tampil.
+class _DeviceStatusBar extends StatefulWidget {
+  /// Warna tema form — dibuat sama dengan AppBar agar menyatu.
+  final String themeColor;
+
+  const _DeviceStatusBar({required this.themeColor});
+
+  /// Total tinggi baris ini termasuk ruang notch/status bar tersembunyi.
+  static double heightOf(BuildContext context) =>
+      MediaQuery.of(context).padding.top + contentHeight;
+
+  static const double contentHeight = 30;
+
+  @override
+  State<_DeviceStatusBar> createState() => _DeviceStatusBarState();
+}
+
+class _DeviceStatusBarState extends State<_DeviceStatusBar> {
+  Timer? _ticker;
+  DateTime _now = DateTime.now();
+  BatteryInfo? _battery;
+
+  @override
+  void initState() {
+    super.initState();
+    _readBattery();
+    _ticker = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _readBattery();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _readBattery() async {
+    final info = await ExamSecurityService.getBatteryInfo();
+    if (!mounted || info == null) return;
+    setState(() => _battery = info);
+  }
+
+  String get _clock {
+    final h = _now.hour.toString().padLeft(2, '0');
+    final m = _now.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  IconData get _batteryIcon {
+    final battery = _battery;
+    if (battery == null) return Icons.battery_unknown_rounded;
+    if (battery.charging) return Icons.battery_charging_full_rounded;
+    final level = battery.level;
+    if (level <= 10) return Icons.battery_0_bar_rounded;
+    if (level <= 30) return Icons.battery_2_bar_rounded;
+    if (level <= 50) return Icons.battery_3_bar_rounded;
+    if (level <= 80) return Icons.battery_5_bar_rounded;
+    return Icons.battery_full_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final background =
+        FormTheme.resolvePrimary(context, widget.themeColor);
+    final battery = _battery;
+
+    return Container(
+      color: background,
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      child: SizedBox(
+        height: _DeviceStatusBar.contentHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              // Jam — pill transparan, angka tabular supaya lebarnya stabil
+              // dan tidak "berganti-ganti" tiap menit.
+              _InfoPill(
+                child: Text(
+                  _clock,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (battery != null)
+                _InfoPill(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${battery.level}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Icon(
+                        _batteryIcon,
+                        color: battery.charging
+                            ? Colors.amberAccent
+                            : Colors.white,
+                        size: 14,
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Pill" kecil transparan pembungkus satu potongan info pada [_DeviceStatusBar].
+///
+/// Dipakai supaya jam dan baterai terlihat sebagai dua unit info yang rapi,
+/// bukan baris status yang meniru tampilan sistem. Latar putih transparan
+/// tipis + radius penuh membuatnya menyatu dengan warna AppBar tanpa
+/// menambah kotak-kotak berat.
+class _InfoPill extends StatelessWidget {
+  final Widget child;
+
+  const _InfoPill({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: child,
+    );
   }
 }
 
@@ -1927,6 +2200,7 @@ class _NavBar
   final VoidCallback onSubmit;
   final VoidCallback onOpenPanel;
   final VoidCallback onToggleFlag;
+  final bool showBackWarning;
 
   const _NavBar({
     required this.current,
@@ -1938,6 +2212,7 @@ class _NavBar
     required this.onSubmit,
     required this.onOpenPanel,
     required this.onToggleFlag,
+    this.showBackWarning = false,
   });
 
   @override
@@ -2030,6 +2305,37 @@ class _NavBar
                 ),
               ),
             ],
+            if (showBackWarning) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppTheme.error.withValues(alpha: 0.35)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 16, color: AppTheme.error),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Peringatan! Anda tidak diperbolehkan keluar dari sesi ujian yang sedang berlangsung.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             Row(
               children: [
                 SizedBox(
@@ -2732,11 +3038,21 @@ class _RatingAnswer
 
 class _YesNoAnswer
     extends StatelessWidget {
+  /// Jawaban tersimpan: **ID opsi** (bentuk normal) atau teks 'yes'/'no'
+  /// (sesi lama). Lihat [FillFormScreen._yesNoOptionId].
   final String? value;
+
+  /// ID opsi yang mewakili "Ya"/"Tidak" pada soal ini. Dibutuhkan supaya
+  /// penyorotan pilihan membandingkan HAL YANG SAMA dengan yang disimpan.
+  final String? yesOptionId;
+  final String? noOptionId;
+
   final void Function(bool) onSelect;
 
   const _YesNoAnswer({
     required this.value,
+    required this.yesOptionId,
+    required this.noOptionId,
     required this.onSelect,
   });
 
@@ -2747,6 +3063,11 @@ class _YesNoAnswer
     final l10n =
         AppLocalizations.of(context);
 
+    final yesSelected =
+        _yesNoMatches(value, yesOptionId, _yesTokens);
+    final noSelected =
+        _yesNoMatches(value, noOptionId, _noTokens);
+
     return Row(
       children: [
         Expanded(
@@ -2756,10 +3077,12 @@ class _YesNoAnswer
                 Icons.check_circle_rounded,
             color:
                 AppTheme.success,
-            selected:
-                value == 'yes' || value == 'Yes',
-            onTap: () =>
-                onSelect(true),
+            selected: yesSelected,
+            // `null` = soal tidak punya dua opsi yang sah → tombol nonaktif,
+            // bukan menyimpan id yang salah ke jawaban.
+            onTap: yesOptionId == null
+                ? null
+                : () => onSelect(true),
           ),
         ),
 
@@ -2774,15 +3097,32 @@ class _YesNoAnswer
                 Icons.cancel_rounded,
             color:
                 AppTheme.error,
-            selected:
-                value == 'no' || value == 'No',
-            onTap: () =>
-                onSelect(false),
+            selected: noSelected,
+            onTap: noOptionId == null
+                ? null
+                : () => onSelect(false),
           ),
         ),
       ],
     );
   }
+}
+
+/// Teks jawaban yang diterima sebagai padanan "Ya"/"Tidak" saat jawaban
+/// tersimpan berupa teks, bukan id opsi.
+const Set<String> _yesTokens = {'yes', 'ya', 'true', 'benar'};
+const Set<String> _noTokens = {'no', 'tidak', 'false', 'salah'};
+
+/// [FillFormScreen._yesNoMatches] versi bebas-konteks untuk widget Ya/Tidak.
+bool _yesNoMatches(
+  String? value,
+  String? optionId,
+  Set<String> tokens,
+) {
+  final raw = (value ?? '').trim();
+  if (raw.isEmpty) return false;
+  if (optionId != null && raw == optionId) return true;
+  return tokens.contains(raw.toLowerCase());
 }
 
 class _YNOption
@@ -2791,7 +3131,9 @@ class _YNOption
   final IconData icon;
   final Color color;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// `null` = tombol tidak bisa ditekan (mis. soal Ya/Tidak tanpa dua opsi).
+  final VoidCallback? onTap;
 
   const _YNOption({
     required this.label,
@@ -2809,69 +3151,87 @@ class _YNOption
         Theme.of(context).brightness ==
             Brightness.dark;
 
-    return GestureDetector(
-      onTap: onTap,
-      child:
-          AnimatedContainer(
-        duration:
-            const Duration(
-          milliseconds: 200,
-        ),
-        height: 68,
-        decoration:
-            BoxDecoration(
-          color: selected
-              ? color.withValues(
-                  alpha: 0.10,
-                )
-              : Colors.transparent,
-          borderRadius:
-              BorderRadius.circular(
-            16,
+    // Soal Ya/Tidak tanpa dua opsi yang sah tidak boleh menipu: tombolnya
+    // tampil redup dan memang tidak bisa ditekan.
+    final enabled = onTap != null;
+
+    final Color idleColor = enabled
+        ? AppTheme.textMuted
+        : AppTheme.textMuted.withValues(alpha: 0.45);
+
+    final Color borderColor = selected
+        ? color
+        : (isDark
+            ? AppTheme.darkBorder
+            : AppTheme.border);
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        // Area sentuh SELUAR tombol — termasuk saat belum dipilih, karena
+        // kotak transparan tidak punya piksel untuk di-hit-test. Tanpa ini
+        // ketukan di bagian kosong tombol terasa "tidak berfungsi".
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child:
+            AnimatedContainer(
+          duration:
+              const Duration(
+            milliseconds: 200,
           ),
-          border:
-              Border.all(
+          height: 68,
+          decoration:
+              BoxDecoration(
             color: selected
-                ? color
-                : (isDark
-                    ? AppTheme
-                        .darkBorder
-                    : AppTheme
-                        .border),
-            width:
-                selected ? 2 : 1,
+                ? color.withValues(
+                    alpha: 0.10,
+                  )
+                : Colors.transparent,
+            borderRadius:
+                BorderRadius.circular(
+              16,
+            ),
+            border:
+                Border.all(
+              color: enabled
+                  ? borderColor
+                  : borderColor.withValues(alpha: 0.50),
+              width:
+                  selected ? 2 : 1,
+            ),
           ),
-        ),
-        child: Center(
-          child: Row(
-            mainAxisSize:
-                MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 22,
-                color: selected
-                    ? color
-                    : AppTheme
-                        .textMuted,
-              ),
-              const SizedBox(
-                width: 8,
-              ),
-              Text(
-                label,
-                style:
-                    TextStyle(
-                  fontSize: 16,
-                  fontWeight:
-                      FontWeight.w700,
+          child: Center(
+            child: Row(
+              mainAxisSize:
+                  MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
                   color: selected
                       ? color
-                      : AppTheme
-                          .textMuted,
+                      : idleColor,
                 ),
-              ),
-            ],
+                const SizedBox(
+                  width: 8,
+                ),
+                Text(
+                  label,
+                  style:
+                      TextStyle(
+                    fontSize: 16,
+                    fontWeight:
+                        FontWeight.w700,
+                    color: selected
+                        ? color
+                        : idleColor,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

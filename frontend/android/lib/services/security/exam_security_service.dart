@@ -130,6 +130,18 @@ class FloatingAppScreeningResult {
 /// jendela); klasifikasi "floating app atau bukan" dilakukan di Dart lewat
 /// katalog [kFloatingAppCatalog] sehingga mudah diuji dan bisa diperluas
 /// tanpa menyentuh kode Kotlin.
+/// Info baterai perangkat (0-100 + status pengisian), dibaca lewat native.
+class BatteryInfo {
+  /// Persentase baterai 0–100.
+  final int level;
+
+  /// `true` bila sedang diisi daya / penuh.
+  final bool charging;
+
+  const BatteryInfo({required this.level, required this.charging});
+}
+
+
 class InstalledAppInfo {
   final String packageName;
   final String appName;
@@ -363,7 +375,21 @@ class ExamSecurityService {
   static const MethodChannel _channel =
       MethodChannel('id.hidocs.app/security');
 
-  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  /// Guardian sebelum setiap panggilan channel native.
+  ///
+  /// Memakai `Platform.isAndroid` (bukan `defaultTargetPlatform`) supaya
+  /// perilakunya di host pengujian tetap sama dengan perangkat uji.
+  /// [platformOverrideForTest] tersedia bagi widget test yang perlu
+  /// menguji jalur Android tanpa mengubah semantik produksi.
+  static bool get _isAndroid =>
+      platformOverrideForTest ?? (!kIsWeb && Platform.isAndroid);
+
+  /// Timpa deteksi platform khusus widget test.
+  ///
+  /// `null` (default) = pakai deteksi asli. Diisi `true` untuk menguji
+  /// bahwa penguncian ujian benar-benar menembak channel native.
+  @visibleForTesting
+  static bool? platformOverrideForTest;
 
   // ---------------------------------------------------------------
   // Penguncian layar (FLAG_SECURE)
@@ -536,6 +562,118 @@ class ExamSecurityService {
       return await _channel.invokeMethod<double>('currentMediaVolume') ?? 1.0;
     } catch (_) {
       return 1.0;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Kunci tampilan penuh
+  // ---------------------------------------------------------------
+
+  /// Menembakkan kunci fullscreen ke sisi native (`setFullscreenLock`).
+  ///
+  /// `SystemUiMode.immersiveSticky` dari Flutter masih menyisakan celah:
+  /// di beberapa perangkat, geser dari tepi atas memunculkan status bar
+  /// sesaat. Native menambahkan `FLAG_FULLSCREEN` dan memakai
+  /// `BEHAVIOR_DEFAULT` sehingga system bar tidak muncul lewat gestur.
+  static Future<void> setFullscreenLock(bool enabled) async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('setFullscreenLock', {
+        'enabled': enabled,
+      });
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------
+  // Screen pinning (pemblokiran system bar yang sesungguhnya)
+  // ---------------------------------------------------------------
+
+  /// Memasuki **screen pinning** (`Activity.startLockTask`) selama ujian.
+  ///
+  /// Ini satu-satunya jalur RESMI untuk benar-benar memblokir panel notifikasi
+  /// dari aplikasi biasa: menyembunyikan system bar hanya menyembunyikan
+  /// tampilannya, sedangkan `BEHAVIOR_DEFAULT` justru membiarkan bar ditarik
+  /// lewat geseran tepi. Lihat komentar native `startExamLockTask`.
+  ///
+  /// PENTING: bila aplikasi belum di-allowlist device owner, Android
+  /// menampilkan dialog persetujuan **"Pin app?"** yang harus diterima siswa.
+  /// Karena itu fungsi ini dipanggil dari tombol (tindakan sadar siswa), bukan
+  /// otomatis saat halaman dibuka.
+  ///
+  /// Kembalikan `true` bila permintaan berhasil dikirim (jawaban dialog
+  /// ditangani sistem, tidak terlihat dari sini).
+  static Future<bool> startExamLockTask() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('startExamLockTask') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Keluar dari screen pinning. Wajib dipanggil saat sesi ujian berakhir,
+  /// supaya siswa tidak tertahan di dalam aplikasi setelah selesai.
+  static Future<bool> stopExamLockTask() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('stopExamLockTask') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// `true` bila aplikasi sedang tersemat (screen pinning / lock task aktif).
+  static Future<bool> isExamLockTaskActive() async {
+    if (!_isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isExamLockTaskActive') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Nyalakan/matikan penanda "sesi ujian sedang dikerjakan" di sisi native.
+  ///
+  /// Ini penjaga alarm keluar. Halaman gerbang dan layar token memanggilnya
+  /// dengan `false` sehingga suara `assets/keluar.mp3` tidak pernah berbunyi
+  /// sebelum siswa benar-benar mulai mengisi soal — alarm hanya hidup selama
+  /// `ExamLockdownService.engage()` sudah dijalankan, dan dimatikan lagi oleh
+  /// `ExamLockdownService.release()`.
+  ///
+  /// Saat dimatikan, native sekalian menghentikan suara yang mungkin masih
+  /// berbunyi dari sesi sebelumnya.
+  static Future<void> setExamSessionActive(bool active) async {
+    if (!_isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('setExamSessionActive', {
+        'active': active,
+      });
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------
+  // Info baterai untuk bilah status dalam aplikasi
+  // ---------------------------------------------------------------
+
+  /// Persentase + status pengisian baterai dari native (`getBatteryInfo`).
+  ///
+  /// Dipakai bilah status bikinan aplikasi di halaman pengisian — halaman
+  /// itu menutup status bar HP, jadi informasi jam + baterai ditampilkan
+  /// aplikasi sendiri. Mengembalikan `null` bila tidak tersedia
+  /// (non-Android / native versi lama); UI menyembunyikan ikon baterainya.
+  static Future<BatteryInfo?> getBatteryInfo() async {
+    if (!_isAndroid) return null;
+    try {
+      final raw = await _channel.invokeMethod<Object?>('getBatteryInfo');
+      if (raw is Map) {
+        final level = (raw['level'] as num?)?.toInt() ?? -1;
+        final charging = raw['charging'] == true;
+        if (level < 0 || level > 100) return null;
+        return BatteryInfo(level: level, charging: charging);
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

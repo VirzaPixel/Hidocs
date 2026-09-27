@@ -69,7 +69,11 @@
                 android:value="Menjaga sesi ujian HiDocs tetap terkunci" />
         </service>
 
-        <!-- Device admin opsional untuk penegakan lebih kuat -->
+        <!-- Device admin OPSIONAL (hanya penanda, tidak dipakai untuk mengunci).
+             Kunci ujian TIDAK memakai Lock Task Mode/device owner karena status
+             itu hanya bisa diberikan lewat provisioning ADB/QR di luar aplikasi.
+             Penguncian dilakukan sepenuhnya oleh SecurityBridge (system bar +
+             penarikan task sendiri ke depan) dan berjalan di perangkat biasa. -->
         <receiver
             android:name=".ExamDeviceAdminReceiver"
             android:permission="android.permission.BIND_DEVICE_ADMIN"

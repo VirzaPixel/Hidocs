@@ -6,14 +6,19 @@ import 'package:hi_docs/services/api/api_client.dart';
 
 import 'exam_security_service.dart';
 
-/// Ringkasan kesiapan SELURUH syarat persiapan ujian (Revisi Lanjutan 7).
+/// Ringkasan kesiapan SELURUH syarat persiapan ujian (Revisi Lanjutan 9).
 ///
-/// Syaratnya HANYA dua + pemeriksaan sesi:
+/// Syaratnya DUA, dan keduanya bisa dipenuhi dari dalam aplikasi:
 ///  1. `overlayPermissionOk` — HiDocs punya izin "tampil di atas aplikasi".
 ///  2. `floatingAppsClean` — hasil screening seluruh aplikasi terpasang:
 ///     tidak ada alat floating khusus terpasang dan tidak ada overlay yang
 ///     sedang tampil (lihat [ExamLockdownService.evaluateLive] untuk versi
 ///     "hanya yang sedang tampil" selama ujian).
+///
+/// Syarat "device owner / Lock Task Mode" DIHAPUS. Mengunci layar Android
+/// sejati menuntut provisioning ADB/QR di luar aplikasi — jalur yang tidak
+/// realistis dibebankan ke guru maupun siswa. Penguncian sekarang dikerjakan
+/// sepenuhnya dari dalam aplikasi (lihat [ExamLockdownService.engage]).
 ///
 /// "Mode Sunyi Total" DIHAPUS sesuai permintaan: tidak ada DND, tidak ada
 /// akses kebijakan notifikasi. Field `dndAccessOk`/`dndActive` dipertahankan
@@ -39,7 +44,8 @@ class LockdownReadiness {
     required this.screening,
   });
 
-  /// Hanya screening floating aktif + izin overlay.
+  /// Screening floating bersih + izin overlay ada. Tidak ada lagi syarat
+  /// perangkat yang harus diprovision dari luar aplikasi.
   bool get isReady => overlayPermissionOk && floatingAppsClean;
 
   /// Daftar id syarat yang belum terpenuhi.
@@ -71,7 +77,7 @@ class ExamLockdownService {
   ExamLockdownService._();
 
   /// Jalankan seluruh pemeriksaan dan kembalikan ringkasannya.
-  /// Read-only: TIDAK mengubah volume maupun izin apa pun.
+  /// Read-only: TIDAK mengubah volume, izin, maupun status penguncian.
   ///
   /// Versi "persiapan": memindai seluruh aplikasi yang terpasang di perangkat
   /// dan mengkategorikan mana yang aplikasi floating.
@@ -102,22 +108,71 @@ class ExamLockdownService {
   }
 
   /// Aktifkan persiapan/awal ujian: FLAG_SECURE, foreground service,
-  /// volume media AUTO FULL (nilai lama disimpan untuk dipulihkan), dan
-  /// alarm keluar aplikasi.
-  static Future<void> engage() async {
+  /// volume media AUTO FULL (nilai lama disimpan untuk dipulihkan), kunci
+  /// tampilan penuh, dan alarm keluar aplikasi.
+  ///
+  /// Penguncian berjalan di SEMUA perangkat tanpa provisioning: status bar +
+  /// nav bar disembunyikan permanen, dan begitu siswa menekan Home/Recents
+  /// task HiDocs ditarik kembali ke depan oleh native
+  /// (`SecurityBridge.pullTaskToFront`).
+  ///
+  /// `setExamSessionActive(true)` adalah pemicu penjaga di native: tanpa itu
+  /// `MainActivity` akan membunyikan alarm DAN menarik task kembali untuk
+  /// halaman mana pun yang kebetulan terbuka sebelum ujian dimulai (mis.
+  /// layar masukan token).
+  ///
+  /// Kembalikan `true` bila seluruh lapisan berhasil diminta ke native.
+  static Future<bool> engage() async {
     await ExamSecurityService.enableSecureScreen();
     await ExamSecurityService.startLockService();
     await ExamSecurityService.maximizeExamVolume();
+    await ExamSecurityService.setExamSessionActive(true);
     await ExamSecurityService.setExitAlarmArmed(true);
+    // Kunci tampilan penuh: status bar + nav bar tidak bisa dimunculkan lagi
+    // lewat gestur tepi layar.
+    await ExamSecurityService.setFullscreenLock(true);
+    return true;
   }
 
   /// Lepaskan persiapan/penguncian: kembalikan FLAG_SECURE, hentikan service,
-  /// cabut alarm keluar, dan pulihkan volume perangkat ke nilai semula.
+  /// cabut alarm keluar, buka kembali system bar, dan pulihkan volume
+  /// perangkat ke nilai semula.
   static Future<void> release() async {
+    // Matikan penanda sesi DULUAN: native ikut menghentikan suara yang
+    // masih berbunyi dan berhenti menarik task ke depan sebelum alarm
+    // dilepas sepenuhnya.
+    await ExamSecurityService.setExamSessionActive(false);
     await ExamSecurityService.setExitAlarmArmed(false);
+    // Keluar dari screen pinning LEBIH DULU sebelum membuka system bar:
+    // selama tersemat, siswa tidak boleh tertahan setelah ujian selesai.
+    await ExamSecurityService.stopExamLockTask();
+    await ExamSecurityService.setFullscreenLock(false);
     await ExamSecurityService.disableSecureScreen();
     await ExamSecurityService.stopLockService();
     await ExamSecurityService.restoreExamVolume();
+  }
+
+  /// Lepaskan screen pinning tanpa menyentuh penguncian lain.
+  static Future<void> stopScreenPinning() async {
+    await ExamSecurityService.stopExamLockTask();
+  }
+
+  /// Pastikan tidak ada penguncian maupun suara yang menyala.
+  ///
+  /// Dipanggil halaman gerbang dan layar token: keduanya BUKAN bagian dari
+  /// sesi ujian, jadi siswa boleh menutup aplikasi di sana tanpa alarm
+  /// berbunyi, tanpa ditarik kembali, dan tanpa layar terkunci. Fungsi ini
+  /// idempoten — aman dipanggil berulang, termasuk untuk membersihkan sisa
+  /// sesi sebelumnya.
+  ///
+  /// Screen pinning juga dilepas: siswa yang menyalakan penguncian di
+  /// percobaan sebelumnya tidak boleh terjebak di dalam aplikasi.
+  static Future<void> ensureIdle() async {
+    await ExamSecurityService.setExamSessionActive(false);
+    await ExamSecurityService.setExitAlarmArmed(false);
+    await ExamSecurityService.stopExitAlarm();
+    await ExamSecurityService.setFullscreenLock(false);
+    await ExamSecurityService.stopExamLockTask();
   }
 
   /// Kirim event pelanggaran ke backend dan kembalikan status berhasil.

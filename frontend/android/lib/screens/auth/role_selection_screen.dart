@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hi_docs/app_theme.dart';
-import 'package:hi_docs/utils/theme_context.dart';
 import 'package:hi_docs/providers/auth_provider.dart';
 import 'package:hi_docs/widgets/common/hidocs_logo.dart';
 
@@ -63,7 +62,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: context.primary,
+      backgroundColor: AppTheme.primary,
       body: FadeTransition(
         opacity: _fadeAnim,
         child: Stack(
@@ -71,12 +70,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
             Positioned(
               top: -80,
               right: -60,
-              child: _Blob(220, context.primaryLightWith(0.22)),
+              child: _Blob(220, AppTheme.primaryLight.withValues(alpha: 0.22)),
             ),
             Positioned(
               top: 120,
               left: -90,
-              child: _Blob(190, context.primaryDark.withValues(alpha: 0.45)),
+              child: _Blob(190, AppTheme.primaryDark.withValues(alpha: 0.45)),
             ),
             Positioned(
               top: size.height * 0.18,
@@ -173,7 +172,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                                 fontWeight: FontWeight.w800,
                                 color: isDark
                                     ? AppTheme.darkTextPrimary
-                                    : context.primary,
+                                    : AppTheme.primary,
                                 letterSpacing: -0.5,
                               ),
                             ),
@@ -204,23 +203,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                             const SizedBox(height: 10),
 
                             _RoleCard(
-                              icon: Icons.person_rounded,
-                              title: 'Mode User',
+                              icon: Icons.home_rounded,
+                              title: 'Masuk ke Aplikasi',
                               subtitle:
-                                  'Mengisi dan mengerjakan form / kuis, serta melihat riwayat.',
-                              color: context.primary,
+                                  'Akses semua fitur pengerjaan form, pembuat form, dan profil dalam satu sistem.',
+                              color: AppTheme.primary,
                               onTap: () => _goTo('/user-home'),
-                            ),
-
-                            const SizedBox(height: 14),
-
-                            _RoleCard(
-                              icon: Icons.dashboard_customize_rounded,
-                              title: 'Mode Creator',
-                              subtitle:
-                                  'Membuat dan mengelola form serta soal milik Anda.',
-                              color: AppTheme.success,
-                              onTap: () => _goTo('/creator-home'),
                             ),
 
                             if (isAdminAccount || isSuperAccount) ...[

@@ -4,9 +4,13 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.NotificationManager
+import android.app.admin.DevicePolicyManager
 import android.app.PictureInPictureParams
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.Manifest
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
@@ -17,6 +21,11 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Process
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.OnApplyWindowInsetsListener
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -43,6 +52,31 @@ import java.io.File
  *  - "Mode Sunyi Total" (DND) DIHAPUS. Gantinya: volume media dimaksimalkan
  *    (AUTO FULL) saat ujian dimulai, dipulihkan saat ujian selesai, dan
  *    `assets/keluar.mp3` dibunyikan lewat native ketika siswa keluar aplikasi.
+ *
+ * REVISI LANJUTAN 9 — penguncian TANPA provisioning:
+ *  - Seluruh jalur **Lock Task Mode / device owner DIHAPUS**. Mengunci layar
+ *    Android sejati hanya mungkin bila aplikasi berstatus device owner, dan
+ *    status itu tidak bisa diminta dari dalam aplikasi: harus lewat ADB atau
+ *    provisioning QR sebelum aplikasi pernah dipakai. Menyuruh guru/siswa
+ *    menjalankan skrip `adb` jelas tidak realistis, jadi jalur itu dibuang.
+ *    (Sebagai catatan teknis: `lockTaskMode="if_whitelisted"` TANPA allowlist
+ *    hanya memunculkan dialog persetujuan screen pinning — lihat dokumentasi
+ *    atribut `lockTaskMode` di SDK — sehingga tidak berguna tanpa provisioning.)
+ *  - Penggantinya adalah penguncian berlapis yang bekerja di SEMUA perangkat:
+ *      1. [applyFullscreenLock] — status bar + nav bar disembunyikan permanen.
+ *      2. [pullTaskToFront] — task HiDocs sendiri ditarik kembali ke depan
+ *         begitu siswa menekan Home/Recents (lihat [onUserLeftActivity]),
+ *         memakai `ActivityManager.getAppTasks()` + `AppTask.moveToFront()`.
+ *         Keduanya menyangkut task MILIK SENDIRI sehingga tidak butuh izin
+ *         apa pun dan tidak pernah melempar `SecurityException` — berbeda
+ *         dengan `getRunningTasks`/`moveTaskToFront` yang menuntut
+ *         `REORDER_TASKS` (sudah diverifikasi pada `android.jar`).
+ *      3. Alarm `assets/keluar.mp3` + telemetry pelanggaran milik Dart.
+ *  - Perlu dilaporkan jujur: tanpa device owner, sistem Android tetap boleh
+ *    memindahkan aplikasi ke latar (mis. pengguna menekan Home dua kali cepat
+ *    atau membuka panel notifikasi dari lockscreen). Yang bisa dijamin adalah
+ *    aplikasi KEMBALI ke depan dalam hitungan milidetik dan setiap
+ *    pelanggaran tercatat — bukan larangan mutlak dari sistem operasi.
  */
 class SecurityBridge(
     private val activity: Activity,
@@ -59,8 +93,40 @@ class SecurityBridge(
     private var exitAlarmPlayer: MediaPlayer? = null
     private var exitAlarmCachedFile: File? = null
 
+    /**
+     * `true` HANYA selama halaman pengisian (sesi ujian) yang sedang dibuka.
+     *
+     * Ini penjaga kedua untuk alarm keluar: [exitAlarmArmed] disetel dari
+     * Dart, tapi baik halaman gerbang maupun layar token BUKAN bagian dari
+     * sesi ujian. Tanpa penjaga ini, satu sesi ujian yang tertinggal
+     * "armed" membuat suara alarm berbunyi walau siswa baru sekadar
+     * sedang memasukkan token. Lihat [onUserLeftActivity].
+     */
+    private var examSessionActive = false
+
+    /** `true` selama layar dikunci penuh (status bar + nav bar tak bisa muncul). */
+    private var fullscreenLocked = false
+
     /** `true` bila alarm keluar sedang dipasang (dipakai MainActivity). */
     val isExitAlarmArmed: Boolean get() = exitAlarmArmed
+
+    /** `true` bila sesi ujian benar-benar sedang dikerjakan. */
+    val isExamSessionActive: Boolean get() = examSessionActive
+
+    /** `true` bila layar sedang dikunci penuh. */
+    val isFullscreenLocked: Boolean get() = fullscreenLocked
+
+    /**
+     * `true` bila penarikan kembali ke depan sedang diminta aktif.
+     *
+     * Dipakai [MainActivity.onUserLeaveHint] untuk memutuskan apakah task
+     * perlu ditarik kembali: saat siswa baru memasukkan token atau menutup
+     * aplikasi dari halaman gerbang, task TIDAK boleh ditarik-tarik lagi.
+     */
+    private var examConfinementActive = false
+
+    /** `true` bila mode penguncian ujian sedang aktif pada proses ini. */
+    val isExamConfinementActive: Boolean get() = examConfinementActive
 
     fun register() {
         channel.setMethodCallHandler { call, result ->
@@ -87,6 +153,9 @@ class SecurityBridge(
                 "maximizeExamVolume" -> result.success(maximizeExamVolume())
                 "restoreExamVolume" -> result.success(restoreExamVolume())
                 "currentMediaVolume" -> result.success(currentMediaVolume())
+                // Persentase + status pengisian baterai untuk bilah status
+                // dalam aplikasi (halaman pengisian menutupi status bar HP).
+                "getBatteryInfo" -> result.success(getBatteryInfo())
                 // Inventaris SELURUH aplikasi terpasang + fakta floating-nya.
                 "getInstalledApps" -> scanInstalledApps(result)
                 // Hanya aplikasi yang SEDANG menayangkan overlay/bubble/PiP.
@@ -104,6 +173,23 @@ class SecurityBridge(
                     result.success(openAppSettings(call.argument("packageName")))
                 }
                 "isDeviceAdminActive" -> result.success(isDeviceAdminActive())
+                // Kunci tampilan penuh saat mengerjakan (status bar + nav bar).
+                "setFullscreenLock" -> {
+                    setFullscreenLock(call.argument("enabled") ?: false)
+                    result.success(true)
+                }
+                // Screen pinning: satu-satunya cara RESMI memblokir panel
+                // notifikasi dari aplikasi biasa. Dipicu tombol siswa karena
+                // Android menampilkan dialog persetujuan "Pin app?".
+                "startExamLockTask" -> result.success(startExamLockTask())
+                "stopExamLockTask" -> result.success(stopExamLockTask())
+                "isExamLockTaskActive" -> result.success(isExamLockTaskActive())
+                // Penjaga alarm keluar: hanya menyala saat halaman pengisian
+                // (sesi ujian) yang benar-benar terbuka.
+                "setExamSessionActive" -> {
+                    setExamSessionActive(call.argument("active") ?: false)
+                    result.success(true)
+                }
                 "startLockService" -> {
                     ExamLockService.start(activity)
                     result.success(true)
@@ -118,10 +204,328 @@ class SecurityBridge(
     }
 
     fun dispose() {
+        fullscreenLocked = false
+        examSessionActive = false
+        stopSystemBarWatchdog()
+        stopExamLockTask()
         disableSecure()
         releaseExitAlarm()
         exitAlarmArmed = false
+        examConfinementActive = false
         channel.setMethodCallHandler(null)
+    }
+
+    // ---------- Kunci tampilan penuh (fullscreen lock) ----------
+
+    /**
+     * Benar-benar mengunci layar saat mengerjakan ujian: status bar DAN nav bar
+     * disembunyikan, gesture "geser dari tepi" dibuat tidak interaktif, dan
+     * (bila siswa menyetujui) aplikasi diletakkan dalam screen pinning
+     * sehingga panel notifikasi benar-benar tertutup.
+     *
+     * KOREKSI FAKTA (revisi ini). Komentar lama menyatakan
+     * `BEHAVIOR_DEFAULT` membuat penyembunyian "permanen". Itu KELIRU.
+     * Pada androidx `WindowInsetsControllerCompat`:
+     *   - `BEHAVIOR_DEFAULT = 1` dan `BEHAVIOR_SHOW_BARS_BY_SWIPE = 1`
+     *     adalah NILAI YANG SAMA — artinya memakai `BEHAVIOR_DEFAULT` justru
+     *     MEMBIARKAN system bar dimunculkan lewat geseran dari tepi layar
+     *     (dokumentasi resminya: "they can be revealed with system gestures,
+     *     such as swiping from the edge of the screen where the bar is hidden
+     *     from"), persis keluhan "status bar masih bisa di-swipe".
+     *   - `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE = 2` memunculkan bar HANYA
+     *     sementara, sebagai overlay yang tidak interaktif dan otomatis
+     *     hilang — jadi siswa tidak bisa menekan notifikasi atau membuka
+     *     panelnya. Itu yang dipakai di sini.
+     *
+     * Untuk BENAR-BENAR memblokir panel notifikasi, Android tidak menyediakan
+     * sihir dari sisi aplikasi biasa: satu-satunya jalur resmi adalah
+     * **screen pinning / lock task mode** ([startExamLockTask]). Lihat
+     * [startExamLockTask] untuk batasnya.
+     *
+     * Status "yang sedang dikunci" disimpan di [fullscreenLocked] supaya
+     * [reapplyFullscreenLock] bisa mengunci ulang setiap kali window regain
+     * focus, dan [systemBarWatchdog] mengulanginya berkala.
+     */
+    private fun setFullscreenLock(enabled: Boolean) {
+        fullscreenLocked = enabled
+        applyFullscreenLock(enabled)
+        if (enabled) startSystemBarWatchdog() else stopSystemBarWatchdog()
+    }
+
+    /**
+     * Kunci ulang tampilan penuh bila sedang dalam mode ujian.
+     *
+     * Dipanggil dari [MainActivity.onWindowFocusChanged] / `onResume`:
+     * gestur tepi (tarik panel notifikasi, geser nav bar) sewaktu-waktu
+     * memunculkan system bar sementara, dan tanpa penguncian ulang bar itu
+     * tidak pernah hilang lagi.
+     *
+     * Juga me-restart watchdog dan inset listener yang mungkin berhenti saat
+     * aktivitas sempat di-pause (view ter-detach, postDelayed tidak berjalan).
+     */
+    fun reapplyFullscreenLock() {
+        if (!fullscreenLocked) return
+        applyFullscreenLock(true)
+        // Restart watchdog + listener: saat app kembali dari background,
+        // postDelayed yang lama sudah tidak berjalan lagi.
+        startSystemBarWatchdog()
+    }
+
+    private fun applyFullscreenLock(enabled: Boolean) {
+        activity.runOnUiThread {
+            val window = activity.window
+            if (enabled) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                // Hilangkan cutout/system bar insets supaya konten aplikasi
+                // benar-benar memenuhi layar.
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            }
+
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            if (enabled) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                // PENTING: BEHAVIOR_DEFAULT (== BEHAVIOR_SHOW_BARS_BY_SWIPE, 1)
+                // justru MEMBIARKAN status bar ditarik keluar dengan geseran
+                // dari tepi layar. Yang benar untuk ujian adalah TRANSIENT:
+                // bar hanya muncul sesaat sebagai overlay tidak interaktif
+                // lalu hilang sendiri, sehingga notifikasi tidak bisa
+                // disentuh maupun dibuka.
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    /**
+     * Penjaga berkala: system bar yang sempat muncul dipaksa tersembunyi lagi.
+     *
+     * [reapplyFullscreenLock] hanya bekerja saat window kehilangan/mendapat
+     * fokus, sedangkan geseran tepi layar bisa memunculkan status bar TANPA
+     * perubahan fokus. Selama mode ujian, watchdog ini mengulang penyembunyian
+     * setiap [SYSTEM_BAR_WATCHDOG_MS] sehingga bar itu tidak pernah bertahan.
+     *
+     * Native membuktikan enaknya sendiri: [isSystemBarVisible] diperiksa lebih
+     * dulu, jadi saat bar memang sudah tersembunyi tidak ada pemanggilan
+     * window yang sia-sia.
+     *
+     * Selain watchdog polling ini, [startInsetListener] memasang listener
+     * event-driven yang bekerja SEKETIKA saat inset berubah — lebih cepat
+     * daripada menunggu putaran polling berikutnya.
+     */
+    private val systemBarWatchdog = object : Runnable {
+        override fun run() {
+            if (!fullscreenLocked) return
+            if (isSystemBarVisible()) applyFullscreenLock(true)
+            activity.window.decorView.postDelayed(this, SYSTEM_BAR_WATCHDOG_MS)
+        }
+    }
+
+    private fun startSystemBarWatchdog() {
+        val view = activity.window.decorView
+        view.removeCallbacks(systemBarWatchdog)
+        view.postDelayed(systemBarWatchdog, SYSTEM_BAR_WATCHDOG_MS)
+        startInsetListener()
+    }
+
+    private fun stopSystemBarWatchdog() {
+        try {
+            activity.window.decorView.removeCallbacks(systemBarWatchdog)
+        } catch (_: Exception) {
+        }
+        stopInsetListener()
+    }
+
+    /**
+     * Listener event-driven untuk perubahan inset window.
+     *
+     * Watchdog polling (150 ms) masih menyisakan jeda: bar bisa muncul
+     * sesaat sebelum putaran berikutnya. Listener ini bereaksi SEKETIKA
+     * setiap kali sistem melaporkan perubahan inset — termasuk saat status
+     * bar atau nav bar dimunculkan oleh gestur tepi — sehingga bar ditutup
+     * sebelum pengguna sempat berinteraksi dengannya.
+     *
+     * Tipe eksplisit `OnApplyWindowInsetsListener` (bukan `ViewCompat.`-nya)
+     * diperlukan agar Kotlin bisa meng-infer parameter lambda dengan benar.
+     */
+    private val insetListener = OnApplyWindowInsetsListener { _, insets ->
+        if (fullscreenLocked && insets.isVisible(WindowInsetsCompat.Type.systemBars())) {
+            // Bar baru saja muncul — sembunyikan lagi seketika.
+            activity.window.decorView.post { applyFullscreenLock(true) }
+        }
+        insets
+    }
+
+    private fun startInsetListener() {
+        ViewCompat.setOnApplyWindowInsetsListener(activity.window.decorView, insetListener)
+    }
+
+    private fun stopInsetListener() {
+        ViewCompat.setOnApplyWindowInsetsListener(activity.window.decorView, null)
+    }
+
+    /**
+     * Apakah status bar atau nav bar sedang terlihat.
+     *
+     * `isVisible` adalah API resmi (`WindowInsetsController`) untuk memeriksa
+     * keadaan ini tanpa menebak-nebak dari tinggi inset.
+     */
+    private fun isSystemBarVisible(): Boolean {
+        return try {
+            val insets = ViewCompat.getRootWindowInsets(
+                activity.window.decorView,
+            ) ?: return false
+            insets.isVisible(WindowInsetsCompat.Type.systemBars())
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------- Screen pinning (pemblokiran system bar yang sesungguhnya) ----------
+
+    /**
+     * Memasuki **screen pinning** selama sesi ujian.
+     *
+     * Mengapa ini perlu: menyembunyikan system bar (`applyFullscreenLock`)
+     * HANYA menyembunyikan tampilannya. Panel notifikasi tetap bisa ditarik
+     * selama aplikasi tidak berstatus *device owner*, dan status itu tidak
+     * bisa diminta dari dalam aplikasi (harus lewat ADB/QR provisioning di
+     * luar aplikasi). Satu-satunya jalur resmi yang tersedia bagi aplikasi
+     * biasa adalah `Activity.startLockTask()` — inilah "screen pinning".
+     *
+     * Perilaku yang WAJIB diketahui (dan ditulis apa adanya di layar
+     * persiapan ujian):
+     *  - Bila aplikasi BELUM di-allowlist device owner, Android menampilkan
+     *    **dialog persetujuan** "Pin app?" yang hanya bisa diterima siswa.
+     *    Itulah sebabnya fungsi ini dipanggil dari tombol yang diketik siswa,
+     *    bukan otomatis saat halaman dibuka.
+     *  - Selama tersemat, siswa tidak bisa membuka Home/Recents maupun
+     *    menarik panel notifikasi; keluar hanya lewat gestur "tahan Back +
+     *    Recents" (atau [stopExamLockTask] milik aplikasi sendiri).
+     *  - Karena itu tidak ada larangan mutlak: siswa tetap bisa keluar, tapi
+     *    lewat tindakan sadar yang tercatat sebagai pelanggaran oleh
+     *    `ExamLockdownService` + alarm `assets/keluar.mp3`.
+     *
+     * Dijalankan di UI thread karena `startLockTask()` adalah API UI.
+     * Kembalikan `true` bila permintaan diterima (tanpa menunggu jawaban
+     * dialog, karena dialog itu ditangani sistem).
+     */
+    fun startExamLockTask(): Boolean {
+        return try {
+            activity.runOnUiThread {
+                try {
+                    activity.startLockTask()
+                } catch (_: Exception) {
+                    // Sebagian ROM menolak saat transisi (mis. baru kembali
+                    // dari lockscreen). Alarm + penarikan task tetap bekerja.
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Keluar dari screen pinning. WAJIB dipanggil saat ujian selesai /
+     * halaman pengisian ditutup, supaya siswa tidak tertahan di dalam
+     * aplikasi setelah selesai mengerjakan.
+     *
+     * Hanya bertindak bila aplikasi memang sedang tersemat, karena
+     * `stopLockTask()` di luar mode itu melempar `IllegalStateException`.
+     */
+    fun stopExamLockTask(): Boolean {
+        return try {
+            activity.runOnUiThread {
+                try {
+                    val am = activity.getSystemService(Context.ACTIVITY_SERVICE)
+                            as ActivityManager
+                    if (am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) {
+                        activity.stopLockTask()
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** `true` bila aplikasi sedang berada dalam lock task / screen pinning. */
+    fun isExamLockTaskActive(): Boolean {
+        return try {
+            val am = activity.getSystemService(Context.ACTIVITY_SERVICE)
+                    as ActivityManager
+            am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------- Penarikan task sendiri ke depan (tanpa provisioning) ----------
+
+    /**
+     * Tarik task HiDocs sendiri kembali ke depan jika siswa mencoba keluar.
+     *
+     * Kenapa TIDAK memakai `lockTaskMode`. Mengunci layar Android sejati hanya
+     * mungkin bila aplikasi berstatus device owner, dan status itu hanya bisa
+     * diberikan lewat ADB/QR provisioning di luar aplikasi — tidak realistis
+     * untuk guru maupun siswa. Tanpa status itu,
+     * `lockTaskMode="if_whitelisted"` hanya memunculkan dialog persetujuan
+     * screen pinning yang tetap bisa dibatalkan pengguna.
+     *
+     * Kenapa `getAppTasks()` dan bukan `getRunningTasks()`:
+     *  - `getRunningTasks()` dideklarasikan melempar `SecurityException` dan
+     *    hanya boleh untuk aplikasi sistem / pemegang `REORDER_TASKS`;
+     *  - `getAppTasks()` tidak punya anotasi izin apa pun dan hanya
+     *    mengembalikan task MILIK APLIKASI SENDIRI, sehingga legal dipakai
+     *    aplikasi biasa (diverifikasi langsung pada `android.jar`).
+     *
+     * Kembalikan `true` bila permintaan pemindahan diterima sistem.
+     */
+    fun pullTaskToFront(): Boolean {
+        if (!examConfinementActive) return false
+        return try {
+            val am = activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val tasks = am.appTasks
+            if (tasks.isEmpty()) return false
+            // Task utama HiDocs ada di depan daftar; `moveToFront()` membawa
+            // seluruh task (termasuk halaman Flutter yang sedang terbuka)
+            // kembali ke depan tanpa menghancurkan state di dalamnya.
+            tasks.first().moveToFront()
+            true
+        } catch (_: Exception) {
+            // Sistem bisa menolak bila pemanggilan terjadi tepat saat transisi
+            // (mis. sedang berpindah dari lockscreen). Alarm keluar tetap
+            // berbunyi sebagai lapisan berikutnya.
+            false
+        }
+    }
+
+    /**
+     * Nyalakan/matikan penanda "siswa sedang mengerjakan soal".
+     *
+     * Dipakai untuk DUA hal:
+     *  1. penjaga alarm keluar — [onUserLeftActivity] hanya berbunyi bila
+     *     penanda ini `true`, sehingga halaman gerbang dan layar token
+     *     (yang memanggilnya dengan `false`) selalu sunyi;
+     *  2. penjaga penarikan task — [pullTaskToFront] menolak bekerja bila
+     *     penanda ini `false`, supaya aplikasi yang memang sedang ditutup
+     *     siswa dari halaman gerbang tidak ditarik-tarik kembali.
+     */
+    fun setExamSessionActive(active: Boolean) {
+        examSessionActive = active
+        examConfinementActive = active
+        if (!active) {
+            // Berhenti berbunyi + lepaskan SENJATA, supaya tidak ada
+            // suara yang masih menggantung saat pindah halaman.
+            exitAlarmArmed = false
+            stopExitAlarm()
+        }
     }
 
     // ---------- FLAG_SECURE ----------
@@ -210,10 +614,22 @@ class SecurityBridge(
     private fun maximizeExamVolume(): Boolean {
         return try {
             val am = activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            val current = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-            if (savedExamVolume < 0) savedExamVolume = current
-            am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
+            // Naikkan semua stream yang relevan supaya alarm + soal audio terdengar
+            // meskipun user sebelumnya mute notifikasi atau media.
+            listOf(
+                AudioManager.STREAM_MUSIC,
+                AudioManager.STREAM_RING,
+                AudioManager.STREAM_NOTIFICATION,
+                AudioManager.STREAM_ALARM,
+            ).forEach { stream ->
+                try {
+                    val max = am.getStreamMaxVolume(stream)
+                    if (stream == AudioManager.STREAM_MUSIC && savedExamVolume < 0) {
+                        savedExamVolume = am.getStreamVolume(stream)
+                    }
+                    am.setStreamVolume(stream, max, 0)
+                } catch (_: Exception) {}
+            }
             true
         } catch (_: Exception) {
             false
@@ -247,6 +663,37 @@ class SecurityBridge(
             am.getStreamVolume(AudioManager.STREAM_MUSIC).toDouble() / max.toDouble()
         } catch (_: Exception) {
             1.0
+        }
+    }
+
+    // ---------- Info baterai (bilah status dalam aplikasi) ----------
+
+    /**
+     * Persentase (0-100) + status pengisian baterai untuk bilah status
+     * dalam aplikasi — halaman pengisian ujian menutup status bar HP dan
+     * menggantinya dengan informasi jam + baterai bikinan aplikasi sendiri.
+     *
+     * Memakai intent lengket `ACTION_BATTERY_CHANGED` sehingga tidak perlu
+     * izin tambahan dan tidak perlu menunggu siaran broadcast sungguhan.
+     */
+    private fun getBatteryInfo(): Map<String, Any> {
+        return try {
+            val sticky = activity.registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+            )
+            val level = sticky?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = sticky?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+            val status = sticky?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            val percent = if (level >= 0 && scale > 0) (level * 100) / scale else -1
+            val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+            mapOf(
+                "level" to percent,
+                "charging" to charging,
+            )
+        } catch (_: Exception) {
+            mapOf("level" to -1, "charging" to false)
         }
     }
 
@@ -640,11 +1087,17 @@ class SecurityBridge(
 //
 // Format: Triple(package, label tampilan, tingkat risiko 1-3).
 private val kKnownFloatingApps: List<Triple<String, String, Int>> = listOf(
-    // Alat floating khusus (case pengguna): Floatee & Floating Apps
-    Triple("com.floatee.app", "Floatee", 3),
-    Triple("com.floatee.android", "Floatee", 3),
+    // Alat floating khusus (case pengguna): Floatee & Floating Apps.
+    // ID paket di bawah adalah applicationId ASLI (terverifikasi Play Store).
+    // `com.floatee.app` / `com.floatee.android` dari revisi sebelumnya TIDAK
+    // PERNAH ada di Play Store (404) — aplikasi sungguhannya bernama
+    // `com.maika.floatee`, jadi entri palsu itu dibuang supaya label tidak
+    // menyesatkan. Deteksi di Dart tetap memakai kata kunci `floatee`, jadi
+    // varian ID baru pun tetap tertangkap.
+    Triple("com.maika.floatee", "Floatee", 3),
     Triple("com.lwi.android.flapps", "Floating Apps", 3),
     Triple("com.lwi.android.flappsfull", "Floating Apps Full", 3),
+    Triple("com.lwi.android.flappsplugin", "Floating Apps Plugin", 3),
     Triple("com.floating.apps.box", "Floating Apps Box", 3),
     Triple("com.flutter.floatingapps", "Floating Apps", 3),
     // Assistive touch / float button
@@ -749,7 +1202,15 @@ private fun knownFloatingLabel(pkg: String): String {
 
     /** Panggilan dari MainActivity: pengguna sedang meninggalkan ujian. */
     fun onUserLeftActivity() {
-        if (exitAlarmArmed) playExitAlarm()
+        // Dua syarat WAJIB: alarm terpasang (di-set dari `engage()`) DAN sesi
+        // ujian benar-benar sedang dikerjakan. Syarat kedua inilah yang
+        // membuat halaman masukan token benar-benar sunyi: siswa boleh
+        // menutup aplikasi di sana tanpa alarm.
+        if (exitAlarmArmed && examSessionActive) playExitAlarm()
+        // Lapisan penguncian: begitu siswa menekan Home/Recents di tengah
+        // ujian, task HiDocs langsung ditarik kembali ke depan. Tanpa
+        // provisioning apa pun — lihat [pullTaskToFront].
+        pullTaskToFront()
     }
 
     /** Panggilan dari MainActivity: pengguna kembali, hentikan alarm. */
@@ -879,14 +1340,23 @@ private fun knownFloatingLabel(pkg: String): String {
     }
 
     // ---------- Device admin ----------
+    // Status device owner / admin TIDAK lagi dipakai untuk mengunci ujian
+    // (lihat catatan REVISI LANJUTAN 9 di kepala kelas): mengunci lewat jalur
+    // itu menuntut provisioning ADB/QR di luar aplikasi, yang tidak realistis
+    // dibebankan ke guru maupun siswa. Yang tersisa hanya PEMBACAAN status
+    // supaya halaman persiapan ujian bisa menampilkan keadaan apa adanya bila
+    // perangkat kebetulan sudah diprovision pihak sekolah — bukan syarat
+    // wajib untuk mulai ujian.
+
+    private fun devicePolicyManager(): DevicePolicyManager? =
+        activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+
+    private fun adminComponent(): ComponentName =
+        ComponentName(activity, ExamDeviceAdminReceiver::class.java)
 
     private fun isDeviceAdminActive(): Boolean {
         return try {
-            val dpm = activity.getSystemService(Context.DEVICE_POLICY_SERVICE)
-                    as android.app.admin.DevicePolicyManager
-            dpm.isAdminActive(
-                android.content.ComponentName(activity, ExamDeviceAdminReceiver::class.java),
-            )
+            devicePolicyManager()?.isAdminActive(adminComponent()) == true
         } catch (_: Exception) {
             false
         }
@@ -897,5 +1367,16 @@ private fun knownFloatingLabel(pkg: String): String {
 
         /** Jendela waktu event UsageStats yang dianggap "masih aktif". */
         private const val USAGE_STATS_WINDOW_MS = 120_000L
+
+        /**
+         * Selang pemeriksaan [systemBarWatchdog].
+         *
+         * Dipilih pendek (150 ms) karena tujuannya menutup system bar yang baru
+         * saja digeser keluar; terlalu panjang membuat status bar sempat
+         * terlihat cukup lama untuk menekan notifikasi. Inset listener
+         * [startInsetListener] bekerja event-driven sehingga reaksinya
+         * lebih cepat dari interval polling ini.
+         */
+        private const val SYSTEM_BAR_WATCHDOG_MS = 150L
     }
 }
