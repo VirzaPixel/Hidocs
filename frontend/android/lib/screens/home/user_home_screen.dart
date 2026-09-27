@@ -11,65 +11,23 @@ import 'package:hi_docs/providers/response_provider.dart';
 import 'package:hi_docs/widgets/common/dynamic_header.dart';
 import 'package:hi_docs/widgets/form/form_theme.dart';
 
-import 'package:hi_docs/screens/home/history_screen.dart';
 import 'package:hi_docs/screens/home/history_detail_screen.dart';
 import 'package:hi_docs/screens/exam/link_input_screen.dart';
 import 'package:hi_docs/screens/exam/scan_form_screen.dart';
 import 'package:hi_docs/screens/home/settings_screen.dart';
 import 'package:hi_docs/utils/custom_page_route.dart';
 
-class UserHomeScreen extends StatefulWidget {
+class UserHomeScreen extends StatelessWidget {
   const UserHomeScreen({super.key});
 
   @override
-  State<UserHomeScreen> createState() => _UserHomeScreenState();
-}
-
-class _UserHomeScreenState extends State<UserHomeScreen> {
-  int _tab = 0;
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = Theme.of(context).colorScheme;
     final auth = Provider.of<AuthProvider>(context);
     final fp = Provider.of<FormProvider>(context);
 
-    final tabs = [
-      _HomeTab(
-        auth: auth,
-        fp: fp,
-      ),
-      const HistoryScreen(),
-      const SettingsScreen(),
-    ];
-
-    return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBg : AppTheme.surfaceLight,
-      body: IndexedStack(
-        index: _tab,
-        children: tabs,
-      ),
-      bottomNavigationBar: _BottomBar(
-        current: _tab,
-        cs: cs,
-        isDark: isDark,
-        onTap: (i) {
-          setState(() => _tab = i);
-
-          if (i == 0 && mounted) {
-          }
-        },
-      ),
+    return _HomeTab(
+      auth: auth,
+      fp: fp,
     );
   }
 }
@@ -595,103 +553,3 @@ class _ActionItem extends StatelessWidget {
   }
 }
 
-class _BottomBar extends StatelessWidget {
-  final int current;
-  final ColorScheme cs;
-  final bool isDark;
-  final ValueChanged<int> onTap;
-
-  const _BottomBar({
-    required this.current,
-    required this.cs,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-
-    final items = [
-      (
-        Icons.home_outlined,
-        Icons.home_rounded,
-        l10n.home,
-      ),
-      (
-        Icons.history_outlined,
-        Icons.history_rounded,
-        l10n.history,
-      ),
-      (
-        Icons.person_outlined,
-        Icons.person_rounded,
-        l10n.profile,
-      ),
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color:
-            isDark ? AppTheme.darkCard : Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: isDark
-                ? AppTheme.darkBorder
-                : AppTheme.border,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 58,
-          child: Row(
-            children: List.generate(
-              items.length,
-              (i) {
-                final active = current == i;
-                final (off, on, label) =
-                    items[i];
-
-                final color = active
-                    ? cs.primary
-                    : isDark
-                        ? AppTheme.darkTextMuted
-                        : AppTheme.textMuted;
-
-                return Expanded(
-                  child: InkWell(
-                    onTap: () => onTap(i),
-                    child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          active ? on : off,
-                          size: 22,
-                          color: color,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: active
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: color,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

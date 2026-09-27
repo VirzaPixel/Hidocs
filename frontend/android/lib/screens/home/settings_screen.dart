@@ -96,24 +96,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _GroupCard(
               isDark: isDark,
               children: [
-                _ModeRow(
-                  l10n: l10n,
-                  isDark: isDark,
-                  isCreatorMode: auth.isCreatorMode,
-                  onTap: () async {
-                    final a = Provider.of<AuthProvider>(
-                      context,
-                      listen: false,
-                    );
-                    await a.toggleMode();
-                    if (!context.mounted) return;
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      a.isCreatorMode ? '/creator-home' : '/user-home',
-                      (_) => false,
-                    );
-                  },
-                ),
                 _NavRow(
                   icon: Icons.info_outline_rounded,
                   iconColor: context.primary,
@@ -911,85 +893,7 @@ class _ThemeRow extends StatelessWidget {
   }
 }
 
-class _ModeRow extends StatelessWidget {
-  final AppLocalizations l10n;
-  final bool isDark;
-  final bool isCreatorMode;
-  final VoidCallback onTap;
 
-  const _ModeRow({
-    required this.l10n,
-    required this.isDark,
-    required this.isCreatorMode,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = isCreatorMode
-        ? Icons.person_rounded
-        : Icons.dashboard_rounded;
-    final title =
-        isCreatorMode ? l10n.modeUser : l10n.modeCreator;
-    final desc = isCreatorMode
-        ? l10n.modeUserDesc
-        : l10n.modeCreatorDesc;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: context.primaryWith(0.10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 20, color: context.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${l10n.switchToMode} $title',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? AppTheme.darkTextPrimary
-                            : AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      desc,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.swap_horiz_rounded,
-                size: 20,
-                color: AppTheme.textMuted,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _NavRow extends StatelessWidget {
   final IconData icon;

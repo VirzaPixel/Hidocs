@@ -203,23 +203,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                             const SizedBox(height: 10),
 
                             _RoleCard(
-                              icon: Icons.person_rounded,
-                              title: 'Mode User',
+                              icon: Icons.home_rounded,
+                              title: 'Masuk ke Aplikasi',
                               subtitle:
-                                  'Mengisi dan mengerjakan form / kuis, serta melihat riwayat.',
+                                  'Akses semua fitur pengerjaan form, pembuat form, dan profil dalam satu sistem.',
                               color: AppTheme.primary,
                               onTap: () => _goTo('/user-home'),
-                            ),
-
-                            const SizedBox(height: 14),
-
-                            _RoleCard(
-                              icon: Icons.dashboard_customize_rounded,
-                              title: 'Mode Creator',
-                              subtitle:
-                                  'Membuat dan mengelola form serta soal milik Anda.',
-                              color: AppTheme.success,
-                              onTap: () => _goTo('/creator-home'),
                             ),
 
                             if (isAdminAccount || isSuperAccount) ...[

@@ -14,8 +14,7 @@ import 'package:hi_docs/screens/auth/login_screen.dart';
 import 'package:hi_docs/screens/auth/register_screen.dart';
 import 'package:hi_docs/screens/auth/role_selection_screen.dart';
 import 'package:hi_docs/screens/auth/admin_blocked_screen.dart';
-import 'package:hi_docs/screens/home/user_home_screen.dart';
-import 'package:hi_docs/screens/home/creator_home_screen.dart';
+import 'package:hi_docs/screens/home/main_screen.dart';
 import 'package:hi_docs/screens/exam/scan_form_screen.dart';
 import 'package:hi_docs/screens/exam/link_input_screen.dart';
 import 'package:hi_docs/screens/exam/deep_link_form_screen.dart';
@@ -100,13 +99,12 @@ class FormMakerApp extends StatelessWidget {
                   page = const RoleSelectionScreen();
                   break;
                 case '/user-home':
-                  page = const UserHomeScreen();
-                  break;
                 case '/creator-home':
+                case '/main-home':
                   page = _GuardedRoute(
                     allow: (a) => a.isLoggedIn,
                     fallback: const LoginScreen(),
-                    child: const CreatorHomeScreen(),
+                    child: const MainScreen(),
                   );
                   break;
                 case '/admin-home':
@@ -177,14 +175,9 @@ class _RoleGateState extends State<RoleGate> {
       return const LoginScreen();
     }
     if (auth.isAdminRole) {
-      // Dashboard admin tidak didukung di Android — layar penjelasan ini
-      // menggantikan AdminDashboardScreen yang sebelumnya blank putih.
       return const AdminBlockedScreen();
     }
-    if (auth.isCreatorMode) {
-      return const CreatorHomeScreen();
-    }
-    return const UserHomeScreen();
+    return const MainScreen();
   }
 }
 
